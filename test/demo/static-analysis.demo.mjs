@@ -37,7 +37,7 @@ after(async () => {
   await rm(FIXTURE, { recursive: true, force: true });
 });
 
-describe("DEMO: run_static_analysis", () => {
+describe("DEMO: lint", () => {
   it("INPUT: valid Python file", async () => {
     const input = { rootDir: FIXTURE, targetPath: "good.py" };
     console.log("\n--- INPUT ---");

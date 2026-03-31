@@ -190,7 +190,7 @@ server.resource(
 );
 
 server.tool(
-  "get_context_tree",
+  "tree",
   "Get the structural tree of the project with file headers, function names, classes, enums, and line ranges. " +
   "Automatically reads 2-line headers for file purpose. Dynamic token-aware pruning: " +
   "Level 2 (deep symbols) -> Level 1 (headers only) -> Level 0 (file names only) based on project size.",
@@ -215,35 +215,67 @@ server.tool(
 );
 
 server.tool(
-  "semantic_identifier_search",
-  "Search semantic intent at identifier level (functions, methods, classes, variables) with definition lines and ranked call sites. " +
-  "Uses embeddings over symbol signatures and source context, then returns line-numbered definition/call chains.",
+  "search",
+  "Search the codebase by meaning. Use search_type='file' for semantic file retrieval or search_type='identifier' " +
+  "for symbol-level matches with ranked call sites.",
   {
+    search_type: z.enum(["file", "identifier"]).describe("Select file-level or identifier-level semantic search."),
     query: z.string().describe("Natural language intent to match identifiers and usages."),
     top_k: z.number().optional().describe("How many identifiers to return. Default: 5."),
+    min_semantic_score: z.number().optional().describe("File search only. Minimum semantic score filter. Accepts 0-1 or 0-100."),
+    min_keyword_score: z.number().optional().describe("File search only. Minimum keyword score filter. Accepts 0-1 or 0-100."),
+    min_combined_score: z.number().optional().describe("File search only. Minimum final score filter. Accepts 0-1 or 0-100."),
+    require_keyword_match: z.boolean().optional().describe("File search only. When true, only return files with keyword overlap."),
+    require_semantic_match: z.boolean().optional().describe("File search only. When true, only return files with positive semantic similarity."),
     top_calls_per_identifier: z.number().optional().describe("How many ranked call sites per identifier. Default: 10."),
     include_kinds: z.array(z.string()).optional().describe("Optional kinds filter, e.g. [\"function\", \"method\", \"variable\"]."),
-    semantic_weight: z.number().optional().describe("Weight for semantic similarity score. Default: 0.78."),
-    keyword_weight: z.number().optional().describe("Weight for keyword overlap score. Default: 0.22."),
+    semantic_weight: z.number().optional().describe("Weight for semantic similarity score. File default: 0.72. Identifier default: 0.78."),
+    keyword_weight: z.number().optional().describe("Weight for keyword overlap score. File default: 0.28. Identifier default: 0.22."),
   },
-  withRequestActivity(async ({ query, top_k, top_calls_per_identifier, include_kinds, semantic_weight, keyword_weight }) => ({
+  withRequestActivity(async ({
+    search_type,
+    query,
+    top_k,
+    min_semantic_score,
+    min_keyword_score,
+    min_combined_score,
+    require_keyword_match,
+    require_semantic_match,
+    top_calls_per_identifier,
+    include_kinds,
+    semantic_weight,
+    keyword_weight,
+  }) => ({
     content: [{
       type: "text" as const,
-      text: await semanticIdentifierSearch({
-        rootDir: ROOT_DIR,
-        query,
-        topK: top_k,
-        topCallsPerIdentifier: top_calls_per_identifier,
-        includeKinds: include_kinds,
-        semanticWeight: semantic_weight,
-        keywordWeight: keyword_weight,
-      }),
+      text: search_type === "file"
+        ? await semanticCodeSearch({
+          rootDir: ROOT_DIR,
+          query,
+          topK: top_k,
+          semanticWeight: semantic_weight,
+          keywordWeight: keyword_weight,
+          minSemanticScore: min_semantic_score,
+          minKeywordScore: min_keyword_score,
+          minCombinedScore: min_combined_score,
+          requireKeywordMatch: require_keyword_match,
+          requireSemanticMatch: require_semantic_match,
+        })
+        : await semanticIdentifierSearch({
+          rootDir: ROOT_DIR,
+          query,
+          topK: top_k,
+          topCallsPerIdentifier: top_calls_per_identifier,
+          includeKinds: include_kinds,
+          semanticWeight: semantic_weight,
+          keywordWeight: keyword_weight,
+        }),
     }],
   }), { useEmbeddingTracker: true }),
 );
 
 server.tool(
-  "get_file_skeleton",
+  "skeleton",
   "Get detailed function signatures, class methods, and type definitions of a specific file WITHOUT reading the full body. " +
   "Shows the API surface: function names, parameters, return types, and line ranges. Perfect for understanding how to use code without loading it all.",
   {
@@ -258,51 +290,7 @@ server.tool(
 );
 
 server.tool(
-  "semantic_code_search",
-  "Search the codebase by MEANING, not just exact variable names. Uses Ollama embeddings over file headers and symbol names. " +
-  "Example: searching 'user authentication' finds files about login, sessions, JWT even if those exact words aren't used, with matched definition lines.",
-  {
-    query: z.string().describe("Natural language description of what you're looking for. Example: 'how are transactions signed'"),
-    top_k: z.number().optional().describe("Number of matches to return. Default: 5."),
-    semantic_weight: z.number().optional().describe("Weight for embedding similarity in hybrid ranking. Default: 0.72."),
-    keyword_weight: z.number().optional().describe("Weight for keyword overlap in hybrid ranking. Default: 0.28."),
-    min_semantic_score: z.number().optional().describe("Minimum semantic score filter. Accepts 0-1 or 0-100."),
-    min_keyword_score: z.number().optional().describe("Minimum keyword score filter. Accepts 0-1 or 0-100."),
-    min_combined_score: z.number().optional().describe("Minimum final score filter. Accepts 0-1 or 0-100."),
-    require_keyword_match: z.boolean().optional().describe("When true, only return files with keyword overlap."),
-    require_semantic_match: z.boolean().optional().describe("When true, only return files with positive semantic similarity."),
-  },
-  withRequestActivity(async ({
-    query,
-    top_k,
-    semantic_weight,
-    keyword_weight,
-    min_semantic_score,
-    min_keyword_score,
-    min_combined_score,
-    require_keyword_match,
-    require_semantic_match,
-  }) => ({
-    content: [{
-      type: "text" as const,
-      text: await semanticCodeSearch({
-        rootDir: ROOT_DIR,
-        query,
-        topK: top_k,
-        semanticWeight: semantic_weight,
-        keywordWeight: keyword_weight,
-        minSemanticScore: min_semantic_score,
-        minKeywordScore: min_keyword_score,
-        minCombinedScore: min_combined_score,
-        requireKeywordMatch: require_keyword_match,
-        requireSemanticMatch: require_semantic_match,
-      }),
-    }],
-  }), { useEmbeddingTracker: true }),
-);
-
-server.tool(
-  "get_blast_radius",
+  "blast_radius",
   "Before deleting or modifying code, check the BLAST RADIUS. Traces every file and line where a specific symbol " +
   "(function, class, variable) is imported or used. Prevents orphaned code. Also warns if usage count is low (candidate for inlining).",
   {
@@ -318,7 +306,7 @@ server.tool(
 );
 
 server.tool(
-  "run_static_analysis",
+  "lint",
   "Run the project's native linter/compiler to find unused variables, dead code, type errors, and syntax issues. " +
   "Delegates detection to deterministic tools instead of LLM guessing. Supports TypeScript, Python, Rust, Go.",
   {
@@ -333,7 +321,7 @@ server.tool(
 );
 
 server.tool(
-  "propose_commit",
+  "checkpoint",
   "The ONLY way to write code. Validates the code against strict rules before saving: " +
   "2-line header comments, no inline comments, max nesting depth, max file length. " +
   "Creates a shadow restore point before writing. REJECTS code that violates formatting rules.",
@@ -354,8 +342,8 @@ server.tool(
 );
 
 server.tool(
-  "list_restore_points",
-  "List all shadow restore points created by propose_commit. Each point captures the file state before the AI made changes. " +
+  "restore_points",
+  "List all shadow restore points created by checkpoint. Each point captures the file state before the AI made changes. " +
   "Use this to find a restore point ID for undoing a bad change.",
   {},
   withRequestActivity(async () => {
@@ -370,11 +358,11 @@ server.tool(
 );
 
 server.tool(
-  "undo_change",
+  "restore",
   "Restore files to their state before a specific AI change. Uses the shadow restore point system. " +
-  "Does NOT affect git history. Call list_restore_points first to find the point ID.",
+  "Does NOT affect git history. Call restore_points first to find the point ID.",
   {
-    point_id: z.string().describe("The restore point ID (format: rp-timestamp-hash). Get from list_restore_points."),
+    point_id: z.string().describe("The restore point ID (format: rp-timestamp-hash). Get from restore_points."),
   },
   withRequestActivity(async ({ point_id }) => {
     const restored = await restorePoint(ROOT_DIR, point_id);
@@ -392,7 +380,7 @@ server.tool(
 );
 
 server.tool(
-  "semantic_navigate",
+  "cluster",
   "Browse the codebase by MEANING, not directory structure. Uses spectral clustering on Ollama embeddings to group " +
   "semantically related files into labeled clusters. Inspired by Gabriella Gonzalez's semantic navigator. " +
   "Requires Ollama running with an embedding model and a chat model for labeling.",
@@ -409,7 +397,7 @@ server.tool(
 );
 
 server.tool(
-  "get_feature_hub",
+  "find_hub",
   "Obsidian-style feature hub navigator. Hub files are .md files containing [[path/to/file]] wikilinks that act as a Map of Content. " +
   "Modes: (1) No args = list all hubs, (2) hub_path or feature_name = show hub with bundled skeletons of all linked files, " +
   "(3) show_orphans = find files not linked to any hub. Prevents orphaned code and enables graph-based codebase navigation.",
@@ -432,7 +420,7 @@ server.tool(
 );
 
 server.tool(
-  "upsert_memory_node",
+  "create_memory",
   "Create or update a memory node in the linking graph. Nodes represent concepts, files, symbols, or notes with auto-generated embeddings. " +
   "If a node with the same label and type exists, it updates content and increments access count. Returns the node ID for use in create_relation.",
   {
@@ -469,7 +457,7 @@ server.tool(
 );
 
 server.tool(
-  "search_memory_graph",
+  "search_memory",
   "Search the memory graph by meaning with graph traversal. First finds direct matches via embedding similarity, " +
   "then traverses 1st/2nd-degree neighbors to discover linked context. Returns both direct hits and graph-connected neighbors with relevance scores.",
   {
@@ -503,7 +491,7 @@ server.tool(
 );
 
 server.tool(
-  "add_interlinked_context",
+  "bulk_memory",
   "Bulk-add multiple memory nodes with automatic similarity linking. Computes embeddings for all items, " +
   "then creates similarity edges between any pair (new-to-new and new-to-existing) with cosine similarity ≥ 0.72. " +
   "Ideal for importing related concepts, files, or notes at once.",
@@ -525,9 +513,9 @@ server.tool(
 );
 
 server.tool(
-  "retrieve_with_traversal",
+  "explore_memory",
   "Start from a specific memory node and traverse the graph outward. Returns the starting node plus all reachable neighbors " +
-  "within the depth limit, scored by edge weight decay and depth penalty. Use after search_memory_graph to explore a specific node's neighborhood.",
+  "within the depth limit, scored by edge weight decay and depth penalty. Use after search_memory to explore a specific node's neighborhood.",
   {
     start_node_id: z.string().describe("ID of the memory node to start traversal from."),
     max_depth: z.number().optional().describe("Maximum traversal depth from start node. Default: 2."),

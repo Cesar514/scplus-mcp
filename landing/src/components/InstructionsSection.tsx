@@ -32,7 +32,7 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 - \`feature-hub.ts\` - Obsidian-style feature hub navigator with bundled skeleton views.
 - \`memory-tools.ts\` - Memory graph MCP wrappers (upsert, relate, search, prune, interlink, traverse).
 
-The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MUST use \`search_memory_graph\` at the start of every task to retrieve prior context, and persist learnings with \`upsert_memory_node\` and \`create_relation\` after completing work. This prevents redundant exploration and builds cumulative knowledge across sessions.
+The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MUST use \`search_memory\` at the start of every task to retrieve prior context, and persist learnings with \`create_memory\` and \`create_relation\` after completing work. This prevents redundant exploration and builds cumulative knowledge across sessions.
 
 **Core Layer** (continued):
 
@@ -43,7 +43,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 
 - \`shadow.ts\` - Shadow restore point system for undo without touching git history.
 
-**Entry Point**: \`src/index.ts\` registers 17 MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to \`process.cwd()\`).
+**Entry Point**: \`src/index.ts\` registers 16 MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to \`process.cwd()\`).
 
 ## Environment Variables
 
@@ -63,12 +63,12 @@ Runtime cache: \`.mcp_data/\` is created at MCP startup and stores reusable embe
 
 Default to execution-first behavior. Use minimal tokens, minimal narration, and maximum tool leverage.
 
-1. Skip long planning prose. Start with lightweight scoping: \`get_context_tree\` and \`get_file_skeleton\`.
+1. Skip long planning prose. Start with lightweight scoping: \`tree\` and \`skeleton\`.
 2. Run independent discovery operations in parallel whenever possible (for example, multiple searches/reads).
 3. Prefer structural tools over full-file reads to conserve context.
-4. Before modifying or deleting symbols, run \`get_blast_radius\`.
-5. Write changes through \`propose_commit\` only.
-6. Run \`run_static_analysis\` once after edits, or once per changed module for larger refactors.
+4. Before modifying or deleting symbols, run \`blast_radius\`.
+5. Write changes through \`checkpoint\` only.
+6. Run \`lint\` once after edits, or once per changed module for larger refactors.
 
 ### Execution Rules
 
@@ -81,7 +81,7 @@ Default to execution-first behavior. Use minimal tokens, minimal narration, and 
 ### Token-Efficiency Rules
 
 1. Treat 100 effective tokens as better than 1000 vague tokens.
-2. Use high-signal tool calls first (\`get_file_skeleton\`, \`get_context_tree\`, \`get_blast_radius\`).
+2. Use high-signal tool calls first (\`skeleton\`, \`tree\`, \`blast_radius\`).
 3. Read full file bodies only when signatures/structure are insufficient.
 4. Avoid repeated scans of unchanged areas.
 5. Prefer direct edits + deterministic validation over extended speculative analysis.
@@ -133,23 +133,22 @@ Strict order within every file:
 
 | Tool                   | When to Use                                             |
 | ---------------------- | ------------------------------------------------------- |
-| \`get_context_tree\`     | Start of every task. Map files + symbols with line ranges. |
-| \`semantic_navigate\`    | Browse codebase by meaning, not directory structure.    |
-| \`get_file_skeleton\`    | MUST run before full reads. Get signatures + line ranges first. |
-| \`semantic_code_search\` | Find relevant files by concept with symbol definition lines. |
-| \`semantic_identifier_search\` | Find closest functions/classes/variables and ranked call chains with line numbers. |
-| \`get_blast_radius\`     | Before deleting or modifying any symbol.                |
-| \`run_static_analysis\`  | After writing code. Catch dead code deterministically.  |
-| \`propose_commit\`       | The ONLY way to save files. Validates before writing.   |
-| \`list_restore_points\`  | See undo history.                                       |
-| \`undo_change\`          | Revert a bad AI change without touching git.            |
-| \`get_feature_hub\`      | Browse feature graph hubs. Find orphaned files.         |
-| \`upsert_memory_node\`   | Create/update memory nodes (concept, file, symbol, note) with auto-embedding. |
+| \`tree\`                 | Start of every task. Map files + symbols with line ranges. |
+| \`cluster\`              | Browse codebase by meaning, not directory structure.    |
+| \`skeleton\`             | MUST run before full reads. Get signatures + line ranges first. |
+| \`search\`               | Find relevant files or identifiers by concept using \`search_type\`. |
+| \`blast_radius\`         | Before deleting or modifying any symbol.                |
+| \`lint\`                 | After writing code. Catch dead code deterministically.  |
+| \`checkpoint\`           | The ONLY way to save files. Validates before writing.   |
+| \`restore_points\`       | See undo history.                                       |
+| \`restore\`              | Revert a bad AI change without touching git.            |
+| \`find_hub\`             | Browse feature graph hubs. Find orphaned files.         |
+| \`create_memory\`        | Create/update memory nodes (concept, file, symbol, note) with auto-embedding. |
 | \`create_relation\`      | Create typed edges between memory nodes (depends_on, implements, etc). |
-| \`search_memory_graph\`  | Semantic search + graph traversal across 1st/2nd-degree neighbors. |
+| \`search_memory\`        | Semantic search + graph traversal across 1st/2nd-degree neighbors. |
 | \`prune_stale_links\`    | Remove decayed edges (e^(-λt)) and orphan nodes periodically. |
-| \`add_interlinked_context\` | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72). |
-| \`retrieve_with_traversal\` | Start from a node, walk outward, return scored neighbors by decay and depth. |
+| \`bulk_memory\`          | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72). |
+| \`explore_memory\`       | Start from a node, walk outward, return scored neighbors by decay and depth. |
 
 ## Anti-Patterns to Avoid
 

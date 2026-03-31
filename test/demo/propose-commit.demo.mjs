@@ -14,7 +14,7 @@ after(async () => {
   await rm(FIXTURE, { recursive: true, force: true });
 });
 
-describe("DEMO: propose_commit", () => {
+describe("DEMO: checkpoint", () => {
   it("INPUT: valid file with proper header + FEATURE tag", async () => {
     const input = {
       rootDir: FIXTURE,

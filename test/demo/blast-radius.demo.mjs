@@ -47,7 +47,7 @@ after(async () => {
   await rm(FIXTURE, { recursive: true, force: true });
 });
 
-describe("DEMO: get_blast_radius", () => {
+describe("DEMO: blast_radius", () => {
   it("INPUT: symbol='add', file_context='src/math.ts'", async () => {
     const input = {
       rootDir: FIXTURE,

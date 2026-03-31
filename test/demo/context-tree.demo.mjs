@@ -44,7 +44,7 @@ after(async () => {
   await rm(FIXTURE, { recursive: true, force: true });
 });
 
-describe("DEMO: get_context_tree", () => {
+describe("DEMO: tree", () => {
   it("INPUT: rootDir, depth_limit=2, include_symbols=true", async () => {
     const input = {
       rootDir: FIXTURE,

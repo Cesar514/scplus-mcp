@@ -49,43 +49,42 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 
 | Tool                         | Description                                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `get_context_tree`           | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
-| `get_file_skeleton`          | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
-| `semantic_code_search`       | Search by meaning, not exact text. Uses embeddings over file headers/symbols and returns matched symbol definition lines.                                        |
-| `semantic_identifier_search` | Identifier-level semantic retrieval for functions/classes/variables with ranked call sites and line numbers.                                                     |
-| `semantic_navigate`          | Browse codebase by meaning using spectral clustering. Groups semantically related files into labeled clusters.                                                   |
+| `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
+| `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
+| `search`                    | Unified semantic search. Use `search_type: "file"` for file retrieval or `search_type: "identifier"` for symbol matches with ranked call sites.                 |
+| `cluster`                   | Browse codebase by meaning using spectral clustering. Groups semantically related files into labeled clusters.                                                   |
 
 ### Analysis
 
 | Tool                  | Description                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `get_blast_radius`    | Trace every file and line where a symbol is imported or used. Prevents orphaned references.                                   |
-| `run_static_analysis` | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go. |
+| `blast_radius`        | Trace every file and line where a symbol is imported or used. Prevents orphaned references.                                   |
+| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go. |
 
 ### Code Ops
 
 | Tool              | Description                                                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `propose_commit`  | The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing. |
-| `get_feature_hub` | Obsidian-style feature hub navigator. Hubs are `.md` files with `[[wikilinks]]` that map features to code files.         |
+| `checkpoint`   | The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing. |
+| `find_hub`     | Obsidian-style feature hub navigator. Hubs are `.md` files with `[[wikilinks]]` that map features to code files.        |
 
 ### Version Control
 
 | Tool                  | Description                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `list_restore_points` | List all shadow restore points created by `propose_commit`. Each captures file state before AI changes.    |
-| `undo_change`         | Restore files to their state before a specific AI change. Uses shadow restore points. Does not affect git. |
+| `restore_points` | List all shadow restore points created by `checkpoint`. Each captures file state before AI changes.    |
+| `restore`        | Restore files to their state before a specific AI change. Uses shadow restore points. Does not affect git. |
 
 ### Memory & RAG
 
 | Tool                      | Description                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `upsert_memory_node`      | Create or update a memory node (concept, file, symbol, note) with auto-generated embeddings.             |
+| `create_memory`          | Create or update a memory node (concept, file, symbol, note) with auto-generated embeddings.             |
 | `create_relation`         | Create typed edges between nodes (relates_to, depends_on, implements, references, similar_to, contains). |
-| `search_memory_graph`     | Semantic search with graph traversal — finds direct matches then walks 1st/2nd-degree neighbors.         |
+| `search_memory`          | Semantic search with graph traversal — finds direct matches then walks 1st/2nd-degree neighbors.         |
 | `prune_stale_links`       | Remove decayed edges (e^(-λt) below threshold) and orphan nodes with low access counts.                  |
-| `add_interlinked_context` | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72 creates edges automatically).                 |
-| `retrieve_with_traversal` | Start from a node and walk outward — returns all reachable neighbors scored by decay and depth.          |
+| `bulk_memory`            | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72 creates edges automatically).                 |
+| `explore_memory`         | Start from a node and walk outward — returns all reachable neighbors scored by decay and depth.          |
 
 ## Setup
 
@@ -269,7 +268,7 @@ Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.co
 }
 ```
 
-> **Note:** The `semantic_navigate` tool also uses a chat model for cluster labeling. When using the `openai` provider, set `CONTEXTPLUS_OPENAI_CHAT_MODEL` (default: `gpt-4o-mini`).
+> **Note:** The `cluster` tool also uses a chat model for cluster labeling. When using the `openai` provider, set `CONTEXTPLUS_OPENAI_CHAT_MODEL` (default: `gpt-4o-mini`).
 >
 > For VS Code, Cursor, or OpenCode, use the same `env` block inside your IDE's MCP config format (see [Config file locations](#setup) table above).
 

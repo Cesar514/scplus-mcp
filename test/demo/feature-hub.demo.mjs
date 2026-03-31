@@ -106,7 +106,7 @@ describe("DEMO: hub parser", () => {
   });
 });
 
-describe("DEMO: get_feature_hub", () => {
+describe("DEMO: find_hub", () => {
   it("INPUT: no args (list all hubs)", async () => {
     const input = { rootDir: FIXTURE };
     console.log("\n--- INPUT ---");

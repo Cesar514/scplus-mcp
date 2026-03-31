@@ -7,25 +7,15 @@ ai agents are not allowed to change this file's content without human approval, 
 ## v1
 
 - [ ] rename tools for better meaning
-  - [ ] rename semantic_navigate to cluster
-  - [ ] rename get_context_tree to tree
-  - [ ] rename semantic_identifier_search and semantic_code_search (merged) to search
   - [ ] rename get_feature_hub to find_hub and change its functionality to return rankings or relevant hubs based on a search query with options for semantic or keyword search or both
     - [ ] add parameter to search for data in hubs by semantic meaning or keyword match or both
     - [ ] add parameter optionality so if no parameters are provided, it returns context of all hubs in the project
-  - [ ] rename get_file_skeleton to skeleton
-  - [ ] rename get_blast_radius to blast_radius
   - [ ] rename run_static_analysis to lint
     - [ ] add skill checking - every file has no comments than top 2 lines, and other checks in the instructions file and return a skill score for each file and the project overall with files and lines that need fixing
   - [ ] rename propose_commit to checkpoint and change its functionality to create a local undoable commit that agent can create during long worksessions mid work - uses shadow checkpoints or git whichever is better
-  - [ ] rename list_restore_points to restore_points
   - [ ] rename undo_change to restore and change its functionality to restore to a specific commit point
-  - [ ] rename upsert_memory_node to create_memory
-  - [ ] rename search_memory_graph to search_memory
-  - [ ] rename retrieve_with_traversal to explore_memory
   - [ ] create delete_memory tool that deletes nodes or relationships in the memory graph
   - [ ] prune_stale_links tool should be removed as i want it to be done automatically by the system when any memory tools are called and before graph is accessed
-  - [ ] add_interlinked_context to bulk_memory
 - [ ] merge semantic_identifier_search and semantic_code_search into one tool called search with a parameter for search type (e.g. "identifier" vs "file" or "hybrid" - which uses both regex and semantic search and returns 2 separate lists of results)
   - [ ] add options for filtering by semantic meaning or normal search or both
   - [ ] use a vector database for storing embeddings and searching instead of doing it in memory for better performance and scalability
