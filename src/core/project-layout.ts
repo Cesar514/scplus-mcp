@@ -1,5 +1,5 @@
 // Context+ project layout definitions for durable repo-local state
-// FEATURE: Project bootstrap paths for config, embeddings, memories, checkpoints
+// FEATURE: Project state paths for config, embeddings, memories, checkpoints
 
 import { mkdir } from "fs/promises";
 import { join } from "path";

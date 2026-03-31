@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ollama } from "ollama";
@@ -90,6 +90,88 @@ describe("semantic-search", () => {
         if (previousSizeLimit === undefined)
           delete process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
         else process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
+        Ollama.prototype.embed = originalEmbed;
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("persists file search state and refreshes only changed files on later searches", async () => {
+      const rootDir = await mkdtemp(
+        join(tmpdir(), "contextplus-semantic-search-"),
+      );
+      const originalEmbed = Ollama.prototype.embed;
+
+      Ollama.prototype.embed = async function ({ input }) {
+        const batch = Array.isArray(input) ? input : [input];
+        return {
+          embeddings: batch.map((value) => {
+            const lower = value.toLowerCase();
+            return [
+              lower.includes("salute") ? 1 : 0.1,
+              lower.includes("greet") ? 1 : 0.1,
+              lower.includes("alpha") ? 1 : 0.1,
+            ];
+          }),
+        };
+      };
+
+      try {
+        await writeFile(
+          join(rootDir, "alpha.ts"),
+          [
+            "// File search fixture header line one two three four",
+            "// FEATURE: persisted file search refresh coverage",
+            "export function greetAlpha(name: string): string {",
+            "  return `hello ${name}`;",
+            "}",
+            "",
+          ].join("\n"),
+        );
+
+        invalidateSearchCache();
+        const firstResult = await semanticCodeSearch({
+          rootDir,
+          query: "greet alpha",
+          topK: 3,
+        });
+        const initialState = JSON.parse(
+          await readFile(
+            join(rootDir, ".contextplus", "embeddings", "file-search-index.json"),
+            "utf8",
+          ),
+        );
+
+        assert.match(firstResult, /alpha\.ts/);
+        assert.equal(Boolean(initialState.files["alpha.ts"]), true);
+
+        await writeFile(
+          join(rootDir, "alpha.ts"),
+          [
+            "// File search fixture header line one two three four",
+            "// FEATURE: persisted file search refresh coverage",
+            "export function saluteAlpha(name: string): string {",
+            "  return `hi ${name}`;",
+            "}",
+            "",
+          ].join("\n"),
+        );
+
+        const secondResult = await semanticCodeSearch({
+          rootDir,
+          query: "salute alpha",
+          topK: 3,
+        });
+        const refreshedState = JSON.parse(
+          await readFile(
+            join(rootDir, ".contextplus", "embeddings", "file-search-index.json"),
+            "utf8",
+          ),
+        );
+
+        assert.match(secondResult, /Index refresh: 1 changed, 0 removed/);
+        assert.match(secondResult, /alpha\.ts/);
+        assert.match(refreshedState.files["alpha.ts"].doc.content, /saluteAlpha/);
+      } finally {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
       }

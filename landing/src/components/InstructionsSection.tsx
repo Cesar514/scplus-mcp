@@ -57,7 +57,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 | \`CONTEXTPLUS_EMBED_TRACKER_MAX_FILES\` | \`8\` | Max changed files per tracker tick (hard-capped to 5-10) |
 | \`CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS\` | \`700\` | Debounce before applying tracker refresh |
 
-Project state lives under \`.contextplus/\`. Run \`index\` to materialize the repo-local layout, config snapshot, memory graph store, restore-point manifest, and embedding cache directories. A realtime tracker watches source updates and refreshes changed function/file embeddings incrementally while ignoring \`.contextplus/\`.
+Project state lives under \`.contextplus/\`. Run \`index\` to materialize the repo-local layout, config snapshot, indexing status, memory graph store, restore-point manifest, and persisted file/identifier search state. Later \`search\` calls refresh only changed files before querying the prepared indexes, while the realtime tracker keeps ignoring \`.contextplus/\`.
 
 ## Fast Execute Mode (Mandatory)
 
@@ -133,7 +133,7 @@ Strict order within every file:
 
 | Tool                   | When to Use                                             |
 | ---------------------- | ------------------------------------------------------- |
-| \`index\`                | Bootstrap or refresh repo-local \`.contextplus/\` state before durable indexing work. |
+| \`index\`                | Build or refresh repo-local \`.contextplus/\` state, including persisted file and identifier search indexes plus indexing status. |
 | \`tree\`                 | Start of every task. Map files + symbols with line ranges. |
 | \`cluster\`              | Browse codebase by meaning, not directory structure.    |
 | \`skeleton\`             | MUST run before full reads. Get signatures + line ranges first. |

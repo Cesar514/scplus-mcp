@@ -24,6 +24,12 @@
 
 ## maintenance
 
+- [x] make `index` perform a real full search index build instead of only bootstrap state
+  - [x] make `index` eagerly build and persist both file and identifier indexes under `.contextplus/`
+  - [x] store index metadata and current phase in `.contextplus/config` so indexing state is inspectable
+  - [x] add a lightweight indexing status surface or status file for long-running or background indexing
+  - [x] add progress logging during indexing with counts, phase updates, and elapsed progress
+  - [x] make later `search` runs perform cheap incremental refreshes for changed files instead of rebuilding everything
 - [x] remove the legacy repo-local index state that still lives under `.mcp_data`
 - [x] create a fresh `.contextplus` index for this repository using the Context+ `index` workflow
 - [x] verify the generated `.contextplus` layout and manifests match the documented project state

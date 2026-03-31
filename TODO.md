@@ -2,23 +2,21 @@
 
 ## instructions
 
-ai agents are not allowed to change this file's content without human approval, ai agents can only complete the given tasks and update the task with [x]
+ai agents may update this file to remove completed work, keep the backlog accurate, and add newly discovered remaining tasks for the current goal
 
 ## v1
 
+- [ ] move persisted embedding/search storage to a vector database once the eager indexing pipeline is solid
 - [ ] rename tools for better meaning
   - [ ] rename get_feature_hub to find_hub and change its functionality to return rankings or relevant hubs based on a search query with options for semantic or keyword search or both
     - [ ] add parameter to search for data in hubs by semantic meaning or keyword match or both
     - [ ] add parameter optionality so if no parameters are provided, it returns context of all hubs in the project
-  - [ ] rename run_static_analysis to lint
-    - [ ] add skill checking - every file has no comments than top 2 lines, and other checks in the instructions file and return a skill score for each file and the project overall with files and lines that need fixing
-  - [ ] rename propose_commit to checkpoint and change its functionality to create a local undoable commit that agent can create during long worksessions mid work - uses shadow checkpoints or git whichever is better
-  - [ ] rename undo_change to restore and change its functionality to restore to a specific commit point
   - [ ] create delete_memory tool that deletes nodes or relationships in the memory graph
   - [ ] prune_stale_links tool should be removed as i want it to be done automatically by the system when any memory tools are called and before graph is accessed
-- [ ] merge semantic_identifier_search and semantic_code_search into one tool called search with a parameter for search type (e.g. "identifier" vs "file" or "hybrid" - which uses both regex and semantic search and returns 2 separate lists of results)
-  - [ ] add options for filtering by semantic meaning or normal search or both
-  - [ ] use a vector database for storing embeddings and searching instead of doing it in memory for better performance and scalability
+- [ ] extend the unified `search` tool with explicit filtering modes for semantic, keyword, or both
+- [ ] extend `lint` with stronger repo-rule checking and project/file scoring where it is still genuinely useful
+- [ ] extend `checkpoint` with clearer long-worksession checkpoint behavior if shadow checkpoints need more functionality
+- [ ] extend `restore` so it can restore to a specific checkpoint point with the exact UX you want
 - [ ] create a new memory system that uses a graph database and md files and vector database for storing memories
   - [ ] add tool for updating memories with new information that updates the embeddings depending on the changes made to the content and the agent should use this instead of directly updating the content in the file
   - [ ] update other tools to use the new memory system too, alongside with tools that save nodes and edges automatically and creates embeddings automatically when a new node or edge is created or deleted

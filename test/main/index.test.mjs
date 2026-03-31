@@ -1,5 +1,5 @@
-// Project indexing command creates durable Context+ repo-local bootstrap state
-// FEATURE: CLI bootstrap coverage for .contextplus layout and persisted manifests
+// Project indexing command creates durable Context+ repo-local search state
+// FEATURE: CLI coverage for .contextplus layout and persisted search manifests
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -31,7 +31,13 @@ describe("index", () => {
           join(process.cwd(), "build", "index.js"),
           "index",
         ],
-        { cwd },
+        {
+          cwd,
+          env: {
+            ...process.env,
+            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+          },
+        },
       );
 
       await expectExists(join(cwd, ".contextplus"));
@@ -43,6 +49,9 @@ describe("index", () => {
 
       const config = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "project.json"), "utf8"));
       const manifest = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "file-manifest.json"), "utf8"));
+      const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
+      const fileIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "file-search-index.json"), "utf8"));
+      const identifierIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "identifier-search-index.json"), "utf8"));
       const graph = JSON.parse(await readFile(join(cwd, ".contextplus", "memories", "memory-graph.json"), "utf8"));
       const restorePoints = JSON.parse(await readFile(join(cwd, ".contextplus", "checkpoints", "restore-points.json"), "utf8"));
       const tree = await readFile(join(cwd, ".contextplus", "config", "context-tree.txt"), "utf8");
@@ -51,10 +60,19 @@ describe("index", () => {
       assert.equal(config.projectName.startsWith("contextplus-index-"), true);
       assert.ok(Array.isArray(manifest.files));
       assert.ok(manifest.files.includes("src/app.ts"));
+      assert.equal(indexStatus.state, "completed");
+      assert.equal(indexStatus.phase, "completed");
+      assert.equal(indexStatus.fileSearch?.indexedDocuments >= 1, true);
+      assert.equal(indexStatus.identifierSearch?.indexedIdentifiers >= 1, true);
+      assert.ok(fileIndex.files["src/app.ts"]);
+      assert.equal(identifierIndex.files["src/app.ts"].docs.some((doc) => doc.name === "run"), true);
       assert.deepEqual(graph, { nodes: {}, edges: {} });
       assert.deepEqual(restorePoints, []);
       assert.ok(tree.includes("src/"));
       assert.ok(stdout.includes("Indexed"));
+      assert.ok(stdout.includes("Progress log:"));
+      assert.ok(stdout.includes("file-ready"));
+      assert.ok(stdout.includes("identifier-ready"));
       assert.ok(stdout.includes(".contextplus/config/project.json"));
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -75,14 +93,22 @@ describe("index", () => {
           join(process.cwd(), "build", "index.js"),
           "index",
         ],
-        { cwd },
+        {
+          cwd,
+          env: {
+            ...process.env,
+            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+          },
+        },
       );
 
       const graph = JSON.parse(await readFile(join(cwd, ".contextplus", "memories", "memory-graph.json"), "utf8"));
       const restorePoints = JSON.parse(await readFile(join(cwd, ".contextplus", "checkpoints", "restore-points.json"), "utf8"));
+      const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
 
       assert.deepEqual(graph, { nodes: { a: 1 }, edges: {} });
       assert.deepEqual(restorePoints, [{ id: "rp-1" }]);
+      assert.equal(indexStatus.state, "completed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -197,8 +197,9 @@ server.resource(
 
 server.tool(
   "index",
-  "Create or refresh the .contextplus project state for this repo. Creates the repo-local Context+ layout, " +
-  "writes project config plus a context-tree snapshot, and initializes durable storage for memories and checkpoints.",
+  "Create or refresh the .contextplus project state for this repo. Builds the repo-local Context+ layout, " +
+  "writes project config plus a context-tree snapshot, eagerly prepares persisted file and identifier search indexes, " +
+  "and records indexing status under .contextplus/config for inspection.",
   {},
   withRequestActivity(async () => ({
     content: [{

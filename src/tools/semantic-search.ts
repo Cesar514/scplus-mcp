@@ -1,19 +1,18 @@
-// Ollama-powered semantic search over file headers and symbol names
-// Uses vector embeddings with cosine similarity for concept matching
+// Persisted file-level semantic search with eager indexing and refresh support
+// Builds reusable file search state under .contextplus for fast queries
 
+import { readFile, stat, writeFile } from "fs/promises";
+import { join, extname, resolve } from "path";
 import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
-  fetchEmbedding,
   getEmbeddingBatchSize,
-  loadEmbeddingCache,
-  saveEmbeddingCache,
   SearchIndex,
   type SearchDocument,
+  type SearchIndexBuildStats,
   type SearchQueryOptions,
 } from "../core/embeddings.js";
-import { readFile, stat } from "fs/promises";
-import { extname, resolve } from "path";
+import { CONTEXTPLUS_EMBEDDINGS_DIR, ensureContextplusLayout } from "../core/project-layout.js";
 
 export interface SemanticSearchOptions {
   rootDir: string;
@@ -28,12 +27,36 @@ export interface SemanticSearchOptions {
   requireSemanticMatch?: boolean;
 }
 
-let cachedIndex: SearchIndex | null = null;
-let cachedRootDir: string | null = null;
-let lastIndexTime = 0;
+export interface FileSearchIndexProgress {
+  phase: "file-scan" | "file-embeddings";
+  totalFiles: number;
+  processedFiles: number;
+  changedFiles: number;
+  removedFiles: number;
+  indexedDocuments: number;
+}
 
-const INDEX_TTL_MS = 60000;
-const SEARCH_CACHE_FILE = "embeddings-cache.json";
+export interface FileSearchIndexStats {
+  totalFiles: number;
+  processedFiles: number;
+  indexedDocuments: number;
+  changedFiles: number;
+  removedFiles: number;
+  embeddedDocuments: number;
+  reusedDocuments: number;
+}
+
+interface PersistedFileSearchEntry {
+  fingerprint: string;
+  doc: SearchDocument;
+}
+
+interface PersistedFileSearchState {
+  generatedAt: string;
+  files: Record<string, PersistedFileSearchEntry>;
+}
+
+const SEARCH_INDEX_STATE_FILE = "file-search-index.json";
 const TEXT_INDEX_EXTENSIONS = new Set([
   ".md",
   ".txt",
@@ -51,6 +74,9 @@ const TEXT_INDEX_EXTENSIONS = new Set([
 ]);
 const MAX_TEXT_DOC_CHARS = 4000;
 const DEFAULT_MAX_EMBED_FILE_SIZE = 50 * 1024;
+
+let cachedIndex: SearchIndex | null = null;
+let cachedRootDir: string | null = null;
 
 function isTextIndexCandidate(filePath: string): boolean {
   return TEXT_INDEX_EXTENSIONS.has(extname(filePath).toLowerCase());
@@ -78,14 +104,33 @@ function extractPlainTextHeader(content: string): string {
   return headerLines.join(" | ");
 }
 
-function hashContent(text: string): string {
-  let h = 0;
-  for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
-  return h.toString(36);
-}
-
 function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
+}
+
+function buildFingerprint(size: number, mtimeMs: number): string {
+  return `${size}:${Math.floor(mtimeMs)}`;
+}
+
+function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
+  return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
+}
+
+async function loadPersistedFileSearchState(rootDir: string): Promise<PersistedFileSearchState> {
+  try {
+    return JSON.parse(await readFile(join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, SEARCH_INDEX_STATE_FILE), "utf-8"));
+  } catch {
+    return { generatedAt: "", files: {} };
+  }
+}
+
+async function savePersistedFileSearchState(rootDir: string, state: PersistedFileSearchState): Promise<void> {
+  await ensureContextplusLayout(rootDir);
+  await writeFile(
+    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, SEARCH_INDEX_STATE_FILE),
+    JSON.stringify(state, null, 2) + "\n",
+    "utf-8",
+  );
 }
 
 async function buildSearchDocumentForFile(rootDir: string, relativePath: string): Promise<SearchDocument | null> {
@@ -116,46 +161,148 @@ async function buildSearchDocumentForFile(rootDir: string, relativePath: string)
     return {
       path: normalized,
       header: analysis.header,
-      symbols: flatSymbols.map((s) => s.name),
-      symbolEntries: flatSymbols.map((s) => ({
-        name: s.name,
-        kind: s.kind,
-        line: s.line,
-        endLine: s.endLine,
-        signature: s.signature,
+      symbols: flatSymbols.map((symbol) => symbol.name),
+      symbolEntries: flatSymbols.map((symbol) => ({
+        name: symbol.name,
+        kind: symbol.kind,
+        line: symbol.line,
+        endLine: symbol.endLine,
+        signature: symbol.signature,
       })),
-      content: flatSymbols.map((s) => s.signature).join(" "),
+      content: flatSymbols.map((symbol) => symbol.signature).join(" "),
     };
   } catch {
     return null;
   }
 }
 
-async function buildIndex(rootDir: string): Promise<SearchIndex> {
-  if (cachedIndex && cachedRootDir === rootDir && Date.now() - lastIndexTime < INDEX_TTL_MS) {
-    return cachedIndex;
+async function refreshPersistedFileSearchState(
+  rootDir: string,
+  onProgress?: (progress: FileSearchIndexProgress) => Promise<void> | void,
+): Promise<{ state: PersistedFileSearchState; stats: Omit<FileSearchIndexStats, "embeddedDocuments" | "reusedDocuments"> }> {
+  const previous = await loadPersistedFileSearchState(rootDir);
+  const entries = await walkDirectory({ rootDir, depthLimit: 0 });
+  const files = entries.filter((entry) => !entry.isDirectory);
+  const nextFiles: Record<string, PersistedFileSearchEntry> = {};
+  const seen = new Set<string>();
+  let processedFiles = 0;
+  let changedFiles = 0;
+
+  for (const file of files) {
+    const relativePath = normalizeRelativePath(file.relativePath);
+    const fullPath = resolve(rootDir, relativePath);
+    const fileStat = await stat(fullPath);
+    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
+    const previousEntry = previous.files[relativePath];
+
+    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+      nextFiles[relativePath] = previousEntry;
+    } else {
+      const doc = await buildSearchDocumentForFile(rootDir, relativePath);
+      changedFiles++;
+      if (doc) {
+        nextFiles[relativePath] = { fingerprint, doc };
+      }
+    }
+
+    seen.add(relativePath);
+    processedFiles++;
+    if (onProgress && shouldReportProgress(processedFiles, files.length)) {
+      await onProgress({
+        phase: "file-scan",
+        totalFiles: files.length,
+        processedFiles,
+        changedFiles,
+        removedFiles: 0,
+        indexedDocuments: Object.keys(nextFiles).length,
+      });
+    }
   }
 
-  const entries = await walkDirectory({ rootDir, depthLimit: 0 });
-  const files = entries.filter((e) => !e.isDirectory);
+  const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
+  const state: PersistedFileSearchState = {
+    generatedAt: new Date().toISOString(),
+    files: nextFiles,
+  };
+  await savePersistedFileSearchState(rootDir, state);
 
-  const docs: SearchDocument[] = [];
-  for (const file of files) {
-    const doc = await buildSearchDocumentForFile(rootDir, file.relativePath);
-    if (doc) docs.push(doc);
+  return {
+    state,
+    stats: {
+      totalFiles: files.length,
+      processedFiles,
+      indexedDocuments: Object.keys(nextFiles).length,
+      changedFiles,
+      removedFiles,
+    },
+  };
+}
+
+export async function ensureFileSearchIndex(
+  rootDir: string,
+  onProgress?: (progress: FileSearchIndexProgress) => Promise<void> | void,
+): Promise<{ index: SearchIndex; stats: FileSearchIndexStats }> {
+  const normalizedRootDir = resolve(rootDir);
+  const { state, stats: refreshStats } = await refreshPersistedFileSearchState(normalizedRootDir, onProgress);
+  const docs = Object.values(state.files).map((entry) => entry.doc);
+  const canReuseCachedIndex = cachedIndex
+    && cachedRootDir === normalizedRootDir
+    && refreshStats.changedFiles === 0
+    && refreshStats.removedFiles === 0
+    && docs.length > 0;
+
+  if (canReuseCachedIndex) {
+    const reusableIndex = cachedIndex;
+    if (!reusableIndex) throw new Error("File search cache was expected but missing.");
+    if (onProgress) {
+      await onProgress({
+        phase: "file-embeddings",
+        totalFiles: refreshStats.totalFiles,
+        processedFiles: refreshStats.processedFiles,
+        changedFiles: refreshStats.changedFiles,
+        removedFiles: refreshStats.removedFiles,
+        indexedDocuments: docs.length,
+      });
+    }
+    return {
+      index: reusableIndex,
+      stats: {
+        ...refreshStats,
+        embeddedDocuments: 0,
+        reusedDocuments: docs.length,
+      },
+    };
   }
 
   const index = new SearchIndex();
-  await index.index(docs, rootDir);
-  cachedIndex = index;
-  cachedRootDir = rootDir;
-  lastIndexTime = Date.now();
+  const embeddingStats: SearchIndexBuildStats = await index.index(docs, normalizedRootDir);
 
-  return index;
+  if (onProgress) {
+    await onProgress({
+      phase: "file-embeddings",
+      totalFiles: refreshStats.totalFiles,
+      processedFiles: refreshStats.processedFiles,
+      changedFiles: refreshStats.changedFiles,
+      removedFiles: refreshStats.removedFiles,
+      indexedDocuments: docs.length,
+    });
+  }
+
+  cachedIndex = index;
+  cachedRootDir = normalizedRootDir;
+
+  return {
+    index,
+    stats: {
+      ...refreshStats,
+      embeddedDocuments: embeddingStats.embeddedDocuments,
+      reusedDocuments: embeddingStats.reusedDocuments,
+    },
+  };
 }
 
 export async function semanticCodeSearch(options: SemanticSearchOptions): Promise<string> {
-  const index = await buildIndex(options.rootDir);
+  const { index, stats } = await ensureFileSearchIndex(options.rootDir);
   const searchOptions: SearchQueryOptions = {
     topK: options.topK,
     semanticWeight: options.semanticWeight,
@@ -171,14 +318,17 @@ export async function semanticCodeSearch(options: SemanticSearchOptions): Promis
   if (results.length === 0) return "No matching files found for the given query.";
 
   const lines: string[] = [`Top ${results.length} hybrid matches for: "${options.query}"\n`];
+  if (stats.changedFiles > 0 || stats.removedFiles > 0) {
+    lines.push(`Index refresh: ${stats.changedFiles} changed, ${stats.removedFiles} removed, ${stats.indexedDocuments} indexed documents.\n`);
+  }
 
   for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    lines.push(`${i + 1}. ${r.path} (${r.score}% total)`);
-    lines.push(`   Semantic: ${r.semanticScore}% | Keyword: ${r.keywordScore}%`);
-    if (r.header) lines.push(`   Header: ${r.header}`);
-    if (r.matchedSymbols.length > 0) lines.push(`   Matched symbols: ${r.matchedSymbols.join(", ")}`);
-    if (r.matchedSymbolLocations.length > 0) lines.push(`   Definition lines: ${r.matchedSymbolLocations.join(", ")}`);
+    const result = results[i];
+    lines.push(`${i + 1}. ${result.path} (${result.score}% total)`);
+    lines.push(`   Semantic: ${result.semanticScore}% | Keyword: ${result.keywordScore}%`);
+    if (result.header) lines.push(`   Header: ${result.header}`);
+    if (result.matchedSymbols.length > 0) lines.push(`   Matched symbols: ${result.matchedSymbols.join(", ")}`);
+    if (result.matchedSymbolLocations.length > 0) lines.push(`   Definition lines: ${result.matchedSymbolLocations.join(", ")}`);
     lines.push("");
   }
 
@@ -188,41 +338,24 @@ export async function semanticCodeSearch(options: SemanticSearchOptions): Promis
 export function invalidateSearchCache(): void {
   cachedIndex = null;
   cachedRootDir = null;
-  lastIndexTime = 0;
 }
 
 export async function refreshFileSearchEmbeddings(options: { rootDir: string; relativePaths: string[] }): Promise<number> {
   const uniquePaths = Array.from(new Set(options.relativePaths.map(normalizeRelativePath).filter(Boolean)));
   if (uniquePaths.length === 0) return 0;
 
-  const cache = await loadEmbeddingCache(options.rootDir, SEARCH_CACHE_FILE);
-  const pending: { path: string; hash: string; text: string }[] = [];
-
-  for (const relativePath of uniquePaths) {
-    const doc = await buildSearchDocumentForFile(options.rootDir, relativePath);
-    if (!doc) {
-      delete cache[relativePath];
-      continue;
-    }
-
-    const text = `${doc.header} ${doc.symbols.join(" ")} ${doc.content}`;
-    const hash = hashContent(text);
-    if (cache[relativePath]?.hash === hash) continue;
-    pending.push({ path: relativePath, hash, text });
-  }
-
-  if (pending.length > 0) {
-    const batchSize = getEmbeddingBatchSize();
-    for (let i = 0; i < pending.length; i += batchSize) {
-      const batch = pending.slice(i, i + batchSize);
-      const vectors = await fetchEmbedding(batch.map((entry) => entry.text));
-      for (let j = 0; j < batch.length; j++) {
-        cache[batch[j].path] = { hash: batch[j].hash, vector: vectors[j] };
-      }
+  let embeddedDocuments = 0;
+  for (let i = 0; i < uniquePaths.length; i += getEmbeddingBatchSize()) {
+    const batch = uniquePaths.slice(i, i + getEmbeddingBatchSize());
+    const docs = await Promise.all(batch.map((relativePath) => buildSearchDocumentForFile(options.rootDir, relativePath)));
+    const validDocs = docs.filter((doc): doc is SearchDocument => doc !== null);
+    if (validDocs.length > 0) {
+      const index = new SearchIndex();
+      const stats = await index.index(validDocs, options.rootDir);
+      embeddedDocuments += stats.embeddedDocuments;
     }
   }
 
-  await saveEmbeddingCache(options.rootDir, cache, SEARCH_CACHE_FILE);
   invalidateSearchCache();
-  return pending.length;
+  return embeddedDocuments;
 }

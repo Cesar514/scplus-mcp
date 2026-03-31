@@ -1,7 +1,7 @@
-// Identifier-level semantic retrieval with call-site ranking and line metadata
+// Identifier-level semantic retrieval with persisted incremental symbol indexing
 // FEATURE: Symbol intelligence via semantic search over definitions and usages
 
-import { readFile } from "fs/promises";
+import { readFile, stat, writeFile } from "fs/promises";
 import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
@@ -11,7 +11,8 @@ import {
   saveEmbeddingCache,
   type EmbeddingCache,
 } from "../core/embeddings.js";
-import { resolve } from "path";
+import { join, resolve } from "path";
+import { CONTEXTPLUS_EMBEDDINGS_DIR, ensureContextplusLayout } from "../core/project-layout.js";
 
 export interface SemanticIdentifierSearchOptions {
   rootDir: string;
@@ -58,12 +59,41 @@ interface IdentifierIndex {
   fileLines: Map<string, string[]>;
 }
 
+export interface IdentifierIndexProgress {
+  phase: "identifier-scan" | "identifier-embeddings";
+  totalFiles: number;
+  processedFiles: number;
+  changedFiles: number;
+  removedFiles: number;
+  indexedIdentifiers: number;
+}
+
+export interface IdentifierIndexStats {
+  totalFiles: number;
+  processedFiles: number;
+  changedFiles: number;
+  removedFiles: number;
+  indexedIdentifiers: number;
+  embeddedIdentifiers: number;
+  reusedIdentifiers: number;
+}
+
+interface PersistedIdentifierFileEntry {
+  fingerprint: string;
+  docs: IdentifierDoc[];
+  lines: string[];
+}
+
+interface PersistedIdentifierIndexState {
+  generatedAt: string;
+  files: Record<string, PersistedIdentifierFileEntry>;
+}
+
 const IDENTIFIER_CACHE_FILE = "identifier-embeddings-cache.json";
+const IDENTIFIER_INDEX_STATE_FILE = "identifier-search-index.json";
 const CALLSITE_CACHE_PREFIX = "callsite:";
-const INDEX_TTL_MS = 60_000;
 
 let cachedRootDir: string | null = null;
-let cachedAt = 0;
 let cachedIndex: IdentifierIndex | null = null;
 
 function hashContent(text: string): string {
@@ -142,6 +172,14 @@ function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+function buildFingerprint(size: number, mtimeMs: number): string {
+  return `${size}:${Math.floor(mtimeMs)}`;
+}
+
+function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
+  return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
+}
+
 function removeFileScopedCacheEntries(cache: EmbeddingCache, relativePath: string): void {
   const definitionPrefix = `id:${relativePath}:`;
   const callsitePrefix = `${CALLSITE_CACHE_PREFIX}${relativePath}:`;
@@ -152,76 +190,174 @@ function removeFileScopedCacheEntries(cache: EmbeddingCache, relativePath: strin
   }
 }
 
-async function buildIdentifierDocsForFile(rootDir: string, relativePath: string): Promise<IdentifierDoc[]> {
-  const normalized = normalizeRelativePath(relativePath);
-  const fullPath = resolve(rootDir, normalized);
-  if (!isSupportedFile(fullPath)) return [];
-
+async function loadPersistedIdentifierIndexState(rootDir: string): Promise<PersistedIdentifierIndexState> {
   try {
-    const analysis = await analyzeFile(fullPath);
-    const flat = flattenSymbols(analysis.symbols);
-    return flat.map((symbol) => ({
-      id: `${normalized}:${symbol.name}:${symbol.line}`,
-      path: normalized,
-      header: analysis.header,
-      name: symbol.name,
-      kind: symbol.kind,
-      line: symbol.line,
-      endLine: symbol.endLine,
-      signature: symbol.signature,
-      parentName: symbol.parentName,
-      text: `${symbol.name} ${symbol.kind} ${symbol.signature} ${normalized} ${analysis.header} ${symbol.parentName ?? ""}`,
-    }));
+    return JSON.parse(await readFile(join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE), "utf-8"));
   } catch {
-    return [];
+    return { generatedAt: "", files: {} };
   }
 }
 
-async function buildIdentifierIndex(rootDir: string): Promise<IdentifierIndex> {
-  if (cachedIndex && cachedRootDir === rootDir && Date.now() - cachedAt < INDEX_TTL_MS) {
-    return cachedIndex;
-  }
+async function savePersistedIdentifierIndexState(rootDir: string, state: PersistedIdentifierIndexState): Promise<void> {
+  await ensureContextplusLayout(rootDir);
+  await writeFile(
+    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE),
+    JSON.stringify(state, null, 2) + "\n",
+    "utf-8",
+  );
+}
 
+async function buildIdentifierDocsForFile(rootDir: string, relativePath: string): Promise<PersistedIdentifierFileEntry | null> {
+  const normalized = normalizeRelativePath(relativePath);
+  const fullPath = resolve(rootDir, normalized);
+  if (!isSupportedFile(fullPath)) return null;
+
+  try {
+    const content = await readFile(fullPath, "utf-8");
+    const analysis = await analyzeFile(fullPath);
+    const flat = flattenSymbols(analysis.symbols);
+    return {
+      fingerprint: "",
+      docs: flat.map((symbol) => ({
+        id: `${normalized}:${symbol.name}:${symbol.line}`,
+        path: normalized,
+        header: analysis.header,
+        name: symbol.name,
+        kind: symbol.kind,
+        line: symbol.line,
+        endLine: symbol.endLine,
+        signature: symbol.signature,
+        parentName: symbol.parentName,
+        text: `${symbol.name} ${symbol.kind} ${symbol.signature} ${normalized} ${analysis.header} ${symbol.parentName ?? ""}`,
+      })),
+      lines: content.split("\n"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function refreshPersistedIdentifierIndexState(
+  rootDir: string,
+  onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,
+): Promise<{ state: PersistedIdentifierIndexState; stats: Omit<IdentifierIndexStats, "embeddedIdentifiers" | "reusedIdentifiers"> }> {
+  const previous = await loadPersistedIdentifierIndexState(rootDir);
   const entries = await walkDirectory({ rootDir, depthLimit: 0 });
   const files = entries.filter((entry) => !entry.isDirectory && isSupportedFile(entry.path));
-  const docs: IdentifierDoc[] = [];
-  const fileLines = new Map<string, string[]>();
+  const nextFiles: Record<string, PersistedIdentifierFileEntry> = {};
+  const seen = new Set<string>();
+  let processedFiles = 0;
+  let changedFiles = 0;
 
   for (const file of files) {
-    try {
-      const content = await readFile(file.path, "utf-8");
-      fileLines.set(file.relativePath, content.split("\n"));
-      const analysis = await analyzeFile(file.path);
-      const flat = flattenSymbols(analysis.symbols);
-      for (const symbol of flat) {
-        docs.push({
-          id: `${file.relativePath}:${symbol.name}:${symbol.line}`,
-          path: file.relativePath,
-          header: analysis.header,
-          name: symbol.name,
-          kind: symbol.kind,
-          line: symbol.line,
-          endLine: symbol.endLine,
-          signature: symbol.signature,
-          parentName: symbol.parentName,
-          text: `${symbol.name} ${symbol.kind} ${symbol.signature} ${file.relativePath} ${analysis.header} ${symbol.parentName ?? ""}`,
-        });
+    const relativePath = normalizeRelativePath(file.relativePath);
+    const fileStat = await stat(file.path);
+    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
+    const previousEntry = previous.files[relativePath];
+
+    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+      nextFiles[relativePath] = previousEntry;
+    } else {
+      const nextEntry = await buildIdentifierDocsForFile(rootDir, relativePath);
+      changedFiles++;
+      if (nextEntry) {
+        nextFiles[relativePath] = {
+          ...nextEntry,
+          fingerprint,
+        };
       }
-    } catch {
     }
+
+    seen.add(relativePath);
+    processedFiles++;
+    if (onProgress && shouldReportProgress(processedFiles, files.length)) {
+      await onProgress({
+        phase: "identifier-scan",
+        totalFiles: files.length,
+        processedFiles,
+        changedFiles,
+        removedFiles: 0,
+        indexedIdentifiers: Object.values(nextFiles).reduce((sum, entry) => sum + entry.docs.length, 0),
+      });
+    }
+  }
+
+  const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
+  const state: PersistedIdentifierIndexState = {
+    generatedAt: new Date().toISOString(),
+    files: nextFiles,
+  };
+  await savePersistedIdentifierIndexState(rootDir, state);
+
+  return {
+    state,
+    stats: {
+      totalFiles: files.length,
+      processedFiles,
+      changedFiles,
+      removedFiles,
+      indexedIdentifiers: Object.values(nextFiles).reduce((sum, entry) => sum + entry.docs.length, 0),
+    },
+  };
+}
+
+async function buildIdentifierIndex(
+  rootDir: string,
+  onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,
+): Promise<{ index: IdentifierIndex; stats: IdentifierIndexStats }> {
+  const normalizedRootDir = resolve(rootDir);
+  const { state, stats: refreshStats } = await refreshPersistedIdentifierIndexState(normalizedRootDir, onProgress);
+  const docs = Object.values(state.files).flatMap((entry) => entry.docs);
+  const fileLines = new Map<string, string[]>(
+    Object.entries(state.files).map(([path, entry]) => [path, entry.lines]),
+  );
+  const canReuseCachedIndex = cachedIndex
+    && cachedRootDir === normalizedRootDir
+    && refreshStats.changedFiles === 0
+    && refreshStats.removedFiles === 0
+    && docs.length > 0;
+
+  if (canReuseCachedIndex) {
+    const reusableIndex = cachedIndex;
+    if (!reusableIndex) throw new Error("Identifier search cache was expected but missing.");
+    if (onProgress) {
+      await onProgress({
+        phase: "identifier-embeddings",
+        totalFiles: refreshStats.totalFiles,
+        processedFiles: refreshStats.processedFiles,
+        changedFiles: refreshStats.changedFiles,
+        removedFiles: refreshStats.removedFiles,
+        indexedIdentifiers: docs.length,
+      });
+    }
+    return {
+      index: reusableIndex,
+      stats: {
+        ...refreshStats,
+        embeddedIdentifiers: 0,
+        reusedIdentifiers: docs.length,
+      },
+    };
   }
 
   if (docs.length === 0) {
     const empty: IdentifierIndex = { docs: [], vectors: [], fileLines };
     cachedIndex = empty;
     cachedRootDir = rootDir;
-    cachedAt = Date.now();
-    return empty;
+    return {
+      index: empty,
+      stats: {
+        ...refreshStats,
+        embeddedIdentifiers: 0,
+        reusedIdentifiers: 0,
+      },
+    };
   }
 
-  const cache = await loadEmbeddingCache(rootDir, IDENTIFIER_CACHE_FILE);
+  const cache = await loadEmbeddingCache(normalizedRootDir, IDENTIFIER_CACHE_FILE);
   const vectors: number[][] = new Array(docs.length);
   const uncached: { idx: number; key: string; hash: string; text: string }[] = [];
+  let reusedIdentifiers = 0;
 
   for (let i = 0; i < docs.length; i++) {
     const text = docs[i].text;
@@ -229,6 +365,7 @@ async function buildIdentifierIndex(rootDir: string): Promise<IdentifierIndex> {
     const key = `id:${docs[i].id}`;
     if (cache[key]?.hash === hash) {
       vectors[i] = cache[key].vector;
+      reusedIdentifiers++;
     } else {
       uncached.push({ idx: i, key, hash, text });
     }
@@ -244,14 +381,30 @@ async function buildIdentifierIndex(rootDir: string): Promise<IdentifierIndex> {
         cache[batch[j].key] = { hash: batch[j].hash, vector: embeddings[j] };
       }
     }
-    await saveEmbeddingCache(rootDir, cache, IDENTIFIER_CACHE_FILE);
+    await saveEmbeddingCache(normalizedRootDir, cache, IDENTIFIER_CACHE_FILE);
   }
 
   const index: IdentifierIndex = { docs, vectors, fileLines };
   cachedIndex = index;
-  cachedRootDir = rootDir;
-  cachedAt = Date.now();
-  return index;
+  cachedRootDir = normalizedRootDir;
+  if (onProgress) {
+    await onProgress({
+      phase: "identifier-embeddings",
+      totalFiles: refreshStats.totalFiles,
+      processedFiles: refreshStats.processedFiles,
+      changedFiles: refreshStats.changedFiles,
+      removedFiles: refreshStats.removedFiles,
+      indexedIdentifiers: docs.length,
+    });
+  }
+  return {
+    index,
+    stats: {
+      ...refreshStats,
+      embeddedIdentifiers: uncached.length,
+      reusedIdentifiers,
+    },
+  };
 }
 
 async function rankCallSites(
@@ -351,7 +504,7 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
   const keywordWeight = normalizeWeight(options.keywordWeight, 0.22);
   const includeKinds = normalizeKinds(options.includeKinds);
 
-  const index = await buildIdentifierIndex(options.rootDir);
+  const { index, stats } = await ensureIdentifierSearchIndex(options.rootDir);
   if (index.docs.length === 0) {
     return "No supported identifiers found for semantic identifier search.";
   }
@@ -385,6 +538,9 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
     `Top ${top.length} identifier matches for: "${options.query}"`,
     "",
   ];
+  if (stats.changedFiles > 0 || stats.removedFiles > 0) {
+    lines.push(`Index refresh: ${stats.changedFiles} changed, ${stats.removedFiles} removed, ${stats.indexedIdentifiers} indexed identifiers.`, "");
+  }
 
   for (let i = 0; i < top.length; i++) {
     const item = top[i];
@@ -424,7 +580,6 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
 
 export function invalidateIdentifierSearchCache(): void {
   cachedRootDir = null;
-  cachedAt = 0;
   cachedIndex = null;
 }
 
@@ -437,8 +592,8 @@ export async function refreshIdentifierEmbeddings(options: { rootDir: string; re
 
   for (const relativePath of uniquePaths) {
     removeFileScopedCacheEntries(cache, relativePath);
-    const docs = await buildIdentifierDocsForFile(options.rootDir, relativePath);
-    for (const doc of docs) {
+    const entry = await buildIdentifierDocsForFile(options.rootDir, relativePath);
+    for (const doc of entry?.docs ?? []) {
       const key = `id:${doc.id}`;
       const hash = hashContent(doc.text);
       pending.push({ key, hash, text: doc.text });
@@ -459,4 +614,11 @@ export async function refreshIdentifierEmbeddings(options: { rootDir: string; re
   await saveEmbeddingCache(options.rootDir, cache, IDENTIFIER_CACHE_FILE);
   invalidateIdentifierSearchCache();
   return pending.length;
+}
+
+export async function ensureIdentifierSearchIndex(
+  rootDir: string,
+  onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,
+): Promise<{ index: IdentifierIndex; stats: IdentifierIndexStats }> {
+  return buildIdentifierIndex(resolve(rootDir), onProgress);
 }

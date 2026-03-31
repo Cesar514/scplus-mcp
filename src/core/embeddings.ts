@@ -51,6 +51,12 @@ export interface SearchQueryOptions {
   requireSemanticMatch?: boolean;
 }
 
+export interface SearchIndexBuildStats {
+  documents: number;
+  embeddedDocuments: number;
+  reusedDocuments: number;
+}
+
 interface ResolvedSearchQueryOptions {
   topK: number;
   semanticWeight: number;
@@ -134,7 +140,21 @@ async function callOpenAIEmbed(input: string[], signal: AbortSignal): Promise<nu
   return data.data.map((item) => item.embedding);
 }
 
+function callMockEmbed(input: string[]): number[][] {
+  return input.map((value) => {
+    const vector = new Array<number>(64).fill(0);
+    for (let i = 0; i < Math.min(value.length, vector.length); i++) {
+      vector[i] = ((value.charCodeAt(i) % 101) + 1) / 101;
+    }
+    const norm = Math.sqrt(vector.reduce((sum, current) => sum + current * current, 0));
+    return norm > 0 ? vector.map((entry) => entry / norm) : vector;
+  });
+}
+
 async function callProviderEmbed(input: string[], signal: AbortSignal): Promise<number[][]> {
+  if (EMBED_PROVIDER === "mock") {
+    return callMockEmbed(input);
+  }
   if (EMBED_PROVIDER === "openai") {
     return callOpenAIEmbed(input, signal);
   }
@@ -442,10 +462,11 @@ function getMatchedSymbolEntries(symbols: SymbolSearchEntry[], queryTerms: Set<s
 export class SearchIndex {
   private documents: SearchDocument[] = [];
   private vectors: number[][] = [];
-  async index(docs: SearchDocument[], rootDir: string): Promise<void> {
+  async index(docs: SearchDocument[], rootDir: string): Promise<SearchIndexBuildStats> {
     this.documents = docs;
     const cache = await loadCache(rootDir);
     const uncached: { idx: number; text: string; hash: string }[] = [];
+    let reusedDocuments = 0;
 
     this.vectors = new Array(docs.length);
 
@@ -456,6 +477,7 @@ export class SearchIndex {
 
       if (cache[doc.path]?.hash === hash) {
         this.vectors[i] = cache[doc.path].vector;
+        reusedDocuments++;
       } else {
         uncached.push({ idx: i, text: rawText, hash });
       }
@@ -487,6 +509,12 @@ export class SearchIndex {
       }
       await saveCache(rootDir, cache);
     }
+
+    return {
+      documents: docs.length,
+      embeddedDocuments: uncached.length,
+      reusedDocuments,
+    };
   }
 
   async search(query: string, optionsOrTopK?: number | SearchQueryOptions): Promise<SearchResult[]> {
