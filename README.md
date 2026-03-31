@@ -6,6 +6,43 @@ Context+ is an MCP server designed for developers who demand 99% accuracy. By co
 
 https://github.com/user-attachments/assets/a97a451f-c9b4-468d-b036-15b65fc13e79
 
+## Local Install
+
+For local development, install the linked `contextplus` CLI with:
+
+```bash
+./install-contextplus.sh
+```
+
+What it does:
+
+- runs `npm install`
+- runs `npm run build`
+- runs `npm link`
+- verifies the linked `contextplus` command resolves to this checkout
+
+After editing this repo, rebuild the linked CLI with:
+
+```bash
+npm run build
+```
+
+Because `npm link` points `contextplus` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js), future builds update the command Codex launches.
+
+To add it to Codex, put this in `~/.codex/config.toml` as a separate manual step:
+
+```toml
+[mcp_servers.contextplus]
+command = "contextplus"
+args = []
+
+[mcp_servers.contextplus.env]
+OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
+OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
+CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
+CONTEXTPLUS_EMBED_TRACKER = "lazy"
+```
+
 ## Tools
 
 ### Discovery
