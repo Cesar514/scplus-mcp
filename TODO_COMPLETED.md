@@ -21,3 +21,13 @@
   - [x] use .contextplus/embeddings for storing file and symbol embeddings
   - [x] use .contextplus/config for configuration files
   - [x] use .contextplus/memories for memory graph data
+
+## maintenance
+
+- [x] remove the legacy repo-local index state that still lives under `.mcp_data`
+- [x] create a fresh `.contextplus` index for this repository using the Context+ `index` workflow
+- [x] verify the generated `.contextplus` layout and manifests match the documented project state
+- [x] update the `contextplus-mcp` skill so it explicitly covers legacy index cleanup and repo-local instruction precedence for reindex tasks
+- [x] remove the remaining legacy `.mcp_data` handling from runtime ignore logic
+- [x] update the memory-graph tests to create `.contextplus/memories` fixtures instead of `.mcp_data`
+- [x] verify runtime code and focused tests no longer depend on `.mcp_data`

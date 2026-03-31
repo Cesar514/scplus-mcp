@@ -30,7 +30,6 @@ const MAX_PENDING_FILES = 50;
 
 const IGNORE_PREFIXES = [
   ".contextplus/",
-  ".mcp_data/",
   ".git/",
   "node_modules/",
   "build/",
