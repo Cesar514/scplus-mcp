@@ -4,6 +4,30 @@
 
 ai agents may update this file to remove completed work, keep the backlog accurate, and add newly discovered remaining tasks for the current goal
 
+## current goal
+
+- [ ] finish roadmap step 02 and verify it directly
+- [ ] commit the verified step 02 work
+
+## full engine roadmap (ordered)
+
+- [ ] 02. split the current indexing pipeline into durable stages so `core` stays a strict prerequisite for `full` and every stage can be rerun independently
+- [ ] 03. add chunk-level AST indexing as a first-class artifact so retrieval is not limited to file and identifier granularity
+- [ ] 04. add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring, while keeping repo-local defaults and optional local vector-db acceleration
+- [ ] 05. add a stronger incremental refresh engine with file hashes, chunk hashes, and dependency-aware invalidation so reindexing recomputes only the necessary artifacts
+- [ ] 06. persist richer code-structure artifacts per file and module, including imports, exports, call graphs, ownership edges, and file-to-symbol mappings
+- [ ] 07. build a unified ranking engine that can combine chunk, file, identifier, lexical, semantic, structural, and memory evidence in one search surface
+- [ ] 08. make `search` the canonical query entrypoint over those precomputed artifacts and remove overlapping or weaker search surfaces after callers are migrated
+- [ ] 09. persist semantic clusters, cluster labels, related-file graphs, and subsystem summaries as `full` artifacts instead of generating them only on demand
+- [ ] 10. generate hub suggestions and feature-group candidates automatically from clusters, structure graphs, and feature tags so humans and agents get higher-level maps for free
+- [ ] 11. replace the current memory store with the planned graph-plus-markdown-plus-vector memory system and make memory writes update embeddings and relations automatically
+- [ ] 12. integrate ACP and external session memories into the same graph so research and retrieval can blend local code, durable memory, and imported agent history
+- [ ] 13. add a unified `research` surface that aggregates code retrieval, structure artifacts, memory, ACP context, and related-context discovery in one tool
+- [ ] 14. harden indexing and query reliability with crash-only behavior, explicit repair commands, artifact-version checks, snapshot/index consistency validation, and no silent fallbacks
+- [ ] 15. add evaluation and benchmarking for retrieval quality, navigation quality, reindex speed, artifact freshness, and agent-answer quality so changes are measured instead of vibe-judged
+- [ ] 16. simplify the public tool surface only after the full engine exists, deleting superseded tools and parameters instead of keeping overlapping abstractions alive
+- [ ] 17. expose the full engine cleanly through the planned CLI and UX layers only after the underlying indexing, retrieval, structure, memory, and research primitives are stable
+
 ## v1
 
 - [ ] move persisted embedding/search storage to a vector database once the eager indexing pipeline is solid

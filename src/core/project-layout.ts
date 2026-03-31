@@ -10,6 +10,7 @@ export const CONTEXTPLUS_EMBEDDINGS_DIR = join(CONTEXTPLUS_DIR, "embeddings");
 export const CONTEXTPLUS_MEMORIES_DIR = join(CONTEXTPLUS_DIR, "memories");
 export const CONTEXTPLUS_CONFIG_DIR = join(CONTEXTPLUS_DIR, "config");
 export const CONTEXTPLUS_CHECKPOINTS_DIR = join(CONTEXTPLUS_DIR, "checkpoints");
+export const CONTEXTPLUS_DERIVED_DIR = join(CONTEXTPLUS_DIR, "derived");
 
 export interface ContextplusLayout {
   root: string;
@@ -18,6 +19,7 @@ export interface ContextplusLayout {
   memories: string;
   config: string;
   checkpoints: string;
+  derived: string;
 }
 
 export function getContextplusLayout(rootDir: string): ContextplusLayout {
@@ -28,6 +30,7 @@ export function getContextplusLayout(rootDir: string): ContextplusLayout {
     memories: join(rootDir, CONTEXTPLUS_MEMORIES_DIR),
     config: join(rootDir, CONTEXTPLUS_CONFIG_DIR),
     checkpoints: join(rootDir, CONTEXTPLUS_CHECKPOINTS_DIR),
+    derived: join(rootDir, CONTEXTPLUS_DERIVED_DIR),
   };
 }
 
@@ -39,5 +42,6 @@ export async function ensureContextplusLayout(rootDir: string): Promise<Contextp
   await mkdir(layout.memories, { recursive: true });
   await mkdir(layout.config, { recursive: true });
   await mkdir(layout.checkpoints, { recursive: true });
+  await mkdir(layout.derived, { recursive: true });
   return layout;
 }

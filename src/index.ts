@@ -22,6 +22,7 @@ import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { toolUpsertMemoryNode, toolCreateRelation, toolSearchMemoryGraph, toolPruneStaleLinks, toolAddInterlinkedContext, toolRetrieveWithTraversal } from "./tools/memory-tools.js";
 import { indexCodebase } from "./tools/index-codebase.js";
+import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -169,8 +170,11 @@ async function runInitCommand(args: string[]) {
 }
 
 async function runIndexCommand(args: string[]) {
-  const targetRoot = args[0] ? resolve(args[0]) : process.cwd();
-  process.stdout.write(await indexCodebase({ rootDir: targetRoot }) + "\n");
+  const targetRootArg = args.find((arg) => !arg.startsWith("--"));
+  const modeArg = args.find((arg) => arg.startsWith("--mode="));
+  const mode = modeArg?.split("=")[1] === "core" ? "core" : DEFAULT_INDEX_MODE;
+  const targetRoot = targetRootArg ? resolve(targetRootArg) : process.cwd();
+  process.stdout.write(await indexCodebase({ rootDir: targetRoot, mode }) + "\n");
 }
 
 const server = new McpServer({
@@ -199,12 +203,14 @@ server.tool(
   "index",
   "Create or refresh the .contextplus project state for this repo. Builds the repo-local Context+ layout, " +
   "writes project config plus a context-tree snapshot, eagerly prepares persisted file and identifier search indexes, " +
-  "and records indexing status under .contextplus/config for inspection.",
-  {},
-  withRequestActivity(async () => ({
+  "and in full mode also persists chunk and code-structure artifacts under .contextplus/derived with explicit contract metadata and indexing status under .contextplus/config.",
+  {
+    mode: z.enum(["core", "full"]).optional().describe("Indexing mode. Defaults to full and persists derived chunk and code-structure artifacts."),
+  },
+  withRequestActivity(async ({ mode }) => ({
     content: [{
       type: "text" as const,
-      text: await indexCodebase({ rootDir: ROOT_DIR }),
+      text: await indexCodebase({ rootDir: ROOT_DIR, mode }),
     }],
   })),
 );
