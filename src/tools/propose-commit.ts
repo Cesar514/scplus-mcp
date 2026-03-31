@@ -1,5 +1,5 @@
-// Code commit gatekeeper enforcing 2-line headers, no inline comments
-// Validates abstraction rules and creates shadow restore points before writing
+// Code commit gatekeeper enforcing practical file hygiene before writes
+// Validates headers and file complexity before creating shadow restore points
 
 import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";
@@ -30,38 +30,19 @@ function validateHeader(lines: string[], ext: string): ValidationError[] {
   const prefix = commentPrefixes[ext];
   if (!prefix) return errors;
 
-  const headerLines = lines.slice(0, 5).filter((l) => l.startsWith(prefix));
-  if (headerLines.length < 2) {
+  if (lines.length < 2 || !lines[0].startsWith(prefix) || !lines[1].startsWith(prefix)) {
     errors.push({
       rule: "header",
-      message: `Missing 2-line file header. First 2 lines must be ${prefix} comments explaining the file.`,
+      message: `Missing 2-line file header. The first 2 lines must be ${prefix} comments explaining the file.`,
     });
+    return errors;
   }
 
-  if (headerLines.length >= 2 && !headerLines[1].toUpperCase().includes("FEATURE:")) {
+  if (!lines[1].toUpperCase().includes("FEATURE:")) {
     errors.push({
       rule: "feature-tag",
       message: `Line 2 should include a FEATURE: tag (e.g., "${prefix} FEATURE: Feature Name"). Links files to feature hubs.`,
     });
-  }
-
-  return errors;
-}
-
-function validateNoInlineComments(lines: string[], ext: string): ValidationError[] {
-  const errors: ValidationError[] = [];
-  const isScriptLang = [".py", ".rb"].includes(ext);
-  const commentPrefix = isScriptLang ? "#" : "//";
-
-  for (let i = 2; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith(commentPrefix) && !trimmed.startsWith("#!") && !trimmed.startsWith("#include")) {
-      errors.push({
-        rule: "no-comments",
-        message: `Unauthorized comment found on line ${i + 1}: ${trimmed.substring(0, 80)}`,
-        line: i + 1,
-      });
-    }
   }
 
   return errors;
@@ -104,21 +85,9 @@ export async function proposeCommit(options: ProposeCommitOptions): Promise<stri
 
   if (isSupportedFile(fullPath)) {
     allErrors.push(...validateHeader(lines, ext));
-    allErrors.push(...validateNoInlineComments(lines, ext));
   }
   allErrors.push(...validateAbstraction(lines));
-
-  const commentErrors = allErrors.filter((e) => e.rule === "no-comments");
-  if (commentErrors.length > 5) {
-    return [
-      `REJECTED: ${allErrors.length} violations found.\n`,
-      ...allErrors.slice(0, 10).map((e) => `  ❌ [${e.rule}] ${e.message}`),
-      allErrors.length > 10 ? `  ... and ${allErrors.length - 10} more violations` : "",
-      "\nFix all violations and resubmit.",
-    ].join("\n");
-  }
-
-  const warnings = allErrors.filter((e) => e.rule !== "no-comments" || commentErrors.length <= 5);
+  const warnings = allErrors;
 
   await createRestorePoint(options.rootDir, [options.filePath], `Pre-commit: ${options.filePath}`);
   await mkdir(dirname(fullPath), { recursive: true });

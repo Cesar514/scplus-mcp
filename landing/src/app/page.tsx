@@ -56,7 +56,7 @@ const toolRefRows = [
     desc: "The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing.",
     input: "{\n  file_path: string,\n  new_content: string\n}",
     output:
-      '"✓ Header comment present\n✓ No inline comments\n✓ Max nesting depth: 3\n✓ File length: 142 lines\n\nSaved src/tools/search.ts\nRestore point: rp-1719384000-a3f2"',
+      '"✓ Header comment present\n✓ FEATURE tag present\n✓ Max nesting depth: 3\n✓ File length: 142 lines\n\nSaved src/tools/search.ts\nRestore point: rp-1719384000-a3f2"',
   },
   {
     name: "restore_points",

@@ -342,7 +342,7 @@ server.tool(
 server.tool(
   "checkpoint",
   "The ONLY way to write code. Validates the code against strict rules before saving: " +
-  "2-line header comments, no inline comments, max nesting depth, max file length. " +
+  "2-line header comments, FEATURE tags, max nesting depth, max file length. " +
   "Creates a shadow restore point before writing. REJECTS code that violates formatting rules.",
   {
     file_path: z.string().describe("Where to save the file (relative to project root)."),

@@ -42,7 +42,7 @@ describe("propose-commit", async () => {
       );
     });
 
-    it("warns about inline comments", async () => {
+    it("allows comments after the required header", async () => {
       const content =
         "// Line 1\n// Line 2\n\n// This is an inline comment\nfunction x() {}\n";
       const result = await proposeCommit({
@@ -50,24 +50,21 @@ describe("propose-commit", async () => {
         filePath: "comments.ts",
         newContent: content,
       });
-      assert.ok(
-        result.includes("comment") ||
-          result.includes("⚠") ||
-          result.includes("Unauthorized"),
-      );
+      assert.ok(result.includes("saved") || result.includes("✅"));
     });
 
-    it("rejects files with many inline comments", async () => {
+    it("warns when the second header line is missing a feature tag", async () => {
       const lines = ["// H1", "// H2", ""];
-      for (let i = 0; i < 10; i++) lines.push("// bad comment " + i);
+      lines[1] = "// Header without feature tag";
+      lines.push("// allowed comment");
       lines.push("function x() {}");
       const content = lines.join("\n");
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
-        filePath: "many.ts",
+        filePath: "feature.ts",
         newContent: content,
       });
-      assert.ok(result.includes("REJECTED") || result.includes("violation"));
+      assert.ok(result.includes("feature") || result.includes("⚠"));
     });
 
     it("warns about high nesting depth", async () => {

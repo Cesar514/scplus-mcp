@@ -31,3 +31,7 @@
 - [x] remove the remaining legacy `.mcp_data` handling from runtime ignore logic
 - [x] update the memory-graph tests to create `.contextplus/memories` fixtures instead of `.mcp_data`
 - [x] verify runtime code and focused tests no longer depend on `.mcp_data`
+- [x] remove the blanket no-comments policy from repo instructions and mirrored landing instructions
+- [x] allow ordinary post-header comments in `checkpoint` while keeping header, feature, and size checks
+- [x] rebuild `lint` so it runs valid native commands and reports practical repo-rule findings
+- [x] verify the updated lint and checkpoint behavior with targeted suites and the full main test run

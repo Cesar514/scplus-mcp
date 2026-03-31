@@ -21,7 +21,7 @@ describe("static-analysis", async () => {
         rootDir: FIXTURE_DIR,
         targetPath: "data.csv",
       });
-      assert.ok(result.includes("No linter"));
+      assert.ok(result.includes("No native lint tool"));
     });
 
     it("returns string output", async () => {
@@ -36,13 +36,14 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "clean.ts"),
-        "export const x: number = 1;\n",
+        "// Clean module\n// FEATURE: Static Analysis Tests\n\nexport const x: number = 1;\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
         targetPath: "clean.ts",
       });
       assert.ok(typeof result === "string");
+      assert.ok(result.includes("Lint target: clean.ts"));
     });
 
     it("returns no-linter for TypeScript without tsconfig", async () => {
@@ -54,7 +55,7 @@ describe("static-analysis", async () => {
         targetPath: "x.ts",
       });
       assert.ok(
-        result.includes("No linter") ||
+        result.includes("No native lint tool") ||
           result.includes("tsc") ||
           typeof result === "string",
       );
@@ -63,13 +64,14 @@ describe("static-analysis", async () => {
     it("handles Python files with py_compile", async () => {
       await writeFile(
         join(FIXTURE_DIR, "good.py"),
-        "def hello():\n    return 'hi'\n",
+        "# Clean script\n# FEATURE: Static Analysis Tests\n\ndef hello():\n    return 'hi'\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
         targetPath: "good.py",
       });
       assert.ok(typeof result === "string");
+      assert.ok(result.includes("No issues found.") || result.includes("py_compile"));
     });
 
     it("reports results with tool name", async () => {
@@ -79,19 +81,35 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "err.ts"),
-        "const a: number = 'wrong';\n",
+        "// Broken module\n// FEATURE: Static Analysis Tests\n\nconst a: number = 'wrong';\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
         targetPath: "err.ts",
       });
-      assert.ok(typeof result === "string");
+      assert.ok(result.includes("Native diagnostics:") || result.includes("[tsc]"));
     });
 
     it("whole directory scan returns string", async () => {
       const result = await runStaticAnalysis({ rootDir: FIXTURE_DIR });
       assert.ok(typeof result === "string");
       assert.ok(result.length > 0);
+    });
+
+    it("reports missing header as a rule finding", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "headerless.ts"),
+        "export const headerless = 1;\n",
+      );
+      await writeFile(
+        join(FIXTURE_DIR, "tsconfig.json"),
+        '{"compilerOptions":{"strict":true}}',
+      );
+      const result = await runStaticAnalysis({
+        rootDir: FIXTURE_DIR,
+        targetPath: "headerless.ts",
+      });
+      assert.ok(result.includes("[header]"));
     });
   });
 

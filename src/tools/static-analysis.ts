@@ -1,105 +1,270 @@
-// Static analysis runner using native linters and compilers
-// Delegates dead code detection to deterministic tools, not LLM guessing
+// Static analysis runner combining native diagnostics with practical repo hygiene
+// Reports deterministic findings for headers, file size, and tool errors
 
-import { exec } from "child_process";
-import { stat } from "fs/promises";
-import { resolve, extname } from "path";
+import { execFile } from "child_process";
+import { readFile, stat } from "fs/promises";
+import { dirname, extname, relative, resolve } from "path";
 import { promisify } from "util";
+import { walkDirectory } from "../core/walker.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const PACKAGE_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..", "..");
 
 export interface StaticAnalysisOptions {
   rootDir: string;
   targetPath?: string;
 }
 
-interface LintResult {
+interface NativeLintConfig {
+  cmd: string;
+  args: string[];
+  tool: string;
+}
+
+interface NativeLintResult {
   tool: string;
   output: string;
   exitCode: number;
 }
 
-const LINTER_MAP: Record<string, { cmd: string; args: string[] }> = {
-  ".ts": { cmd: "npx", args: ["tsc", "--noEmit", "--pretty"] },
-  ".tsx": { cmd: "npx", args: ["tsc", "--noEmit", "--pretty"] },
-  ".js": { cmd: "npx", args: ["eslint", "--no-eslintrc", "--rule", '{"no-unused-vars": "warn"}'] },
-  ".py": { cmd: "python", args: ["-m", "py_compile"] },
-  ".rs": { cmd: "cargo", args: ["check", "--message-format=short"] },
-  ".go": { cmd: "go", args: ["vet"] },
+interface RuleFinding {
+  file: string;
+  line?: number;
+  rule: string;
+  severity: "error" | "warning";
+  message: string;
+}
+
+const COMMENT_PREFIXES: Record<string, string> = {
+  ".c": "//",
+  ".cpp": "//",
+  ".cs": "//",
+  ".go": "//",
+  ".java": "//",
+  ".js": "//",
+  ".jsx": "//",
+  ".kt": "//",
+  ".lua": "--",
+  ".py": "#",
+  ".rb": "#",
+  ".rs": "//",
+  ".swift": "//",
+  ".ts": "//",
+  ".tsx": "//",
+  ".zig": "//",
 };
 
-async function runCommand(cmd: string, args: string[], cwd: string): Promise<LintResult> {
-  const fullCmd = `${cmd} ${args.join(" ")}`;
+const ROOT_ESLINT_CONFIGS = [
+  "eslint.config.js",
+  "eslint.config.cjs",
+  "eslint.config.mjs",
+  ".eslintrc",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".eslintrc.json",
+  ".eslintrc.yaml",
+  ".eslintrc.yml",
+];
+
+const MAX_FILE_LINES = 1000;
+
+async function pathExists(path: string): Promise<boolean> {
   try {
-    const { stdout, stderr } = await execAsync(fullCmd, { cwd, timeout: 30000, maxBuffer: 1024 * 512 });
-    return { tool: cmd, output: (stdout + stderr).trim(), exitCode: 0 };
-  } catch (err: any) {
-    return { tool: cmd, output: (err.stdout ?? "") + (err.stderr ?? ""), exitCode: err.code ?? 1 };
+    await stat(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-async function detectAvailableLinter(rootDir: string, ext: string): Promise<{ cmd: string; args: string[] } | null> {
-  const config = LINTER_MAP[ext];
-  if (!config) return null;
+async function resolveNodeTool(rootDir: string, relativePath: string): Promise<string | null> {
+  const localPath = resolve(rootDir, "node_modules", relativePath);
+  if (await pathExists(localPath)) return localPath;
+  const packagePath = resolve(PACKAGE_ROOT, "node_modules", relativePath);
+  if (await pathExists(packagePath)) return packagePath;
+  return null;
+}
 
-  if (ext === ".ts" || ext === ".tsx") {
-    try {
-      await stat(resolve(rootDir, "tsconfig.json"));
-      return config;
-    } catch {
-      return null;
-    }
+async function runCommand(cmd: string, args: string[], cwd: string, tool: string): Promise<NativeLintResult> {
+  try {
+    const { stdout, stderr } = await execFileAsync(cmd, args, {
+      cwd,
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+    });
+    return { tool, output: `${stdout}${stderr}`.trim(), exitCode: 0 };
+  } catch (error: any) {
+    return {
+      tool,
+      output: `${error.stdout ?? ""}${error.stderr ?? ""}`.trim(),
+      exitCode: error.code ?? 1,
+    };
+  }
+}
+
+async function getTargetFiles(rootDir: string, targetPath?: string): Promise<string[]> {
+  if (!targetPath) {
+    const entries = await walkDirectory({ rootDir });
+    return entries.filter((entry) => !entry.isDirectory).map((entry) => entry.path);
   }
 
-  if (ext === ".rs") {
-    try {
-      await stat(resolve(rootDir, "Cargo.toml"));
-      return config;
-    } catch {
-      return null;
-    }
+  const fullTargetPath = resolve(rootDir, targetPath);
+  const targetStat = await stat(fullTargetPath);
+  if (!targetStat.isDirectory()) return [fullTargetPath];
+
+  const entries = await walkDirectory({ rootDir, targetPath });
+  return entries.filter((entry) => !entry.isDirectory).map((entry) => entry.path);
+}
+
+function getSupportedRuleFiles(paths: string[]): string[] {
+  return paths.filter((path) => COMMENT_PREFIXES[extname(path)]);
+}
+
+function validateHeader(file: string, lines: string[]): RuleFinding[] {
+  const prefix = COMMENT_PREFIXES[extname(file)];
+  if (!prefix) return [];
+  if (lines.length >= 2 && lines[0].startsWith(prefix) && lines[1].startsWith(prefix)) {
+    const featureLine = lines[1].toUpperCase().includes("FEATURE:");
+    return featureLine
+      ? []
+      : [{
+          file,
+          line: 2,
+          rule: "feature-tag",
+          severity: "warning",
+          message: "Line 2 should include a FEATURE: tag.",
+        }];
+  }
+  return [{
+    file,
+    line: 1,
+    rule: "header",
+    severity: "error",
+    message: `The first 2 lines must be ${prefix} header comments.`,
+  }];
+}
+
+function validateFileLength(file: string, lines: string[]): RuleFinding[] {
+  if (lines.length <= MAX_FILE_LINES) return [];
+  return [{
+    file,
+    line: MAX_FILE_LINES + 1,
+    rule: "file-length",
+    severity: "warning",
+    message: `File has ${lines.length} lines. Recommended maximum is ${MAX_FILE_LINES}.`,
+  }];
+}
+
+async function collectRuleFindings(rootDir: string, targetFiles: string[]): Promise<RuleFinding[]> {
+  const findings: RuleFinding[] = [];
+  for (const file of getSupportedRuleFiles(targetFiles)) {
+    const content = await readFile(file, "utf-8");
+    const lines = content.split("\n");
+    const relativePath = relative(rootDir, file).replace(/\\/g, "/");
+    findings.push(...validateHeader(relativePath, lines));
+    findings.push(...validateFileLength(relativePath, lines));
+  }
+  return findings;
+}
+
+async function detectNativeLinters(rootDir: string, targetFiles: string[], targetPath?: string): Promise<NativeLintConfig[]> {
+  const configs: NativeLintConfig[] = [];
+  const extensions = new Set(targetFiles.map((file) => extname(file)));
+
+  const tscPath = await resolveNodeTool(rootDir, "typescript/bin/tsc");
+  if ((extensions.has(".ts") || extensions.has(".tsx")) && tscPath && await pathExists(resolve(rootDir, "tsconfig.json"))) {
+    configs.push({
+      cmd: process.execPath,
+      args: [tscPath, "--noEmit", "--pretty", "false", "-p", resolve(rootDir, "tsconfig.json")],
+      tool: "tsc",
+    });
   }
 
-  if (ext === ".go") {
-    try {
-      await stat(resolve(rootDir, "go.mod"));
-      return config;
-    } catch {
-      return null;
-    }
+  const eslintPath = await resolveNodeTool(rootDir, "eslint/bin/eslint.js");
+  if ((extensions.has(".js") || extensions.has(".jsx")) && eslintPath && (await Promise.all(ROOT_ESLINT_CONFIGS.map((name) => pathExists(resolve(rootDir, name))))).some(Boolean)) {
+    const lintTarget = targetPath ? resolve(rootDir, targetPath) : ".";
+    configs.push({
+      cmd: process.execPath,
+      args: [eslintPath, lintTarget],
+      tool: "eslint",
+    });
   }
 
-  return config;
+  const pythonFiles = targetFiles.filter((file) => extname(file) === ".py");
+  if (pythonFiles.length > 0) {
+    configs.push({
+      cmd: "python",
+      args: ["-m", "py_compile", ...pythonFiles],
+      tool: "py_compile",
+    });
+  }
+
+  if ((extensions.has(".rs") || await pathExists(resolve(rootDir, "Cargo.toml"))) && await pathExists(resolve(rootDir, "Cargo.toml"))) {
+    configs.push({
+      cmd: "cargo",
+      args: ["check", "--message-format=short"],
+      tool: "cargo check",
+    });
+  }
+
+  if ((extensions.has(".go") || await pathExists(resolve(rootDir, "go.mod"))) && await pathExists(resolve(rootDir, "go.mod"))) {
+    const goTarget = targetPath ? resolve(rootDir, targetPath) : "./...";
+    configs.push({
+      cmd: "go",
+      args: ["vet", goTarget],
+      tool: "go vet",
+    });
+  }
+
+  return configs;
+}
+
+function formatFindings(findings: RuleFinding[]): string[] {
+  return findings.map((finding) => {
+    const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
+    return `- [${finding.severity}] ${location} [${finding.rule}] ${finding.message}`;
+  });
 }
 
 export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise<string> {
-  const targetPath = options.targetPath ? resolve(options.rootDir, options.targetPath) : options.rootDir;
-  const ext = extname(targetPath);
+  const rootDir = resolve(options.rootDir);
+  const targetFiles = await getTargetFiles(rootDir, options.targetPath);
+  const relativeFiles = targetFiles.map((file) => relative(rootDir, file).replace(/\\/g, "/"));
+  const nativeLinters = await detectNativeLinters(rootDir, targetFiles, options.targetPath);
+  const nativeResults = await Promise.all(nativeLinters.map((config) => runCommand(config.cmd, config.args, rootDir, config.tool)));
+  const ruleFindings = await collectRuleFindings(rootDir, targetFiles);
+  const nativeFailures = nativeResults.filter((result) => result.exitCode !== 0);
+  const nativeOutput = nativeResults.filter((result) => result.output);
 
-  if (ext) {
-    const linter = await detectAvailableLinter(options.rootDir, ext);
-    if (!linter) return `No linter configured for ${ext} files.`;
+  const lines = [
+    `Lint target: ${options.targetPath ?? "."}`,
+    `Files inspected: ${relativeFiles.length}`,
+    `Native tools run: ${nativeResults.length > 0 ? nativeResults.map((result) => result.tool).join(", ") : "none"}`,
+    `Rule findings: ${ruleFindings.length}`,
+  ];
 
-    const args = [...linter.args];
-    if ([".js", ".ts", ".tsx"].includes(ext)) args.push(targetPath);
-    else if (ext === ".py") args.push(targetPath);
-
-    const result = await runCommand(linter.cmd, args, options.rootDir);
-
-    if (result.exitCode === 0 && !result.output) return "No issues found. Code is clean.";
-    return `Static analysis (${result.tool}):\n\n${result.output.substring(0, 5000)}`;
+  if (nativeFailures.length === 0 && ruleFindings.length === 0) {
+    lines.push("", "No issues found.");
   }
 
-  const results: string[] = [];
-  for (const [fileExt] of Object.entries(LINTER_MAP)) {
-    const linter = await detectAvailableLinter(options.rootDir, fileExt);
-    if (!linter) continue;
+  if (ruleFindings.length > 0) {
+    lines.push("", "Context+ rule findings:");
+    lines.push(...formatFindings(ruleFindings));
+  }
 
-    const result = await runCommand(linter.cmd, linter.args, options.rootDir);
-    if (result.output) {
-      results.push(`[${result.tool}] ${fileExt} files:\n${result.output.substring(0, 2000)}`);
+  if (nativeOutput.length > 0) {
+    lines.push("", "Native diagnostics:");
+    for (const result of nativeOutput) {
+      lines.push(`[${result.tool}] exit=${result.exitCode}`);
+      lines.push(result.output.substring(0, 4000));
     }
   }
 
-  return results.length > 0 ? results.join("\n\n") : "No linters available or no issues found.";
+  if (nativeResults.length === 0 && targetFiles.length === 0) {
+    lines.push("", "No supported files found for linting.");
+  } else if (nativeResults.length === 0) {
+    lines.push("", "No native lint tool matched this target.");
+  }
+
+  return lines.join("\n");
 }

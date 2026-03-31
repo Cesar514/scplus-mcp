@@ -91,17 +91,17 @@ describe("DEMO: checkpoint", () => {
     console.log("--- END ---\n");
   });
 
-  it("INPUT: file with inline comments (violation)", async () => {
+  it("INPUT: file with helpful comments after the required header", async () => {
     const input = {
       rootDir: FIXTURE,
       filePath: "src/comments.ts",
       newContent: [
-        "// Module with unauthorized inline comments scattered throughout code",
-        "// FEATURE: Bad Example",
+        "// Module showing that targeted inline comments are now allowed",
+        "// FEATURE: Commented Example",
         "",
-        "// This is not allowed",
+        "// This explains why the branch exists",
         "export function bad(): void {}",
-        "// Neither is this",
+        "// This note documents a follow-up risk",
       ].join("\n"),
     };
     console.log("\n--- INPUT ---");

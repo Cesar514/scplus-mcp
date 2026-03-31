@@ -28,7 +28,7 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 - \`semantic-navigate.ts\` - Browse-by-meaning navigator using spectral clustering and Ollama labeling.
 - \`blast-radius.ts\` - Symbol usage tracer across the entire codebase.
 - \`static-analysis.ts\` - Native linter runner (tsc, eslint, py_compile, cargo check, go vet).
-- \`propose-commit.ts\` - Code gatekeeper validating headers, FEATURE tag, no inline comments, nesting, file length.
+- \`propose-commit.ts\` - Code gatekeeper validating headers, FEATURE tag, nesting, and file length.
 - \`feature-hub.ts\` - Obsidian-style feature hub navigator with bundled skeleton views.
 - \`memory-tools.ts\` - Memory graph MCP wrappers (upsert, relate, search, prune, interlink, traverse).
 
@@ -100,9 +100,9 @@ FEATURE: Core parsing layer for structural code analysis
 Line 1: What the file does.
 Line 2: \`FEATURE: <name>\` - the primary feature it belongs to. Links to hub.
 
-### Zero Comments
+### Comment Policy
 
-No comments anywhere in the file except the 2-line header. No inline comments, no block comments, no TODO markers.
+Use comments when they clarify non-obvious behavior. Avoid stale or noisy comments that only restate the code.
 
 ### Code Ordering
 
@@ -156,7 +156,7 @@ Strict order within every file:
 1. Reading entire files without checking the skeleton first.
 2. Deleting functions without checking blast radius.
 3. Creating small helper functions that are only used once.
-4. Writing inline comments anywhere in the code.
+4. Writing noisy comments that do not improve comprehension.
 5. Wrapping simple logic in 10 layers of abstraction or nesting.
 6. Leaving unused imports or variables after a refactor.
 7. Creating more than 10 files in a single directory.
