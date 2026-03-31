@@ -39,7 +39,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 
 - `shadow.ts` - Shadow restore point system for undo without touching git history.
 
-**Entry Point**: `src/index.ts` registers 16 MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to `process.cwd()`).
+**Entry Point**: `src/index.ts` registers 17 MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to `process.cwd()`).
 
 ## Environment Variables
 
@@ -53,7 +53,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 | `CONTEXTPLUS_EMBED_TRACKER_MAX_FILES`   | `8`                | Max changed files per tracker tick (hard-capped to 5-10)      |
 | `CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS` | `700`              | Debounce before applying tracker refresh                      |
 
-Runtime cache: `.mcp_data/` is created at MCP startup and stores reusable embedding vectors for files, identifiers, and call sites. A realtime tracker watches file updates and refreshes changed function/file embeddings incrementally.
+Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, memory graph store, restore-point manifest, and embedding cache directories. A realtime tracker watches source updates and refreshes changed function/file embeddings incrementally while ignoring `.contextplus/`.
 
 ## Fast Execute Mode (Mandatory)
 
@@ -129,6 +129,7 @@ Strict order within every file:
 
 | Tool                         | When to Use                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
+| `index`                      | Bootstrap or refresh repo-local `.contextplus/` state before durable indexing work. |
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse codebase by meaning, not directory structure.                               |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |

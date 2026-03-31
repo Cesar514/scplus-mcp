@@ -30,6 +30,7 @@ const ALWAYS_IGNORE = new Set([
   ".next",
   ".nuxt",
   "target",
+  ".contextplus",
   ".mcp_data",
   ".mcp-shadow-history",
   "coverage",

@@ -9,6 +9,13 @@ export const dynamic = "force-dynamic";
 
 const toolRefRows = [
   {
+    name: "index",
+    desc: "Create or refresh repo-local .contextplus state. Writes project config, a context-tree snapshot, a file manifest, and durable memory/checkpoint storage.",
+    input: "{}",
+    output:
+      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/config/project.json\n  .contextplus/config/context-tree.txt\n  .contextplus/config/file-manifest.json\n  .contextplus/memories/memory-graph.json\n  .contextplus/checkpoints/restore-points.json"',
+  },
+  {
     name: "tree",
     desc: "Get the structural AST tree of a project with file headers plus line-numbered function/class/method symbols. Dynamic token-aware pruning shrinks output automatically.",
     input:

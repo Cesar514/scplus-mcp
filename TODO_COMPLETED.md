@@ -16,3 +16,8 @@
   - [x] rename search_memory_graph to search_memory
   - [x] rename retrieve_with_traversal to explore_memory
   - [x] add_interlinked_context to bulk_memory
+- [x] create a new tool called index that initializes the project by creating a context tree and .contextplus folder
+  - [x] use .contextplus/hubs for feature hubs
+  - [x] use .contextplus/embeddings for storing file and symbol embeddings
+  - [x] use .contextplus/config for configuration files
+  - [x] use .contextplus/memories for memory graph data

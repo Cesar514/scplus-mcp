@@ -11,7 +11,7 @@ import { createEmbeddingTrackerController } from "./core/embedding-tracker.js";
 import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeError, runCleanup, startParentMonitor } from "./core/process-lifecycle.js";
 import { getContextTree } from "./tools/context-tree.js";
 import { getFileSkeleton } from "./tools/file-skeleton.js";
-import { ensureMcpDataDir, cancelAllEmbeddings } from "./core/embeddings.js";
+import { cancelAllEmbeddings } from "./core/embeddings.js";
 import { semanticCodeSearch, invalidateSearchCache } from "./tools/semantic-search.js";
 import { semanticIdentifierSearch, invalidateIdentifierSearchCache } from "./tools/semantic-identifiers.js";
 import { getBlastRadius } from "./tools/blast-radius.js";
@@ -21,6 +21,7 @@ import { listRestorePoints, restorePoint } from "./git/shadow.js";
 import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { toolUpsertMemoryNode, toolCreateRelation, toolSearchMemoryGraph, toolPruneStaleLinks, toolAddInterlinkedContext, toolRetrieveWithTraversal } from "./tools/memory-tools.js";
+import { indexCodebase } from "./tools/index-codebase.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -33,7 +34,7 @@ const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
   codex: ".codex/config.toml",
 };
 
-const SUB_COMMANDS = ["init", "skeleton", "tree"];
+const SUB_COMMANDS = ["init", "index", "skeleton", "tree"];
 const passthroughArgs = process.argv.slice(2);
 const ROOT_DIR = passthroughArgs[0] && !SUB_COMMANDS.includes(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
@@ -167,6 +168,11 @@ async function runInitCommand(args: string[]) {
   console.error(`Wrote MCP config: ${outputPath}`);
 }
 
+async function runIndexCommand(args: string[]) {
+  const targetRoot = args[0] ? resolve(args[0]) : process.cwd();
+  process.stdout.write(await indexCodebase({ rootDir: targetRoot }) + "\n");
+}
+
 const server = new McpServer({
   name: "contextplus",
   version: "1.0.0",
@@ -187,6 +193,19 @@ server.resource(
       }],
     };
   }),
+);
+
+server.tool(
+  "index",
+  "Create or refresh the .contextplus project state for this repo. Creates the repo-local Context+ layout, " +
+  "writes project config plus a context-tree snapshot, and initializes durable storage for memories and checkpoints.",
+  {},
+  withRequestActivity(async () => ({
+    content: [{
+      type: "text" as const,
+      text: await indexCodebase({ rootDir: ROOT_DIR }),
+    }],
+  })),
 );
 
 server.tool(
@@ -536,6 +555,10 @@ async function main() {
     await runInitCommand(args.slice(1));
     return;
   }
+  if (args[0] === "index") {
+    await runIndexCommand(args.slice(1));
+    return;
+  }
   if (args[0] === "skeleton" || args[0] === "tree") {
     const targetRoot = args[1] ? resolve(args[1]) : process.cwd();
     const tree = await getContextTree({
@@ -546,7 +569,6 @@ async function main() {
     process.stdout.write(tree + "\n");
     return;
   }
-  await ensureMcpDataDir(ROOT_DIR);
   const trackerController = createEmbeddingTrackerController({
     rootDir: ROOT_DIR,
     mode: process.env.CONTEXTPLUS_EMBED_TRACKER,

@@ -3,7 +3,8 @@
 
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
-import { fetchEmbedding, ensureMcpDataDir } from "./embeddings.js";
+import { fetchEmbedding } from "./embeddings.js";
+import { CONTEXTPLUS_MEMORIES_DIR, ensureContextplusLayout } from "./project-layout.js";
 
 export type NodeType = "concept" | "file" | "symbol" | "note";
 export type RelationType = "relates_to" | "depends_on" | "implements" | "references" | "similar_to" | "contains";
@@ -50,7 +51,7 @@ export interface GraphSearchResult {
 }
 
 const GRAPH_FILE = "memory-graph.json";
-const CACHE_DIR = ".mcp_data";
+const CACHE_DIR = CONTEXTPLUS_MEMORIES_DIR;
 const DECAY_LAMBDA = 0.05;
 const SIMILARITY_THRESHOLD = 0.72;
 const STALE_THRESHOLD = 0.15;
@@ -99,7 +100,7 @@ async function loadGraph(rootDir: string): Promise<GraphStore> {
 async function persistGraph(rootDir: string): Promise<void> {
   const store = graphCache.get(rootDir);
   if (!store) return;
-  await ensureMcpDataDir(rootDir);
+  await ensureContextplusLayout(rootDir);
   await writeFile(join(rootDir, CACHE_DIR, GRAPH_FILE), JSON.stringify(store, null, 2));
 }
 

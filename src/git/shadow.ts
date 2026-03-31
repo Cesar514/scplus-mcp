@@ -4,9 +4,10 @@
 import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
+import { CONTEXTPLUS_CHECKPOINTS_DIR, ensureContextplusLayout } from "../core/project-layout.js";
 
 const SHADOW_BRANCH = "mcp-shadow-history";
-const DATA_DIR = ".mcp_data";
+const DATA_DIR = CONTEXTPLUS_CHECKPOINTS_DIR;
 
 export interface RestorePoint {
   id: string;
@@ -16,6 +17,7 @@ export interface RestorePoint {
 }
 
 async function ensureDataDir(rootDir: string): Promise<string> {
+  await ensureContextplusLayout(rootDir);
   const dataPath = join(rootDir, DATA_DIR);
   await mkdir(dataPath, { recursive: true });
   return dataPath;

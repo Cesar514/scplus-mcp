@@ -22,11 +22,6 @@ ai agents are not allowed to change this file's content without human approval, 
 - [ ] create a new memory system that uses a graph database and md files and vector database for storing memories
   - [ ] add tool for updating memories with new information that updates the embeddings depending on the changes made to the content and the agent should use this instead of directly updating the content in the file
   - [ ] update other tools to use the new memory system too, alongside with tools that save nodes and edges automatically and creates embeddings automatically when a new node or edge is created or deleted
-- [ ] create a new tool called init that initializes the project by creating a context tree and .contextplus folder
-  - [ ] use .contextplus/hubs for feature hubs
-  - [ ] use .contextplus/embeddings for storing file and symbol embeddings
-  - [ ] use .contextplus/config for configuration files
-  - [ ] use .contextplus/memories for memory graph data
 
 ---
 
@@ -44,7 +39,7 @@ new features:
 - [ ] ctx+ cli in cli/ folder
   - [ ] visualize memory graphs, unto commits, hubs in the cli
   - [ ] use charm's tui library - bubble or tea
-  - [ ] features like `contextplus init`
+  - [ ] features like `contextplus index`
   - [ ] visualize context tree, undo commits, hubs list, and more in the cli
   - [ ] create hubs option from the cli for humans
 - [ ] acp features (maybe that we can list all sessions and memories from all agents, like opencode, copilot, claude, codex into one generalized list)
