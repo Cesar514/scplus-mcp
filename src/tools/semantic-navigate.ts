@@ -29,8 +29,8 @@ interface ClusterNode {
 }
 
 const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
-const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
-const CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL ?? "llama3.2";
+const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k";
+const CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL ?? "nemotron-3-nano:4b-128k";
 const OPENAI_CHAT_MODEL = process.env.CONTEXTPLUS_OPENAI_CHAT_MODEL ?? process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini";
 const OPENAI_API_KEY = process.env.CONTEXTPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 const OPENAI_BASE_URL = process.env.CONTEXTPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
@@ -98,6 +98,7 @@ async function chatCompletion(prompt: string): Promise<string> {
     model: CHAT_MODEL,
     messages: [{ role: "user", content: prompt }],
     stream: false,
+    keep_alive: "10s",
   });
   return response.message.content;
 }

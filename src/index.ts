@@ -22,7 +22,7 @@ import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { toolUpsertMemoryNode, toolCreateRelation, toolSearchMemoryGraph, toolPruneStaleLinks, toolAddInterlinkedContext, toolRetrieveWithTraversal } from "./tools/memory-tools.js";
 
-type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode";
+type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
 const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
   claude: ".mcp.json",
@@ -30,6 +30,7 @@ const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
   vscode: ".vscode/mcp.json",
   windsurf: ".windsurf/mcp.json",
   opencode: "opencode.json",
+  codex: ".codex/config.toml",
 };
 
 const SUB_COMMANDS = ["init", "skeleton", "tree"];
@@ -61,7 +62,8 @@ function parseAgentTarget(input?: string): AgentTarget {
   if (normalized === "vscode" || normalized === "vs-code" || normalized === "vs") return "vscode";
   if (normalized === "windsurf") return "windsurf";
   if (normalized === "opencode" || normalized === "open-code") return "opencode";
-  throw new Error(`Unsupported coding agent \"${input}\". Use one of: claude, cursor, vscode, windsurf, opencode.`);
+  if (normalized === "codex") return "codex";
+  throw new Error(`Unsupported coding agent \"${input}\". Use one of: claude, cursor, vscode, windsurf, opencode, codex.`);
 }
 
 function parseRunner(args: string[]): "npx" | "bunx" {
@@ -92,8 +94,8 @@ function buildMcpConfig(runner: "npx" | "bunx") {
           command: runner,
           args: commandArgs,
           env: {
-            OLLAMA_EMBED_MODEL: "nomic-embed-text",
-            OLLAMA_CHAT_MODEL: "gemma2:27b",
+            OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
+            OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
             OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             CONTEXTPLUS_EMBED_BATCH_SIZE: "8",
             CONTEXTPLUS_EMBED_TRACKER: "lazy",
@@ -117,8 +119,8 @@ function buildOpenCodeConfig(runner: "npx" | "bunx") {
           command,
           enabled: true,
           environment: {
-            OLLAMA_EMBED_MODEL: "nomic-embed-text",
-            OLLAMA_CHAT_MODEL: "gemma2:27b",
+            OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
+            OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
             OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             CONTEXTPLUS_EMBED_BATCH_SIZE: "8",
             CONTEXTPLUS_EMBED_TRACKER: "lazy",
@@ -131,12 +133,34 @@ function buildOpenCodeConfig(runner: "npx" | "bunx") {
   );
 }
 
+function buildCodexConfig(runner: "npx" | "bunx") {
+  const command = runner;
+  const args = runner === "npx" ? ["-y", "contextplus"] : ["contextplus"];
+  return [
+    "[mcp_servers.contextplus]",
+    `command = ${JSON.stringify(command)}`,
+    `args = ${JSON.stringify(args)}`,
+    "",
+    "[mcp_servers.contextplus.env]",
+    'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
+    'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
+    'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
+    'CONTEXTPLUS_EMBED_BATCH_SIZE = "8"',
+    'CONTEXTPLUS_EMBED_TRACKER = "lazy"',
+    "",
+  ].join("\n");
+}
+
 async function runInitCommand(args: string[]) {
   const nonFlags = args.filter((arg) => !arg.startsWith("--"));
   const target = parseAgentTarget(nonFlags[0]);
   const runner = parseRunner(args);
   const outputPath = resolve(process.cwd(), AGENT_CONFIG_PATH[target]);
-  const content = target === "opencode" ? buildOpenCodeConfig(runner) : buildMcpConfig(runner);
+  const content = target === "opencode"
+    ? buildOpenCodeConfig(runner)
+    : target === "codex"
+      ? buildCodexConfig(runner)
+      : buildMcpConfig(runner);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${content}\n`, "utf8");
   console.error(`Context+ initialized for ${target} using ${runner}.`);

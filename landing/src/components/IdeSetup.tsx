@@ -8,6 +8,7 @@ const ides = [
   { id: "vscode", label: "VS Code", file: ".vscode/mcp.json" },
   { id: "windsurf", label: "Windsurf", file: ".windsurf/mcp.json" },
   { id: "opencode", label: "OpenCode", file: "opencode.json" },
+  { id: "codex", label: "Codex", file: ".codex/config.toml" },
 ];
 
 const runners = [
@@ -17,6 +18,19 @@ const runners = [
 
 function buildConfig(runner: string, ideId: string): string {
   const isNpx = runner === "npx";
+
+  if (ideId === "codex") {
+    return [
+      "[mcp_servers.contextplus]",
+      `command = "${isNpx ? "npx" : "bunx"}"`,
+      `args = [${isNpx ? '"-y", "contextplus"' : '"contextplus"'}]`,
+      "",
+      "[mcp_servers.contextplus.env]",
+      'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
+      'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
+      'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
+    ].join("\n");
+  }
 
   if (ideId === "opencode") {
     return JSON.stringify(
@@ -30,8 +44,8 @@ function buildConfig(runner: string, ideId: string): string {
               : ["bunx", "contextplus"],
             enabled: true,
             environment: {
-              OLLAMA_EMBED_MODEL: "nomic-embed-text",
-              OLLAMA_CHAT_MODEL: "gemma2:27b",
+              OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
+              OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
               OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             },
           },
@@ -51,8 +65,8 @@ function buildConfig(runner: string, ideId: string): string {
             command: isNpx ? "npx" : "bunx",
             args: isNpx ? ["-y", "contextplus"] : ["contextplus"],
             env: {
-              OLLAMA_EMBED_MODEL: "nomic-embed-text",
-              OLLAMA_CHAT_MODEL: "gemma2:27b",
+              OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
+              OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
               OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             },
           },
@@ -71,8 +85,8 @@ function buildConfig(runner: string, ideId: string): string {
           command: isNpx ? "npx" : "bunx",
           args: isNpx ? ["-y", "contextplus"] : ["contextplus"],
           env: {
-            OLLAMA_EMBED_MODEL: "nomic-embed-text",
-            OLLAMA_CHAT_MODEL: "gemma2:27b",
+            OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
+            OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
             OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
           },
         },
@@ -140,6 +154,56 @@ function highlightJson(json: string): ReactNode[] {
 
   if (lastIndex < json.length) {
     parts.push(json.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+function highlightToml(toml: string): ReactNode[] {
+  const tokenRegex =
+    /^\s*\[[^\]]+\]|\b[A-Z0-9_]+\b\s*=|"(?:[^"\\]|\\.)*"|\btrue\b|\bfalse\b|-?\d+(?:\.\d+)?/gm;
+
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenRegex.exec(toml)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(toml.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    if (token.startsWith("[")) {
+      parts.push(
+        <span key={match.index} style={{ color: "var(--json-key)" }}>
+          {token}
+        </span>,
+      );
+    } else if (token.includes("=")) {
+      parts.push(
+        <span key={match.index} style={{ color: "var(--json-key)" }}>
+          {token}
+        </span>,
+      );
+    } else if (token.startsWith('"')) {
+      parts.push(
+        <span key={match.index} style={{ color: "var(--json-string)" }}>
+          {token}
+        </span>,
+      );
+    } else {
+      parts.push(
+        <span key={match.index} style={{ color: "var(--json-value)" }}>
+          {token}
+        </span>,
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < toml.length) {
+    parts.push(toml.slice(lastIndex));
   }
 
   return parts;
@@ -344,7 +408,7 @@ export default function IdeSetup() {
                 margin: 0,
               }}
             >
-              {highlightJson(config)}
+              {activeIde === "codex" ? highlightToml(config) : highlightJson(config)}
             </pre>
           </div>
 
@@ -430,7 +494,8 @@ export default function IdeSetup() {
             }}
           >
             Before using Context+, make sure Ollama is running and install the
-            required models (for example, nomic-embed-text and gemma2:27b).{" "}
+            required models (for example, qwen3-embedding:0.6b-32k and
+            nemotron-3-nano:4b-128k).{" "}
             <span style={{ textDecoration: "underline" }}>
               Get your Ollama Cloud API key here
             </span>

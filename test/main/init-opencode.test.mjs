@@ -34,7 +34,11 @@ describe("init-opencode", () => {
       assert.equal(cfg.mcp.contextplus.enabled, true);
       assert.equal(
         cfg.mcp.contextplus.environment.OLLAMA_EMBED_MODEL,
-        "nomic-embed-text",
+        "qwen3-embedding:0.6b-32k",
+      );
+      assert.equal(
+        cfg.mcp.contextplus.environment.OLLAMA_CHAT_MODEL,
+        "nemotron-3-nano:4b-128k",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

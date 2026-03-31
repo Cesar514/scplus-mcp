@@ -75,7 +75,7 @@ export interface EmbeddingCache {
 }
 
 const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
-const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text";
+const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k";
 const OPENAI_EMBED_MODEL = process.env.CONTEXTPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
 const OPENAI_API_KEY = process.env.CONTEXTPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 const OPENAI_BASE_URL = process.env.CONTEXTPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
@@ -106,7 +106,7 @@ async function getOllamaClient(): Promise<OllamaEmbedClient> {
 async function callOllamaEmbed(input: string[], signal: AbortSignal): Promise<number[][]> {
   const client = await getOllamaClient();
   const options = getEmbedRuntimeOptions();
-  const request: Record<string, unknown> = { model: EMBED_MODEL, input, signal };
+  const request: Record<string, unknown> = { model: EMBED_MODEL, input, signal, keep_alive: "10s" };
   if (options) request.options = options;
   const response = await client.embed(request);
   return response.embeddings;

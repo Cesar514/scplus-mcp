@@ -65,8 +65,8 @@ For Claude Code, Cursor, and Windsurf, use `mcpServers`:
       "command": "bunx",
       "args": ["contextplus"],
       "env": {
-        "OLLAMA_EMBED_MODEL": "nomic-embed-text",
-        "OLLAMA_CHAT_MODEL": "gemma2:27b",
+        "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
+        "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
         "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY"
       }
     }
@@ -84,8 +84,8 @@ For VS Code (`.vscode/mcp.json`), use `servers` and `inputs`:
       "command": "bunx",
       "args": ["contextplus"],
       "env": {
-        "OLLAMA_EMBED_MODEL": "nomic-embed-text",
-        "OLLAMA_CHAT_MODEL": "gemma2:27b",
+        "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
+        "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
         "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY"
       }
     }
@@ -105,9 +105,10 @@ Or generate the MCP config file directly in your current directory:
 npx -y contextplus init claude
 bunx contextplus init cursor
 npx -y contextplus init opencode
+bunx contextplus init codex
 ```
 
-Supported coding agent names: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`.
+Supported coding agent names: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`.
 
 Config file locations:
 
@@ -118,12 +119,30 @@ Config file locations:
 | VS Code     | `.vscode/mcp.json`   |
 | Windsurf    | `.windsurf/mcp.json` |
 | OpenCode    | `opencode.json`      |
+| Codex       | `.codex/config.toml` |
 
 ### CLI Subcommands
 
-- `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`).
+- `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`).
 - `skeleton [path]` or `tree [path]` - **(New)** View the structural tree of a project with file headers and symbol definitions directly in your terminal.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
+
+### Codex
+
+Codex uses project-scoped TOML configuration in `.codex/config.toml`:
+
+```toml
+[mcp_servers.contextplus]
+command = "bunx"
+args = ["contextplus"]
+
+[mcp_servers.contextplus.env]
+OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
+OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
+OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
+CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
+CONTEXTPLUS_EMBED_TRACKER = "lazy"
+```
 
 ### From Source
 
@@ -146,7 +165,8 @@ Context+ supports two embedding backends controlled by `CONTEXTPLUS_EMBED_PROVID
 No extra configuration needed. Just run Ollama with an embedding model:
 
 ```bash
-ollama pull nomic-embed-text
+ollama pull qwen3-embedding:0.6b-32k
+ollama pull nemotron-3-nano:4b-128k
 ollama serve
 ```
 
@@ -233,9 +253,9 @@ Three layers built with TypeScript over stdio using the Model Context Protocol S
 | Variable                                | Type                      | Default                                | Description                                                   |
 | --------------------------------------- | ------------------------- | -------------------------------------- | ------------------------------------------------------------- |
 | `CONTEXTPLUS_EMBED_PROVIDER`            | string                    | `ollama`                               | Embedding backend: `ollama` or `openai`                      |
-| `OLLAMA_EMBED_MODEL`                    | string                    | `nomic-embed-text`                     | Ollama embedding model                                        |
+| `OLLAMA_EMBED_MODEL`                    | string                    | `qwen3-embedding:0.6b-32k`             | Ollama embedding model                                        |
 | `OLLAMA_API_KEY`                        | string                    | -                                      | Ollama Cloud API key                                          |
-| `OLLAMA_CHAT_MODEL`                     | string                    | `llama3.2`                             | Ollama chat model for cluster labeling                        |
+| `OLLAMA_CHAT_MODEL`                     | string                    | `nemotron-3-nano:4b-128k`              | Ollama chat model for cluster labeling                        |
 | `CONTEXTPLUS_OPENAI_API_KEY`            | string                    | -                                      | API key for OpenAI-compatible provider (alias: `OPENAI_API_KEY`) |
 | `CONTEXTPLUS_OPENAI_BASE_URL`           | string                    | `https://api.openai.com/v1`            | OpenAI-compatible endpoint URL (alias: `OPENAI_BASE_URL`)    |
 | `CONTEXTPLUS_OPENAI_EMBED_MODEL`        | string                    | `text-embedding-3-small`               | OpenAI-compatible embedding model (alias: `OPENAI_EMBED_MODEL`) |
