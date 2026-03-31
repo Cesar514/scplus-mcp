@@ -24,6 +24,8 @@
 
 ## maintenance
 
+- [x] finish roadmap step 02 by splitting the indexing pipeline into durable rerunnable stages with persisted dependencies and strict core prerequisites for `full`
+- [x] verify roadmap step 02 directly with build, tests, a real full index run, and on-disk inspection of `.contextplus/config/index-stages.json`
 - [x] create an ExecPlan for the 17-step full-engine roadmap and keep it updated as implementation proceeds
 - [x] finish roadmap step 01 by locking the `index(core)` and `index(full)` contract, persisted artifact schemas, invalidation rules, and failure semantics
 - [x] verify roadmap step 01 directly with build, tests, and a real full index run

@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 02 and verify it directly
-- [ ] commit the verified step 02 work
+- [ ] finish roadmap step 03 and verify it directly
+- [ ] commit the verified step 03 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 02. split the current indexing pipeline into durable stages so `core` stays a strict prerequisite for `full` and every stage can be rerun independently
 - [ ] 03. add chunk-level AST indexing as a first-class artifact so retrieval is not limited to file and identifier granularity
 - [ ] 04. add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring, while keeping repo-local defaults and optional local vector-db acceleration
 - [ ] 05. add a stronger incremental refresh engine with file hashes, chunk hashes, and dependency-aware invalidation so reindexing recomputes only the necessary artifacts

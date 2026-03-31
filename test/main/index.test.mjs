@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { rerunIndexStage } from "../../build/tools/index-stages.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -51,6 +52,7 @@ describe("index", () => {
       const config = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "project.json"), "utf8"));
       const manifest = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "file-manifest.json"), "utf8"));
       const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
+      const stageState = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-stages.json"), "utf8"));
       const fileIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "file-search-index.json"), "utf8"));
       const identifierIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "identifier-search-index.json"), "utf8"));
       const chunkIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "derived", "chunk-search-index.json"), "utf8"));
@@ -79,6 +81,12 @@ describe("index", () => {
       assert.equal(indexStatus.artifactVersion, 3);
       assert.ok(Array.isArray(indexStatus.stageOrder));
       assert.ok(indexStatus.stageOrder.includes("chunk-embeddings"));
+      assert.equal(stageState.mode, "full");
+      assert.equal(stageState.contractVersion, 1);
+      assert.equal(stageState.stages.bootstrap.state, "completed");
+      assert.equal(stageState.stages["file-search"].state, "completed");
+      assert.equal(stageState.stages["identifier-search"].state, "completed");
+      assert.equal(stageState.stages["full-artifacts"].state, "completed");
       assert.equal(indexStatus.fileSearch?.indexedDocuments >= 1, true);
       assert.equal(indexStatus.identifierSearch?.indexedIdentifiers >= 1, true);
       assert.equal(indexStatus.fullIndex?.chunkIndex?.indexedChunks >= 1, true);
@@ -183,6 +191,42 @@ describe("index", () => {
       await assert.rejects(access(join(cwd, ".contextplus", "derived", "full-index-manifest.json")));
       assert.ok(stdout.includes("Mode: core"));
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("persists stage dependencies and allows individual stage reruns", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "contextplus-stages-"));
+    const originalProvider = process.env.CONTEXTPLUS_EMBED_PROVIDER;
+    try {
+      process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// App entrypoint for staged index tests\n// FEATURE: Stage rerun verification\n\nexport function run() {\n  return 1;\n}\n",
+      );
+
+      await rerunIndexStage({ rootDir: cwd, stage: "bootstrap", mode: "full" });
+      await assert.rejects(
+        rerunIndexStage({ rootDir: cwd, stage: "full-artifacts", mode: "full" }),
+        /requires completed dependency/,
+      );
+
+      await rerunIndexStage({ rootDir: cwd, stage: "file-search", mode: "full" });
+      await rerunIndexStage({ rootDir: cwd, stage: "identifier-search", mode: "full" });
+      const result = await rerunIndexStage({ rootDir: cwd, stage: "full-artifacts", mode: "full" });
+      const stageState = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-stages.json"), "utf8"));
+
+      assert.equal(result.stageState.stages.bootstrap.state, "completed");
+      assert.equal(result.stageState.stages["file-search"].state, "completed");
+      assert.equal(result.stageState.stages["identifier-search"].state, "completed");
+      assert.equal(result.stageState.stages["full-artifacts"].state, "completed");
+      assert.equal(stageState.stages["full-artifacts"].dependencies.includes("file-search"), true);
+      assert.equal(stageState.stages["full-artifacts"].runCount >= 1, true);
+      await expectExists(join(cwd, ".contextplus", "derived", "full-index-manifest.json"));
+    } finally {
+      if (originalProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
+      else process.env.CONTEXTPLUS_EMBED_PROVIDER = originalProvider;
       await rm(cwd, { recursive: true, force: true });
     }
   });

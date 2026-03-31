@@ -12,7 +12,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 - [x] (2026-03-31 19:19Z) Created the ExecPlan and aligned it with the existing 17-step roadmap in `TODO.md`.
 - [x] (2026-03-31 19:34Z) Completed Step 01. Added a shared indexing contract module, versioned persisted schema metadata, explicit invalidation semantics, explicit failure semantics, and direct test coverage for those fields.
-- [ ] Step 02. Split the indexing pipeline into durable rerunnable stages where `core` is a strict prerequisite for `full`.
+- [x] (2026-03-31 19:35Z) Completed Step 02. Split the indexing pipeline into durable rerunnable stages, persisted stage state in `.contextplus/config/index-stages.json`, and added direct rerun coverage that enforces `core` prerequisites before `full-artifacts`.
 - [ ] Step 03. Add chunk-level AST indexing as a first-class artifact.
 - [ ] Step 04. Add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring.
 - [ ] Step 05. Add stronger incremental refresh with file hashes, chunk hashes, and dependency-aware invalidation.
@@ -40,6 +40,9 @@ The work is large enough that it must be delivered in validated increments. Each
 - Observation: The persisted on-disk artifacts needed a fresh rewrite before the new contract fields became visible during verification.
   Evidence: The first artifact inspection still saw older schema fields, but a completed `node build/index.js index --mode=full` run rewrote the files with version 3 metadata and contract fields.
 
+- Observation: The staged pipeline benefits from explicit stage-state persistence rather than inferring progress from individual artifact files.
+  Evidence: Step 02 added `.contextplus/config/index-stages.json`, and direct verification showed durable stage dependencies, stage-local run counts, and completed-state gating for `full-artifacts`.
+
 ## Decision Log
 
 - Decision: Put the long-running program into `plans/full-engine-roadmap.md` under version control before making further large edits.
@@ -54,9 +57,13 @@ The work is large enough that it must be delivered in validated increments. Each
   Rationale: The older partial full-mode foundation already used version 2 metadata, so the new formalized contract needs a distinguishable on-disk schema step.
   Date/Author: 2026-03-31 / Codex
 
+- Decision: Persist stage orchestration state as its own artifact instead of folding rerun metadata into `index-status.json` alone.
+  Rationale: Step 02 needs durable rerunnable stages and dependency gating; a dedicated stage-state file is the simplest explicit representation and can be validated independently of transient status fields.
+  Date/Author: 2026-03-31 / Codex
+
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Step 01 is complete and verified. Step 02 is next and will focus on splitting the current orchestration into explicit rerunnable stages without changing the durable meaning of the Step 01 artifacts.
+This plan is now the controlling implementation document for the 17-step program. Steps 01 and 02 are complete and verified. Step 03 is next and will focus on promoting chunk-level AST indexing from a derived helper to a first-class artifact with explicit durable semantics.
 
 ## Context and Orientation
 
@@ -79,7 +86,9 @@ The repo already uses `.contextplus/` as its only durable project-state root. Th
 
 Step 01 introduced an explicit indexing contract module and schema definitions rather than leaving the shapes embedded informally across multiple files. The work defined the artifact version, index modes, stage names, failure states, persisted paths, and invalidation fingerprints in one place, then migrated `src/tools/index-codebase.ts` and `src/tools/full-index-artifacts.ts` to use those shared types. The docs and mirrored skill text were tightened so the persisted contract metadata is described consistently.
 
-Step 02 will refactor the pipeline into separately rerunnable stages without changing the durable meaning of the Step 01 artifacts.
+Step 02 refactored the pipeline into separately rerunnable stages without changing the durable meaning of the Step 01 artifacts. The pipeline now persists stage records and can rerun individual stages with explicit dependency checks.
+
+Step 03 will strengthen chunk indexing itself so chunk artifacts have a clearer first-class contract and more explicit AST-oriented semantics than the current helper-oriented full-artifact path.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -88,10 +97,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 02, split the indexing flow in `src/tools/index-codebase.ts` into named reusable stage runners that can be invoked independently while preserving the Step 01 contract.
-3. Update the tests to assert the staged execution model.
-4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated `.contextplus` artifacts.
-5. Commit Step 02 with a message that names the staged indexing milestone.
+2. For Step 03, formalize chunk-level AST indexing as its own durable artifact surface rather than only a byproduct of the current full-artifact builder.
+3. Update the tests to assert the chunk-artifact contract directly.
+4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated `.contextplus` chunk artifacts.
+5. Commit Step 03 with a message that names the chunk-indexing milestone.
 
 Verification transcript used for Step 01:
 
@@ -100,6 +109,14 @@ Verification transcript used for Step 01:
     node build/index.js index --mode=full
 
 The observed outcome for Step 01 was a passing build, a passing test suite, and durable `.contextplus` files whose schema fields match the Step 01 contract.
+
+Verification transcript used for Step 02:
+
+    npm run build
+    npm test
+    node build/index.js index --mode=full
+
+The observed outcome for Step 02 was a passing build, a passing test suite including direct rerun coverage for individual stages, and a durable `.contextplus/config/index-stages.json` file whose `full-artifacts` record depends on completed `bootstrap`, `file-search`, and `identifier-search` stages.
 
 ## Validation and Acceptance
 
@@ -118,6 +135,14 @@ For Step 01 specifically, acceptance means:
 - invalidation and failure semantics are described in code and docs
 - `test/main/index.test.mjs` asserts the contract fields
 - `node build/index.js index --mode=full` produces contract-compliant artifacts on disk
+
+For Step 02 specifically, acceptance means:
+
+- `index` orchestrates named reusable stage runners instead of one monolithic inline pipeline
+- `.contextplus/config/index-stages.json` persists durable stage metadata, dependencies, supported modes, and stage outputs
+- rerunning `full-artifacts` without completed core prerequisites fails loudly
+- direct rerun tests cover stage dependency enforcement and successful independent stage execution
+- `node build/index.js index --mode=full` writes completed stage records on disk
 
 ## Idempotence and Recovery
 
@@ -155,6 +180,6 @@ Step 01 must end with explicit shared interfaces for:
 
 These interfaces should live in the indexing domain alongside `src/tools/index-codebase.ts` and `src/tools/full-index-artifacts.ts`, and they should be imported by the callers rather than redefined in place.
 
-The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 01.
+The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 03.
 
 Plan revision note: Created the initial ExecPlan to govern the 17-step full-engine implementation program and to require one verified commit per roadmap step.

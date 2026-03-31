@@ -5,6 +5,7 @@ import { join } from "path";
 import { CONTEXTPLUS_CHECKPOINTS_DIR, CONTEXTPLUS_CONFIG_DIR, CONTEXTPLUS_DERIVED_DIR, CONTEXTPLUS_EMBEDDINGS_DIR, CONTEXTPLUS_MEMORIES_DIR } from "../core/project-layout.js";
 
 export type IndexMode = "core" | "full";
+export type IndexStageName = "bootstrap" | "file-search" | "identifier-search" | "full-artifacts";
 
 export type IndexPhase =
   | "bootstrap"
@@ -40,8 +41,38 @@ export interface IndexContractMetadata {
   defaultMode: "full";
   supportedModes: IndexMode[];
   stageOrder: IndexPhase[];
+  stageNames: IndexStageName[];
   invalidation: IndexInvalidationContract;
   failureSemantics: IndexFailureSemantics;
+}
+
+export interface IndexStageDefinition {
+  name: IndexStageName;
+  phases: IndexPhase[];
+  dependencies: IndexStageName[];
+  modes: IndexMode[];
+  outputs: string[];
+}
+
+export interface PersistedIndexStageRecord {
+  name: IndexStageName;
+  state: "pending" | "running" | "completed" | "failed";
+  modes: IndexMode[];
+  dependencies: IndexStageName[];
+  outputs: string[];
+  phases: IndexPhase[];
+  runCount: number;
+  lastRunAt?: string;
+  lastCompletedAt?: string;
+  lastError?: string;
+}
+
+export interface PersistedIndexStageState {
+  generatedAt: string;
+  contractVersion: number;
+  artifactVersion: number;
+  mode: IndexMode;
+  stages: Record<IndexStageName, PersistedIndexStageRecord>;
 }
 
 export interface ProjectIndexConfig {
@@ -98,6 +129,7 @@ export const INDEX_CONTRACT_VERSION = 1;
 export const INDEX_ARTIFACT_VERSION = 3;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
+export const INDEX_STAGE_STATE_FILE = "index-stages.json";
 export const INDEX_STAGE_ORDER: IndexPhase[] = [
   "bootstrap",
   "file-scan",
@@ -109,6 +141,12 @@ export const INDEX_STAGE_ORDER: IndexPhase[] = [
   "structure-scan",
   "completed",
   "failed",
+];
+export const INDEX_STAGE_NAMES: IndexStageName[] = [
+  "bootstrap",
+  "file-search",
+  "identifier-search",
+  "full-artifacts",
 ];
 
 export const INDEX_INVALIDATION_CONTRACT: IndexInvalidationContract = {
@@ -134,29 +172,70 @@ export function buildIndexContract(): IndexContractMetadata {
     defaultMode: DEFAULT_INDEX_MODE,
     supportedModes: ["core", "full"],
     stageOrder: INDEX_STAGE_ORDER,
+    stageNames: INDEX_STAGE_NAMES,
     invalidation: INDEX_INVALIDATION_CONTRACT,
     failureSemantics: INDEX_FAILURE_SEMANTICS,
   };
 }
 
+export function getStageDefinitions(): Record<IndexStageName, IndexStageDefinition> {
+  return {
+    bootstrap: {
+      name: "bootstrap",
+      phases: ["bootstrap"],
+      dependencies: [],
+      modes: ["core", "full"],
+      outputs: [
+        join(CONTEXTPLUS_CONFIG_DIR, "project.json"),
+        join(CONTEXTPLUS_CONFIG_DIR, "context-tree.txt"),
+        join(CONTEXTPLUS_CONFIG_DIR, "file-manifest.json"),
+        join(CONTEXTPLUS_CONFIG_DIR, INDEX_STATUS_FILE),
+        join(CONTEXTPLUS_CONFIG_DIR, INDEX_STAGE_STATE_FILE),
+        join(CONTEXTPLUS_MEMORIES_DIR, "memory-graph.json"),
+        join(CONTEXTPLUS_CHECKPOINTS_DIR, "restore-points.json"),
+      ],
+    },
+    "file-search": {
+      name: "file-search",
+      phases: ["file-scan", "file-embeddings"],
+      dependencies: ["bootstrap"],
+      modes: ["core", "full"],
+      outputs: [
+        join(CONTEXTPLUS_EMBEDDINGS_DIR, "file-search-index.json"),
+      ],
+    },
+    "identifier-search": {
+      name: "identifier-search",
+      phases: ["identifier-scan", "identifier-embeddings"],
+      dependencies: ["bootstrap"],
+      modes: ["core", "full"],
+      outputs: [
+        join(CONTEXTPLUS_EMBEDDINGS_DIR, "identifier-search-index.json"),
+      ],
+    },
+    "full-artifacts": {
+      name: "full-artifacts",
+      phases: ["chunk-scan", "chunk-embeddings", "structure-scan"],
+      dependencies: ["bootstrap", "file-search", "identifier-search"],
+      modes: ["full"],
+      outputs: [
+        join(CONTEXTPLUS_DERIVED_DIR, "chunk-search-index.json"),
+        join(CONTEXTPLUS_DERIVED_DIR, "code-structure-index.json"),
+        join(CONTEXTPLUS_DERIVED_DIR, "full-index-manifest.json"),
+      ],
+    },
+  };
+}
+
 export function getCoreArtifactPaths(): string[] {
+  const definitions = getStageDefinitions();
   return [
-    join(CONTEXTPLUS_CONFIG_DIR, "project.json"),
-    join(CONTEXTPLUS_CONFIG_DIR, "context-tree.txt"),
-    join(CONTEXTPLUS_CONFIG_DIR, "file-manifest.json"),
-    join(CONTEXTPLUS_CONFIG_DIR, INDEX_STATUS_FILE),
-    join(CONTEXTPLUS_EMBEDDINGS_DIR, "file-search-index.json"),
-    join(CONTEXTPLUS_EMBEDDINGS_DIR, "identifier-search-index.json"),
-    join(CONTEXTPLUS_MEMORIES_DIR, "memory-graph.json"),
-    join(CONTEXTPLUS_CHECKPOINTS_DIR, "restore-points.json"),
+    ...definitions.bootstrap.outputs,
+    ...definitions["file-search"].outputs,
+    ...definitions["identifier-search"].outputs,
   ];
 }
 
 export function getFullArtifactPaths(): string[] {
-  return [
-    ...getCoreArtifactPaths(),
-    join(CONTEXTPLUS_DERIVED_DIR, "chunk-search-index.json"),
-    join(CONTEXTPLUS_DERIVED_DIR, "code-structure-index.json"),
-    join(CONTEXTPLUS_DERIVED_DIR, "full-index-manifest.json"),
-  ];
+  return [...getCoreArtifactPaths(), ...getStageDefinitions()["full-artifacts"].outputs];
 }

@@ -161,7 +161,7 @@ Config file locations:
 ### CLI Subcommands
 
 - `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`).
-- `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. `core` writes `config/project.json`, `config/context-tree.txt`, `config/file-manifest.json`, `config/index-status.json`, plus eager search state in `embeddings/file-search-index.json` and `embeddings/identifier-search-index.json`. `full` also writes `derived/chunk-search-index.json`, `derived/code-structure-index.json`, and `derived/full-index-manifest.json`. The persisted config, status, and full manifest now carry explicit contract metadata covering supported modes, stage order, invalidation rules, and crash-only failure semantics.
+- `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. `core` writes `config/project.json`, `config/context-tree.txt`, `config/file-manifest.json`, `config/index-status.json`, `config/index-stages.json`, plus eager search state in `embeddings/file-search-index.json` and `embeddings/identifier-search-index.json`. `full` also writes `derived/chunk-search-index.json`, `derived/code-structure-index.json`, and `derived/full-index-manifest.json`. The persisted config, status, stage state, and full manifest now carry explicit contract metadata covering supported modes, stage order, invalidation rules, and crash-only failure semantics.
 - `skeleton [path]` or `tree [path]` - **(New)** View the structural tree of a project with file headers and symbol definitions directly in your terminal.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
 
@@ -284,7 +284,7 @@ Three layers built with TypeScript over stdio using the Model Context Protocol S
 
 **Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
 
-**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted file and identifier search state, full-mode derived chunk and code-structure artifacts, memory graph data, restore-point manifests, and embedding caches. Later searches refresh only changed files before querying the prepared state.
+**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk and code-structure artifacts, memory graph data, restore-point manifests, and embedding caches. Later searches refresh only changed files before querying the prepared state.
 
 ## Config
 
