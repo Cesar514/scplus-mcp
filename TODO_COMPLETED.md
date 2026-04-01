@@ -71,3 +71,5 @@
 - [x] allow ordinary post-header comments in `checkpoint` while keeping header, feature, and size checks
 - [x] rebuild `lint` so it runs valid native commands and reports practical repo-rule findings
 - [x] verify the updated lint and checkpoint behavior with targeted suites and the full main test run
+- [x] finish roadmap step 07 by building a unified ranking engine that combines file, chunk, identifier, structure, and memory evidence over the persisted sqlite artifacts
+- [x] verify roadmap step 07 directly with the focused unified-ranking test and a clean full-index rerun on the repository

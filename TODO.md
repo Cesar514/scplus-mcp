@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 07 and verify it directly
-- [ ] commit the verified step 07 work
+- [ ] finish roadmap step 08 and verify it directly
+- [ ] commit the verified step 08 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 07. build a unified ranking engine that can combine chunk, file, identifier, lexical, semantic, structural, and memory evidence in one search surface
 - [ ] 08. make `search` the canonical query entrypoint over those precomputed artifacts and remove overlapping or weaker search surfaces after callers are migrated
 - [ ] 09. persist semantic clusters, cluster labels, related-file graphs, and subsystem summaries as `full` artifacts instead of generating them only on demand
 - [ ] 10. generate hub suggestions and feature-group candidates automatically from clusters, structure graphs, and feature tags so humans and agents get higher-level maps for free
