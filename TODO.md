@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 10 and verify it directly
-- [ ] commit the verified step 10 work
+- [ ] finish roadmap step 11 and verify it directly
+- [ ] commit the verified step 11 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 10. generate hub suggestions and feature-group candidates automatically from clusters, structure graphs, and feature tags so humans and agents get higher-level maps for free
 - [ ] 11. replace the current memory store with the planned graph-plus-markdown-plus-vector memory system and make memory writes update embeddings and relations automatically
 - [ ] 12. integrate ACP and external session memories into the same graph so research and retrieval can blend local code, durable memory, and imported agent history
 - [ ] 13. add a unified `research` surface that aggregates code retrieval, structure artifacts, memory, ACP context, and related-context discovery in one tool

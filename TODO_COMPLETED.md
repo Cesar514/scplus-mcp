@@ -24,6 +24,8 @@
 
 ## maintenance
 
+- [x] finish roadmap step 10 by generating persisted hub suggestions and feature-group candidates automatically from clusters, structure graphs, and file FEATURE tags
+- [x] verify roadmap step 10 directly with focused hub-suggestion and feature-hub coverage, the index integration suite, and a real full index run plus sqlite inspection
 - [x] finish roadmap step 06 by expanding the persisted structure artifact into a richer per-file and per-module graph with symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges
 - [x] verify roadmap step 06 directly with targeted structure-index tests, the index integration suite, the full test suite, a real full index run, and direct sqlite inspection of the richer structure state
 - [x] finish roadmap step 05 by replacing size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation

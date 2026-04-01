@@ -55,15 +55,15 @@ describe("hybrid-retrieval", () => {
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 
-      assert.equal(hybridChunk.state.artifactVersion, 9);
-      assert.equal(hybridChunk.state.contractVersion, 7);
+      assert.equal(hybridChunk.state.artifactVersion, 10);
+      assert.equal(hybridChunk.state.contractVersion, 8);
       assert.equal(hybridChunk.state.source, "chunk");
       assert.equal(hybridChunk.stats.indexedDocuments >= 2, true);
       assert.equal(hybridChunk.stats.uniqueTerms >= 4, true);
       assert.equal(Object.keys(dbHybridChunk.documents).length, hybridChunk.stats.indexedDocuments);
 
-      assert.equal(hybridIdentifier.state.artifactVersion, 9);
-      assert.equal(hybridIdentifier.state.contractVersion, 7);
+      assert.equal(hybridIdentifier.state.artifactVersion, 10);
+      assert.equal(hybridIdentifier.state.contractVersion, 8);
       assert.equal(hybridIdentifier.state.source, "identifier");
       assert.equal(hybridIdentifier.stats.indexedDocuments >= 2, true);
       assert.equal(hybridIdentifier.stats.uniqueTerms >= 4, true);

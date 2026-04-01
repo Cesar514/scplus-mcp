@@ -11,6 +11,7 @@ import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js"
 import { refreshChunkIndexState, warmChunkEmbeddings, type ChunkArtifactStats, type ChunkIndexProgress } from "./chunk-index.js";
 import { refreshHybridChunkIndex, refreshHybridIdentifierIndex, type HybridRetrievalStats } from "./hybrid-retrieval.js";
 import { refreshSemanticClusterState, type SemanticClusterStats } from "./cluster-artifacts.js";
+import { refreshHubSuggestionState, type HubSuggestionStats } from "./hub-suggestions.js";
 import {
   buildDependencyHash,
   computeFileContentHash,
@@ -23,7 +24,7 @@ export interface FullIndexArtifactOptions {
 }
 
 export interface FullIndexProgress {
-  phase: "chunk-scan" | "chunk-embeddings" | "hybrid-chunk-scan" | "hybrid-identifier-scan" | "structure-scan" | "cluster-scan";
+  phase: "chunk-scan" | "chunk-embeddings" | "hybrid-chunk-scan" | "hybrid-identifier-scan" | "structure-scan" | "cluster-scan" | "hub-scan";
   totalFiles: number;
   processedFiles: number;
   changedFiles: number;
@@ -33,6 +34,7 @@ export interface FullIndexProgress {
   indexedHybridChunks: number;
   indexedHybridIdentifiers: number;
   indexedClusters: number;
+  indexedHubSuggestions: number;
 }
 
 export interface StructureArtifactStats {
@@ -49,6 +51,7 @@ export interface FullIndexArtifactStats {
   hybridChunkIndex: HybridRetrievalStats;
   hybridIdentifierIndex: HybridRetrievalStats;
   semanticClusterIndex: SemanticClusterStats;
+  hubSuggestionIndex: HubSuggestionStats;
 }
 
 interface ImportInfo {
@@ -493,6 +496,7 @@ export async function refreshStructureIndexState(
         indexedHybridChunks: 0,
         indexedHybridIdentifiers: 0,
         indexedClusters: 0,
+        indexedHubSuggestions: 0,
       });
     }
   }
@@ -566,6 +570,7 @@ export async function ensureFullIndexArtifacts(
       indexedHybridChunks: 0,
       indexedHybridIdentifiers: 0,
       indexedClusters: 0,
+      indexedHubSuggestions: 0,
     });
   });
   const allChunks = Object.values(chunkResult.state.files).flatMap((entry) => entry.chunks);
@@ -576,6 +581,7 @@ export async function ensureFullIndexArtifacts(
       indexedHybridChunks: 0,
       indexedHybridIdentifiers: 0,
       indexedClusters: 0,
+      indexedHubSuggestions: 0,
     });
   });
   const hybridChunkResult = await refreshHybridChunkIndex(rootDir, chunkResult.state);
@@ -590,6 +596,7 @@ export async function ensureFullIndexArtifacts(
     indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
     indexedHybridIdentifiers: 0,
     indexedClusters: 0,
+    indexedHubSuggestions: 0,
   });
   const hybridIdentifierResult = await refreshHybridIdentifierIndex(rootDir);
   await onProgress?.({
@@ -603,6 +610,7 @@ export async function ensureFullIndexArtifacts(
     indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
     indexedHybridIdentifiers: hybridIdentifierResult.stats.indexedDocuments,
     indexedClusters: 0,
+    indexedHubSuggestions: 0,
   });
   const structureResult = await refreshStructureIndexState(rootDir, onProgress);
   const semanticClusterResult = await refreshSemanticClusterState(rootDir);
@@ -617,6 +625,22 @@ export async function ensureFullIndexArtifacts(
     indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
     indexedHybridIdentifiers: hybridIdentifierResult.stats.indexedDocuments,
     indexedClusters: semanticClusterResult.stats.clusterCount,
+    indexedHubSuggestions: 0,
+  });
+
+  const hubSuggestionResult = await refreshHubSuggestionState(rootDir);
+  await onProgress?.({
+    phase: "hub-scan",
+    totalFiles: hubSuggestionResult.stats.suggestionCount,
+    processedFiles: hubSuggestionResult.stats.suggestionCount,
+    changedFiles: hubSuggestionResult.stats.suggestionCount,
+    removedFiles: 0,
+    indexedChunks: chunkResult.stats.indexedChunks,
+    indexedStructures: structureResult.stats.indexedStructures,
+    indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
+    indexedHybridIdentifiers: hybridIdentifierResult.stats.indexedDocuments,
+    indexedClusters: semanticClusterResult.stats.clusterCount,
+    indexedHubSuggestions: hubSuggestionResult.stats.suggestionCount,
   });
 
   const stats: FullIndexArtifactStats = {
@@ -628,6 +652,7 @@ export async function ensureFullIndexArtifacts(
     hybridChunkIndex: hybridChunkResult.stats,
     hybridIdentifierIndex: hybridIdentifierResult.stats,
     semanticClusterIndex: semanticClusterResult.stats,
+    hubSuggestionIndex: hubSuggestionResult.stats,
   };
 
   const manifest: FullArtifactManifest = {
@@ -640,11 +665,14 @@ export async function ensureFullIndexArtifacts(
     hybridIdentifierIndexPath: "sqlite:index_artifacts/hybrid-identifier-index",
     structureIndexPath: "sqlite:index_artifacts/code-structure-index",
     semanticClusterIndexPath: "sqlite:index_artifacts/semantic-cluster-index",
+    hubSuggestionIndexPath: "sqlite:index_artifacts/hub-suggestion-index",
     chunkCount: stats.chunkIndex.indexedChunks,
     hybridChunkCount: stats.hybridChunkIndex.indexedDocuments,
     hybridIdentifierCount: stats.hybridIdentifierIndex.indexedDocuments,
     structureCount: stats.structureIndex.indexedStructures,
     semanticClusterCount: stats.semanticClusterIndex.clusterCount,
+    hubSuggestionCount: stats.hubSuggestionIndex.suggestionCount,
+    featureGroupCount: stats.hubSuggestionIndex.featureGroupCount,
     contract: buildIndexContract(),
     stats,
   };

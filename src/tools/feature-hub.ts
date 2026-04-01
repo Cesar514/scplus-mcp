@@ -6,6 +6,7 @@ import { readFile, stat } from "fs/promises";
 import { parseHubFile, discoverHubs, findOrphanedFiles, type HubInfo } from "../core/hub.js";
 import { getFileSkeleton } from "./file-skeleton.js";
 import { walkDirectory } from "../core/walker.js";
+import { loadHubSuggestionState } from "./hub-suggestions.js";
 
 export interface FeatureHubOptions {
   rootDir: string;
@@ -34,20 +35,53 @@ async function findHubByName(rootDir: string, name: string): Promise<string | nu
   return partial ?? null;
 }
 
+async function findSuggestedHubByName(rootDir: string, name: string): Promise<string | null> {
+  const suggestions = await loadHubSuggestionState(rootDir);
+  const lower = name.toLowerCase();
+  const match = Object.values(suggestions.suggestions).find((suggestion) =>
+    suggestion.label.toLowerCase() === lower
+      || suggestion.slug === lower
+      || suggestion.label.toLowerCase().includes(lower)
+      || suggestion.featureTags.some((tag) => tag.toLowerCase() === lower || tag.toLowerCase().includes(lower)),
+  );
+  return match?.markdownPath ?? null;
+}
+
 export async function getFeatureHub(options: FeatureHubOptions): Promise<string> {
   const { rootDir, showOrphans } = options;
   const out: string[] = [];
 
   if (!options.hubPath && !options.featureName && !showOrphans) {
     const hubs = await discoverHubs(rootDir);
-    if (hubs.length === 0) {
+    const suggestions = await loadHubSuggestionState(rootDir);
+    if (hubs.length === 0 && Object.keys(suggestions.suggestions).length === 0) {
       return "No hub files found. Create a .md file with [[path/to/file]] links to establish a feature hub.";
     }
-    out.push(`Feature Hubs (${hubs.length}):`);
-    out.push("");
-    for (const h of hubs) {
-      const info = await parseHubFile(resolve(rootDir, h));
-      out.push(`  ${h} | ${info.title} | ${info.links.length} links`);
+    if (hubs.length > 0) {
+      out.push(`Feature Hubs (${hubs.length}):`);
+      out.push("");
+      for (const h of hubs) {
+        const info = await parseHubFile(resolve(rootDir, h));
+        out.push(`  ${h} | ${info.title} | ${info.links.length} links`);
+      }
+    }
+    const suggestionList = Object.values(suggestions.suggestions);
+    if (suggestionList.length > 0) {
+      if (out.length > 0) out.push("");
+      out.push(`Suggested Hubs (${suggestionList.length}):`);
+      out.push("");
+      for (const suggestion of suggestionList.sort((left, right) => left.label.localeCompare(right.label))) {
+        out.push(`  ${suggestion.markdownPath} | ${suggestion.label} | ${suggestion.filePaths.length} files`);
+      }
+    }
+    const featureGroups = Object.values(suggestions.featureGroups);
+    if (featureGroups.length > 0) {
+      if (out.length > 0) out.push("");
+      out.push(`Feature Group Candidates (${featureGroups.length}):`);
+      out.push("");
+      for (const group of featureGroups.sort((left, right) => left.label.localeCompare(right.label))) {
+        out.push(`  ${group.label} | tag=${group.featureTag} | ${group.filePaths.length} files | ${group.suggestionIds.length} suggested hubs`);
+      }
     }
     return out.join("\n");
   }
@@ -69,7 +103,9 @@ export async function getFeatureHub(options: FeatureHubOptions): Promise<string>
 
   let hubRelPath = options.hubPath;
   if (!hubRelPath && options.featureName) {
-    hubRelPath = (await findHubByName(rootDir, options.featureName)) ?? undefined;
+    hubRelPath = (await findHubByName(rootDir, options.featureName))
+      ?? (await findSuggestedHubByName(rootDir, options.featureName))
+      ?? undefined;
     if (!hubRelPath) {
       return `No hub found for feature "${options.featureName}". Available hubs:\n` +
         (await discoverHubs(rootDir)).map((h) => `  - ${h}`).join("\n") || "  (none)";

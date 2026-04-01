@@ -416,7 +416,8 @@ server.tool(
 server.tool(
   "find_hub",
   "Obsidian-style feature hub navigator. Hub files are .md files containing [[path/to/file]] wikilinks that act as a Map of Content. " +
-  "Modes: (1) No args = list all hubs, (2) hub_path or feature_name = show hub with bundled skeletons of all linked files, " +
+  "Modes: (1) No args = list all hubs plus persisted suggested hubs and feature-group candidates, " +
+  "(2) hub_path or feature_name = show hub with bundled skeletons of all linked files, " +
   "(3) show_orphans = find files not linked to any hub. Prevents orphaned code and enables graph-based codebase navigation.",
   {
     hub_path: z.string().optional().describe("Path to a specific hub .md file (relative to root)."),

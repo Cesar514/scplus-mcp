@@ -49,7 +49,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 
 | Tool                         | Description                                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, code-structure, and semantic-cluster artifacts, writes indexing status, preserves durable memories/checkpoints, refreshes incrementally using content hashes plus dependency-aware structure invalidation, and prepares the unified ranking substrate used by canonical search. |
+| `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, writes indexing status, preserves durable memories/checkpoints, refreshes incrementally using content hashes plus dependency-aware structure invalidation, and prepares the unified ranking substrate used by canonical search. |
 | `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
 | `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
 | `search`                    | Canonical full-engine search. Use `search_type: "file"` for file results, `search_type: "symbol"` for symbol results, or `search_type: "mixed"` to rank both together over the unified evidence model. |
@@ -67,7 +67,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | Tool              | Description                                                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `checkpoint`   | The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing. |
-| `find_hub`     | Obsidian-style feature hub navigator. Hubs are `.md` files with `[[wikilinks]]` that map features to code files.        |
+| `find_hub`     | Obsidian-style feature hub navigator. Lists handwritten hubs plus persisted suggested hubs and feature-group candidates generated from the full index. |
 
 ### Version Control
 
@@ -284,7 +284,7 @@ Three layers built with TypeScript over stdio using the Model Context Protocol S
 
 **Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
 
-**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk and code-structure artifacts, memory graph data, restore-point manifests, and embedding caches. Later searches refresh only changed files before querying the prepared state.
+**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, memory graph data, restore-point manifests, embedding caches, and suggested hub markdown under `.contextplus/hubs/suggested/`. Later searches refresh only changed files before querying the prepared state.
 
 ## Config
 

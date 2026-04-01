@@ -21,6 +21,7 @@ export type IndexArtifactKey =
   | "hybrid-identifier-index"
   | "code-structure-index"
   | "semantic-cluster-index"
+  | "hub-suggestion-index"
   | "full-index-manifest"
   | "memory-graph"
   | "restore-points"

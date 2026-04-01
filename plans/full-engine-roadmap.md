@@ -22,7 +22,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 19:45Z) Completed Step 07. Added a unified ranking engine that combines persisted file, chunk, identifier, structure, and memory evidence into one scoreable file/symbol result set, then verified it with focused ranking tests and a real full-index rerun.
 - [x] (2026-04-01 20:03Z) Completed Step 08. Routed the public `search` surface through the unified ranking engine, simplified the search contract to `file` / `symbol` / `mixed`, and verified canonical output directly.
 - [x] (2026-04-01 20:24Z) Completed Step 09. Persisted semantic clusters, related-file graphs, and subsystem summaries into sqlite as full-engine artifacts, then switched `cluster` to render those artifacts directly.
-- [ ] Step 10. Generate hub suggestions and feature-group candidates automatically.
+- [x] (2026-04-01 21:35Z) Completed Step 10. Persisted hub suggestions and feature-group candidates from the cluster tree, related-file graph, structure graph, and file FEATURE tags, then materialized suggested markdown hubs under `.contextplus/hubs/suggested/` and verified them through sqlite plus `find_hub`.
 - [ ] Step 11. Replace the current memory store with the planned graph-plus-markdown-plus-vector memory system.
 - [ ] Step 12. Integrate ACP and external session memories into the same graph.
 - [ ] Step 13. Add a unified `research` tool surface across code, structure, memory, and ACP.
@@ -76,7 +76,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, and Step 09 are complete and verified. Step 10 is next and will turn the persisted cluster and structure graph state into hub suggestions and higher-level feature candidates.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. Step 11 is next and will replace the current memory store with the planned graph-plus-markdown-plus-vector memory system.
 
 ## Context and Orientation
 
@@ -114,10 +114,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 10, use the persisted cluster tree, related-file graph, and structure graph to propose hub suggestions and feature-group candidates automatically.
-3. Update the tests so hub suggestions are verified from persisted full-engine artifacts rather than ad hoc file scans alone.
-4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and inspect the hub-suggestion output against the persisted cluster artifacts.
-5. Commit Step 10 with a message that names the hub-suggestion milestone.
+2. For Step 11, replace the current memory store with the planned graph-plus-markdown-plus-vector memory system and make memory writes update embeddings and relations automatically.
+3. Update the tests so memory markdown, graph state, embeddings, and automatic relations are verified together instead of only graph writes.
+4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and inspect the upgraded memory store plus markdown outputs directly.
+5. Commit Step 11 with a message that names the memory-system milestone.
 
 Verification transcript used for Step 01:
 
