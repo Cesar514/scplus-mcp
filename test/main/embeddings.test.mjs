@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { Ollama } from "ollama";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +9,57 @@ import {
   SearchIndex,
   fetchEmbedding,
   getEmbeddingBatchSize,
+  loadEmbeddingCache,
+  saveEmbeddingCache,
 } from "../../build/core/embeddings.js";
+import { getIndexDatabasePath } from "../../build/core/index-database.js";
+
+function getActiveGeneration(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT meta_value FROM index_db_meta WHERE meta_key = 'activeGeneration'").get();
+    return row ? Number.parseInt(row.meta_value, 10) : 0;
+  } finally {
+    db.close();
+  }
+}
+
+function qualifyNamespace(namespace, generation) {
+  if (generation === 0) return namespace;
+  return `generation:${generation}:${namespace}`;
+}
+
+function readVectorEntries(dbPath, namespace) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const generation = getActiveGeneration(dbPath);
+    const storedNamespace = qualifyNamespace(namespace, generation);
+    return db.prepare(`
+      SELECT entry_id, content_hash, updated_at
+      FROM vector_entries
+      WHERE namespace = ?
+      ORDER BY entry_id
+    `).all(storedNamespace);
+  } finally {
+    db.close();
+  }
+}
+
+function readVectorCollectionEntryCount(dbPath, namespace) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const generation = getActiveGeneration(dbPath);
+    const storedNamespace = qualifyNamespace(namespace, generation);
+    const row = db.prepare(`
+      SELECT entry_count
+      FROM vector_collections
+      WHERE namespace = ?
+    `).get(storedNamespace);
+    return row ? row.entry_count : null;
+  } finally {
+    db.close();
+  }
+}
 
 describe("embeddings", () => {
   describe("getEmbeddingBatchSize", () => {
@@ -236,6 +287,68 @@ describe("embeddings", () => {
           if (value === undefined) delete process.env[key];
           else process.env[key] = value;
         }
+      }
+    });
+  });
+
+  describe("saveEmbeddingCache", () => {
+    it("updates only changed entries and deletes removed entries without rewriting untouched vectors", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-cache-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-a-v1", vector: [1, 0, 0] },
+          "src/b.ts": { hash: "hash-b-v1", vector: [0, 1, 0] },
+        }, "chunk-embeddings-cache.json");
+
+        const dbPath = await getIndexDatabasePath(rootDir);
+        const firstEntries = readVectorEntries(dbPath, "chunk-search");
+        assert.equal(firstEntries.length, 2);
+        const firstUpdatedAtById = new Map(firstEntries.map((entry) => [entry.entry_id, entry.updated_at]));
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        await saveEmbeddingCache(rootDir, {
+          "src/b.ts": { hash: "hash-b-v2", vector: [0, 1, 1] },
+          "src/c.ts": { hash: "hash-c-v1", vector: [1, 1, 0] },
+        }, "chunk-embeddings-cache.json");
+
+        const nextEntries = readVectorEntries(dbPath, "chunk-search");
+        assert.deepEqual(nextEntries.map((entry) => entry.entry_id), ["src/b.ts", "src/c.ts"]);
+        assert.equal(readVectorCollectionEntryCount(dbPath, "chunk-search"), 2);
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").content_hash, "hash-b-v2");
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/c.ts").content_hash, "hash-c-v1");
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").updated_at !== firstUpdatedAtById.get("src/b.ts"), true);
+        assert.equal(firstUpdatedAtById.has("src/c.ts"), false);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("preserves split identifier namespaces and materializes empty callsite collections", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-identifier-cache-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "id:run": { hash: "hash-run", vector: [1, 2, 3] },
+          "callsite:run@src/app.ts:10": { hash: "hash-callsite", vector: [3, 2, 1] },
+        }, "identifier-embeddings-cache.json");
+
+        let cache = await loadEmbeddingCache(rootDir, "identifier-embeddings-cache.json");
+        assert.deepEqual(Object.keys(cache).sort(), ["callsite:run@src/app.ts:10", "id:run"]);
+
+        await saveEmbeddingCache(rootDir, {
+          "id:run": { hash: "hash-run-v2", vector: [4, 5, 6] },
+        }, "identifier-embeddings-cache.json");
+
+        cache = await loadEmbeddingCache(rootDir, "identifier-embeddings-cache.json");
+        assert.deepEqual(Object.keys(cache), ["id:run"]);
+        assert.equal(cache["id:run"].hash, "hash-run-v2");
+
+        const dbPath = await getIndexDatabasePath(rootDir);
+        assert.equal(readVectorCollectionEntryCount(dbPath, "identifier-search"), 1);
+        assert.equal(readVectorCollectionEntryCount(dbPath, "identifier-callsite-search"), 0);
+        assert.deepEqual(readVectorEntries(dbPath, "identifier-callsite-search"), []);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
       }
     });
   });

@@ -1,8 +1,15 @@
 // Multi-provider vector embedding engine with cosine similarity search
-// Supports Ollama (local) and OpenAI-compatible APIs (Gemini, OpenAI, etc.)
+// FEATURE: Provider-backed embeddings with sqlite vector persistence for file, identifier, and chunk retrieval
 // Indexes file headers and symbols, persists vectors in sqlite collections
 
-import { getIndexGenerationContext, loadVectorCollection, replaceVectorCollection } from "./index-database.js";
+import {
+  deleteVectorEntries,
+  getIndexGenerationContext,
+  loadVectorCollection,
+  loadVectorCollectionMap,
+  upsertVectorEntries,
+  type VectorStoreEntry,
+} from "./index-database.js";
 
 const EMBED_TIMEOUT_MS = 60_000;
 let embedAbortController = new AbortController();
@@ -482,29 +489,75 @@ export async function loadEmbeddingCache(rootDir: string, fileName: string): Pro
 
 export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
-  const primaryEntries = Object.entries(cache)
-    .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
-    .map(([key, value]) => ({
-      id: key,
-      contentHash: value.hash,
-      searchText: key,
-      vector: value.vector,
-      metadata: null,
-    }));
-  await replaceVectorCollection(rootDir, namespaces.primary, primaryEntries);
-
-  if (namespaces.secondary) {
-    const secondaryEntries = Object.entries(cache)
-      .filter(([key]) => key.startsWith("callsite:"))
+  await saveEmbeddingNamespace(
+    rootDir,
+    namespaces.primary,
+    Object.entries(cache)
+      .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
       .map(([key, value]) => ({
         id: key,
         contentHash: value.hash,
         searchText: key,
         vector: value.vector,
         metadata: null,
-      }));
-    await replaceVectorCollection(rootDir, namespaces.secondary, secondaryEntries);
+      })),
+  );
+
+  if (namespaces.secondary) {
+    await saveEmbeddingNamespace(
+      rootDir,
+      namespaces.secondary,
+      Object.entries(cache)
+        .filter(([key]) => key.startsWith("callsite:"))
+        .map(([key, value]) => ({
+          id: key,
+          contentHash: value.hash,
+          searchText: key,
+          vector: value.vector,
+          metadata: null,
+        })),
+    );
   }
+}
+
+async function saveEmbeddingNamespace(
+  rootDir: string,
+  namespace: string,
+  nextEntries: VectorStoreEntry<null>[],
+): Promise<void> {
+  const currentEntries = await loadVectorCollectionMap<null>(rootDir, namespace);
+  const nextEntryMap = new Map(nextEntries.map((entry) => [entry.id, entry]));
+  const entriesToUpsert: VectorStoreEntry<null>[] = [];
+  const entryIdsToDelete: string[] = [];
+
+  for (const nextEntry of nextEntries) {
+    const currentEntry = currentEntries.get(nextEntry.id);
+    if (
+      !currentEntry
+      || currentEntry.contentHash !== nextEntry.contentHash
+      || currentEntry.searchText !== nextEntry.searchText
+      || !vectorsEqual(currentEntry.vector, nextEntry.vector)
+    ) {
+      entriesToUpsert.push(nextEntry);
+    }
+  }
+
+  for (const currentEntryId of currentEntries.keys()) {
+    if (!nextEntryMap.has(currentEntryId)) {
+      entryIdsToDelete.push(currentEntryId);
+    }
+  }
+
+  await upsertVectorEntries(rootDir, namespace, entriesToUpsert);
+  await deleteVectorEntries(rootDir, namespace, entryIdsToDelete);
+}
+
+function vectorsEqual(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 export async function materializeEmbeddingCache(rootDir: string, fileName: string): Promise<void> {

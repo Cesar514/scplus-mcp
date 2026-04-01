@@ -2,6 +2,11 @@
 
 ## v1.5
 
+- [x] rewrite the embedding save path in `src/core/embeddings.ts` so `saveEmbeddingCache()` stops replacing full vector namespaces for every save
+- [x] switch the embedding save path to the sqlite delta-write APIs in `src/core/index-database.ts`, specifically `upsertVectorEntries()` and `deleteVectorEntries()`, instead of `replaceVectorCollection()`
+- [x] remove the full-namespace delete-and-reinsert behavior from the hot embedding persistence path so unchanged vectors keep their existing sqlite rows
+- [x] preserve namespace integrity and deletion semantics while switching to delta writes, including zero-entry namespace materialization for split identifier caches
+- [x] verify directly that incremental embedding updates on a small file set do not rewrite the full vector namespace in sqlite
 - [x] expand `src/cli/commands.ts` so the CLI bridge exposes the same high-value engine surfaces as MCP instead of stopping at the dashboard subset
 - [x] add bridge commands for `search` with exact and related intent, explicit retrieval-mode controls, and structured result payloads
 - [x] add bridge commands for `symbol`, `word`, `outline`, and `deps` so the human operator can inspect the same exact-query substrate the agent uses

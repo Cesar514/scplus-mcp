@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 5: Vector Persistence Hot Path
-
-- [ ] Rewrite the embedding save path in [src/core/embeddings.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/embeddings.ts) so `saveEmbeddingCache()` stops mapping the whole cache back into entries and stops calling full-namespace replacement for every save.
-- [ ] Use the existing delta-write APIs in [src/core/index-database.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/index-database.ts), specifically `upsertVectorEntries()` and `deleteVectorEntries()`, from the embedding save path instead of `replaceVectorCollection()`.
-- [ ] Remove the current full-namespace rewrite behavior where `replaceVectorCollection()` deletes the namespace and reinserts every vector and metadata entry, because this is the current highest-ROI performance issue.
-- [ ] Preserve namespace integrity and deletion semantics while switching to delta writes so removed vectors are actually deleted and changed vectors are updated in place.
-- [ ] Verify that incremental embedding updates on a small file set do not rewrite the full vector namespace in sqlite.
-
 ## Phase 6: Embedding Cache Load Strategy
 
 - [ ] Rewrite `loadEmbeddingCache()` in [src/core/embeddings.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/embeddings.ts) so it no longer loads entire vector collections into a giant JS object on every search path.

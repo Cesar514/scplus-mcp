@@ -752,7 +752,6 @@ export async function upsertVectorEntries<TMetadata = unknown>(
   options?: IndexArtifactOptions,
 ): Promise<void> {
   await ensureContextplusLayout(resolve(rootDir));
-  if (entries.length === 0) return;
   const db = openIndexDatabase(rootDir);
   const updatedAt = new Date().toISOString();
   try {
@@ -770,33 +769,35 @@ export async function upsertVectorEntries<TMetadata = unknown>(
       ON CONFLICT(namespace) DO UPDATE SET
         updated_at = excluded.updated_at
     `).run(storedNamespace, storedNamespace, updatedAt);
-    const statement = db.prepare(`
-      INSERT INTO vector_entries (
-        namespace,
-        entry_id,
-        content_hash,
-        search_text,
-        vector_json,
-        metadata_json,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(namespace, entry_id) DO UPDATE SET
-        content_hash = excluded.content_hash,
-        search_text = excluded.search_text,
-        vector_json = excluded.vector_json,
-        metadata_json = excluded.metadata_json,
-        updated_at = excluded.updated_at
-    `);
-    for (const entry of entries) {
+    if (entries.length > 0) {
+      const statement = db.prepare(`
+        INSERT INTO vector_entries (
+          namespace,
+          entry_id,
+          content_hash,
+          search_text,
+          vector_json,
+          metadata_json,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(namespace, entry_id) DO UPDATE SET
+          content_hash = excluded.content_hash,
+          search_text = excluded.search_text,
+          vector_json = excluded.vector_json,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at
+      `);
+      for (const entry of entries) {
         statement.run(
           storedNamespace,
           entry.id,
-        entry.contentHash,
-        entry.searchText,
-        JSON.stringify(entry.vector),
-        JSON.stringify(entry.metadata),
-        updatedAt,
-      );
+          entry.contentHash,
+          entry.searchText,
+          JSON.stringify(entry.vector),
+          JSON.stringify(entry.metadata),
+          updatedAt,
+        );
+      }
     }
     db.prepare(`
       UPDATE vector_collections
