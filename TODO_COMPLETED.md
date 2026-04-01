@@ -75,3 +75,5 @@
 - [x] verify roadmap step 07 directly with the focused unified-ranking test and a clean full-index rerun on the repository
 - [x] finish roadmap step 08 by routing the public `search` surface through the unified ranking engine and simplifying the search contract around file, symbol, and mixed result types
 - [x] verify roadmap step 08 directly with focused canonical-search coverage and a real full-index plus canonical-search run on the repository
+- [x] finish roadmap step 09 by persisting semantic clusters, cluster labels, related-file graphs, and subsystem summaries as full-index sqlite artifacts
+- [x] verify roadmap step 09 directly with focused cluster-artifact and semantic-navigate coverage plus a real full-index and cluster render on the repository

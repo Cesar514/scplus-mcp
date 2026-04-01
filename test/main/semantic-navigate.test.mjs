@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Ollama } from "ollama";
+
+process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 
 describe("semantic-navigate", () => {
   it("exports semanticNavigate as a function", async () => {
@@ -20,21 +21,11 @@ describe("semantic-navigate", () => {
   });
 
   it("skips data files and navigates source files", async () => {
-    const { semanticNavigate } =
-      await import("../../build/tools/semantic-navigate.js");
+    const { semanticNavigate } = await import("../../build/tools/semantic-navigate.js");
+    const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const rootDir = await mkdtemp(
       join(tmpdir(), "contextplus-semantic-navigate-"),
     );
-    const originalEmbed = Ollama.prototype.embed;
-    const originalChat = Ollama.prototype.chat;
-
-    Ollama.prototype.embed = async function ({ input }) {
-      const batch = Array.isArray(input) ? input : [input];
-      return { embeddings: batch.map(() => [1, 0, 0]) };
-    };
-    Ollama.prototype.chat = async function () {
-      return { message: { content: JSON.stringify(["Source file"]) } };
-    };
 
     try {
       await writeFile(
@@ -56,16 +47,16 @@ describe("semantic-navigate", () => {
         }),
       );
 
+      await indexCodebase({ rootDir, mode: "full" });
       const result = await semanticNavigate({
         rootDir,
         maxDepth: 2,
         maxClusters: 5,
       });
+      assert.match(result, /Persisted clusters:/);
       assert.match(result, /app\.ts/);
       assert.doesNotMatch(result, /data\.json/);
     } finally {
-      Ollama.prototype.embed = originalEmbed;
-      Ollama.prototype.chat = originalChat;
       await rm(rootDir, { recursive: true, force: true });
     }
   });

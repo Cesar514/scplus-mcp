@@ -20,6 +20,7 @@ export type IndexArtifactKey =
   | "hybrid-chunk-index"
   | "hybrid-identifier-index"
   | "code-structure-index"
+  | "semantic-cluster-index"
   | "full-index-manifest"
   | "memory-graph"
   | "restore-points"

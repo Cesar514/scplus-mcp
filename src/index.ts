@@ -399,12 +399,11 @@ server.tool(
 
 server.tool(
   "cluster",
-  "Browse the codebase by MEANING, not directory structure. Uses spectral clustering on Ollama embeddings to group " +
-  "semantically related files into labeled clusters. Inspired by Gabriella Gonzalez's semantic navigator. " +
-  "Requires Ollama running with an embedding model and a chat model for labeling.",
+  "Browse the codebase by MEANING, not directory structure. Renders persisted semantic clusters, subsystem summaries, " +
+  "and related-file neighborhoods from the full index instead of recomputing them on demand.",
   {
     max_depth: z.number().optional().describe("Maximum nesting depth of clusters. Default: 3."),
-    max_clusters: z.number().optional().describe("Maximum sub-clusters per level. Default: 20."),
+    max_clusters: z.number().optional().describe("Maximum rendered child clusters per level. Default: 20."),
   },
   withRequestActivity(async ({ max_depth, max_clusters }) => ({
     content: [{
