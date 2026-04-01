@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 17 by adding a fast exact-query substrate over the prepared full index with hot in-memory caches for exact symbol lookup, word lookup, file outlines, reverse dependencies, and git-backed change/status tracking
+- [x] verify roadmap step 17 directly with Context+ lint, a focused exact-query test, build, and the full main test suite
+- [x] commit the verified step 17 work
 - [x] expand the roadmap before the former step 17 to add a `codedb`-inspired fast exact-query phase that reduces tokens without removing Context+ intelligence features
 - [x] align `TODO.md` and the ExecPlan so the next implementation phase is the fast-path plus escalation stack, and move the CLI/UX milestone to step 21
 - [x] commit the verified roadmap expansion
