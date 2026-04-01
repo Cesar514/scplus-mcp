@@ -7,6 +7,7 @@ import { parseHubFile, discoverHubs, findOrphanedFiles, type HubInfo } from "../
 import { getFileSkeleton } from "./file-skeleton.js";
 import { walkDirectory } from "../core/walker.js";
 import { loadHubSuggestionState } from "./hub-suggestions.js";
+import { validatePreparedIndex } from "./index-reliability.js";
 
 export interface FeatureHubOptions {
   rootDir: string;
@@ -53,7 +54,10 @@ export async function getFeatureHub(options: FeatureHubOptions): Promise<string>
 
   if (!options.hubPath && !options.featureName && !showOrphans) {
     const hubs = await discoverHubs(rootDir);
-    const suggestions = await loadHubSuggestionState(rootDir);
+    const validation = await validatePreparedIndex({ rootDir, mode: "full" });
+    const suggestions = validation.ok
+      ? await loadHubSuggestionState(rootDir)
+      : { suggestions: {}, featureGroups: {} };
     if (hubs.length === 0 && Object.keys(suggestions.suggestions).length === 0) {
       return "No hub files found. Create a .md file with [[path/to/file]] links to establish a feature hub.";
     }
@@ -103,9 +107,15 @@ export async function getFeatureHub(options: FeatureHubOptions): Promise<string>
 
   let hubRelPath = options.hubPath;
   if (!hubRelPath && options.featureName) {
-    hubRelPath = (await findHubByName(rootDir, options.featureName))
-      ?? (await findSuggestedHubByName(rootDir, options.featureName))
-      ?? undefined;
+    const manualHubPath = await findHubByName(rootDir, options.featureName);
+    if (manualHubPath) hubRelPath = manualHubPath;
+    if (!hubRelPath) {
+      const validation = await validatePreparedIndex({ rootDir, mode: "full" });
+      if (validation.ok) {
+        const suggestedHubPath = await findSuggestedHubByName(rootDir, options.featureName);
+        if (suggestedHubPath) hubRelPath = suggestedHubPath;
+      }
+    }
     if (!hubRelPath) {
       return `No hub found for feature "${options.featureName}". Available hubs:\n` +
         (await discoverHubs(rootDir)).map((h) => `  - ${h}`).join("\n") || "  (none)";

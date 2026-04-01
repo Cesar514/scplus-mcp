@@ -309,15 +309,48 @@ export async function saveIndexStageState(runtime: IndexStageRuntime, stageState
 }
 
 export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<PersistedIndexStageState> {
-  return loadIndexArtifact(runtime.rootDir, "index-stage-state", () => buildStageState(runtime.mode));
+  const persisted = await loadIndexArtifact(
+    runtime.rootDir,
+    "index-stage-state",
+    () => buildStageState(runtime.mode),
+  );
+  const current = buildStageState(runtime.mode);
+
+  for (const definition of Object.values(getStageDefinitions())) {
+    const prior = persisted.stages[definition.name];
+    if (!prior) continue;
+    current.stages[definition.name] = {
+      ...current.stages[definition.name],
+      state: prior.state,
+      runCount: prior.runCount,
+      lastRunAt: prior.lastRunAt,
+      lastCompletedAt: prior.lastCompletedAt,
+      lastError: prior.lastError,
+    };
+  }
+
+  current.generatedAt = persisted.generatedAt;
+  return current;
 }
 
 export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: string): Promise<IndexStatus> {
-  return loadIndexArtifact(
+  const persisted = await loadIndexArtifact(
     runtime.rootDir,
     "index-status",
     () => buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode)),
   );
+  const current = buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode));
+  return {
+    ...current,
+    ...persisted,
+    indexMode: runtime.mode,
+    contractVersion: runtime.config.contract.contractVersion,
+    artifactVersion: runtime.config.artifactVersion,
+    stageOrder: runtime.config.contract.stageOrder,
+    projectName: runtime.config.projectName,
+    rootDir: runtime.rootDir,
+    stages: current.stages,
+  };
 }
 
 export async function executeIndexStage(options: ExecuteIndexStageOptions): Promise<void> {

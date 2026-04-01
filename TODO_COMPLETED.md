@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 14 by hardening prepared-index validation, crash-only query behavior, and explicit repair commands
+- [x] verify roadmap step 14 directly with build, targeted reliability/query suites, the full test suite, and a real index validation plus repair cycle
+- [x] commit the verified step 14 work
 - [x] finish roadmap step 13 by adding a unified `research` tool that aggregates ranked code hits, related files, subsystem summaries, and hub context from the prepared full-engine artifacts
 - [x] verify roadmap step 13 directly with build, focused research coverage, the full test suite, a real full index run on the repository, and a direct `research` query against this repository
 - [x] commit the verified step 13 work

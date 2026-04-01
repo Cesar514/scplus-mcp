@@ -22,6 +22,7 @@ import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
+import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "./tools/index-reliability.js";
 import { runResearch } from "./tools/research.js";
 import { runCanonicalSearch } from "./tools/unified-ranking.js";
 
@@ -215,6 +216,38 @@ server.tool(
       text: await indexCodebase({ rootDir: ROOT_DIR, mode }),
     }],
   })),
+);
+
+server.tool(
+  "validate_index",
+  "Validate that the prepared sqlite-backed index is present, version-compatible, and internally consistent for core or full mode.",
+  {
+    mode: z.enum(["core", "full"]).optional().describe("Validation mode. Defaults to full."),
+  },
+  withRequestActivity(async ({ mode }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatIndexValidationReport(await validatePreparedIndex({
+        rootDir: ROOT_DIR,
+        mode: mode ?? DEFAULT_INDEX_MODE,
+      })),
+    }],
+  })),
+);
+
+server.tool(
+  "repair_index",
+  "Repair the prepared index by rerunning the full pipeline or a specific durable stage, then validate the repaired state.",
+  {
+    target: z.enum(["core", "full", "bootstrap", "file-search", "identifier-search", "full-artifacts"])
+      .describe("Repair target. Use core/full for full pipeline rebuilds or a stage name for a targeted rerun."),
+  },
+  withRequestActivity(async ({ target }) => ({
+    content: [{
+      type: "text" as const,
+      text: await repairPreparedIndex(ROOT_DIR, target),
+    }],
+  }), { useEmbeddingTracker: true }),
 );
 
 server.tool(

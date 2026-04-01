@@ -5,6 +5,7 @@ import { discoverHubs, parseHubFile } from "../core/hub.js";
 import { loadIndexArtifact } from "../core/index-database.js";
 import { loadSemanticClusterState, type PersistedSemanticClusterState, type SubsystemSummary } from "./cluster-artifacts.js";
 import { loadHubSuggestionState, type HubSuggestion, type PersistedHubSuggestionState } from "./hub-suggestions.js";
+import { assertValidPreparedIndex } from "./index-reliability.js";
 import { rankUnifiedSearch, formatUnifiedSearchResults, type UnifiedRankedHit } from "./unified-ranking.js";
 
 interface StructureArtifact {
@@ -234,6 +235,11 @@ function dedupeHubHits(hits: ResearchHubHit[]): ResearchHubHit[] {
 }
 
 export async function buildResearchReport(options: ResearchOptions): Promise<ResearchReport> {
+  await assertValidPreparedIndex({
+    rootDir: options.rootDir,
+    mode: "full",
+    consumer: "research",
+  });
   const queryTerms = splitTerms(options.query);
   const topK = normalizeTopK(options.topK, 5);
   const maxRelated = normalizeTopK(options.maxRelated, 6);

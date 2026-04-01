@@ -89,11 +89,6 @@ interface ClusterDescriptor {
   distinguishingFeature: string;
 }
 
-const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
-const CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL ?? "nemotron-3-nano:4b-128k";
-const OPENAI_CHAT_MODEL = process.env.CONTEXTPLUS_OPENAI_CHAT_MODEL ?? process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini";
-const OPENAI_API_KEY = process.env.CONTEXTPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-const OPENAI_BASE_URL = process.env.CONTEXTPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const MAX_FILES_PER_LEAF = 20;
 const MAX_RELATED_FILES = 3;
 const MIN_RELATED_SCORE = 0.35;
@@ -110,17 +105,6 @@ const NON_CODE_NAVIGATE_EXTENSIONS = new Set([
   ".lock",
   ".env",
 ]);
-
-type OllamaChatClient = { chat: (params: Record<string, unknown>) => Promise<{ message: { content: string } }> };
-let ollamaClient: OllamaChatClient | null = null;
-
-async function getOllamaClient(): Promise<OllamaChatClient> {
-  if (!ollamaClient) {
-    const { Ollama } = await import("ollama");
-    ollamaClient = new Ollama({ host: process.env.OLLAMA_HOST }) as unknown as OllamaChatClient;
-  }
-  return ollamaClient;
-}
 
 function isNavigableSourcePath(filePath: string): boolean {
   return !NON_CODE_NAVIGATE_EXTENSIONS.has(extname(filePath).toLowerCase());
@@ -145,44 +129,7 @@ function summarizeFiles(files: FileInfo[]): string {
   return `${files.length} files around ${filesLabel}`;
 }
 
-async function chatCompletion(prompt: string): Promise<string> {
-  if (EMBED_PROVIDER === "mock") {
-    return prompt;
-  }
-
-  if (EMBED_PROVIDER === "openai") {
-    const url = `${OPENAI_BASE_URL.replace(/\/+$/, "")}/chat/completions`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_CHAT_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        stream: false,
-      }),
-    });
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`OpenAI chat API error ${response.status}: ${body}`);
-    }
-    const data = await response.json() as { choices: { message: { content: string } }[] };
-    return data.choices[0]?.message?.content ?? "";
-  }
-
-  const client = await getOllamaClient();
-  const response = await client.chat({
-    model: CHAT_MODEL,
-    messages: [{ role: "user", content: prompt }],
-    stream: false,
-    keep_alive: "10s",
-  });
-  return response.message.content;
-}
-
-function deriveMockDescriptor(files: FileInfo[], pathPattern: string | null, index: number): ClusterDescriptor {
+function deriveClusterDescriptor(files: FileInfo[], pathPattern: string | null, index: number): ClusterDescriptor {
   const samplePath = pathPattern ?? files[0]?.relativePath ?? `cluster-${index + 1}`;
   const dominantSegment = samplePath.split("/").find(Boolean) ?? `cluster-${index + 1}`;
   const label = dominantSegment
@@ -200,25 +147,7 @@ function deriveMockDescriptor(files: FileInfo[], pathPattern: string | null, ind
 
 async function describeClusters(clusters: { files: FileInfo[]; pathPattern: string | null }[]): Promise<ClusterDescriptor[]> {
   if (clusters.length === 0) return [];
-  if (EMBED_PROVIDER === "mock") return clusters.map((cluster, index) => deriveMockDescriptor(cluster.files, cluster.pathPattern, index));
-
-  const descriptions = clusters.map((cluster, index) => {
-    const sampleFiles = cluster.files
-      .slice(0, 6)
-      .map((file) => `${file.relativePath}: ${file.header || "no description"}`)
-      .join("\n  ");
-    return `Cluster ${index + 1}${cluster.pathPattern ? ` (${cluster.pathPattern})` : ""}:\n  ${sampleFiles}`;
-  });
-  const prompt = `Label each code cluster below. Respond with ONLY one JSON array of ${clusters.length} objects.\nEach object must include:\n- "label": exactly 2 words\n- "overarchingTheme": one sentence\n- "distinguishingFeature": one sentence\n\n${descriptions.join("\n\n")}`;
-  const response = await chatCompletion(prompt);
-  const jsonMatch = response.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return clusters.map((cluster, index) => deriveMockDescriptor(cluster.files, cluster.pathPattern, index));
-  const parsed = JSON.parse(jsonMatch[0]) as ClusterDescriptor[];
-  return parsed.map((entry, index) => ({
-    label: entry.label || deriveMockDescriptor(clusters[index].files, clusters[index].pathPattern, index).label,
-    overarchingTheme: entry.overarchingTheme || summarizeFiles(clusters[index].files),
-    distinguishingFeature: entry.distinguishingFeature || clusters[index].files[0]?.header || summarizeFiles(clusters[index].files),
-  }));
+  return clusters.map((cluster, index) => deriveClusterDescriptor(cluster.files, cluster.pathPattern, index));
 }
 
 function buildFileInfoList(state: PersistedFileSearchState): FileInfo[] {
@@ -261,7 +190,7 @@ async function buildHierarchy(files: FileInfo[], vectors: number[][], maxCluster
     if (grouped.length > 1) {
       const children = await Promise.all(grouped.map(async (group, index) => {
         const pathPattern = findPathPattern(group.map((file) => file.relativePath));
-        const descriptor = deriveMockDescriptor(group, pathPattern, index);
+        const descriptor = deriveClusterDescriptor(group, pathPattern, index);
         return {
           id: `cluster-${depth + 1}-${index}`,
           label: descriptor.label,

@@ -2,6 +2,7 @@
 // FEATURE: Canonical ranking layer for file and symbol search over sqlite state
 
 import { loadIndexArtifact } from "../core/index-database.js";
+import { assertValidPreparedIndex } from "./index-reliability.js";
 import { ensureFileSearchIndex } from "./semantic-search.js";
 import { searchHybridChunkIndex, searchHybridIdentifierIndex, type HybridSearchMatch } from "./hybrid-retrieval.js";
 
@@ -381,6 +382,11 @@ export async function runCanonicalSearch(options: CanonicalSearchOptions): Promi
 }
 
 export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise<UnifiedRankedHit[]> {
+  await assertValidPreparedIndex({
+    rootDir: options.rootDir,
+    mode: "full",
+    consumer: "search",
+  });
   const rootDir = options.rootDir;
   const queryTerms = splitTerms(options.query);
   const topK = normalizeTopK(options.topK, 5);

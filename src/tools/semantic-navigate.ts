@@ -2,6 +2,7 @@
 // FEATURE: Render semantic clusters from sqlite instead of recomputing on demand
 
 import { loadSemanticClusterState, renderSemanticClusterState } from "./cluster-artifacts.js";
+import { assertValidPreparedIndex } from "./index-reliability.js";
 
 export interface SemanticNavigateOptions {
   rootDir: string;
@@ -10,6 +11,11 @@ export interface SemanticNavigateOptions {
 }
 
 export async function semanticNavigate(options: SemanticNavigateOptions): Promise<string> {
+  await assertValidPreparedIndex({
+    rootDir: options.rootDir,
+    mode: "full",
+    consumer: "cluster",
+  });
   const state = await loadSemanticClusterState(options.rootDir);
   if (state.clusterCount === 0 && state.root.filePaths.length === 0) {
     throw new Error("Semantic cluster artifacts are missing. Run `index` in full mode before calling `cluster`.");

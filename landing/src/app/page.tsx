@@ -16,6 +16,21 @@ const toolRefRows = [
       '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/config/project.json\n  .contextplus/config/context-tree.txt\n  .contextplus/config/file-manifest.json\n  .contextplus/checkpoints/restore-points.json"',
   },
   {
+    name: "validate_index",
+    desc: "Validate that the prepared sqlite-backed index is present, version-compatible, and internally consistent before query tools rely on it.",
+    input: "{ mode?: 'core' | 'full' }",
+    output:
+      '"Prepared index: valid\nMode: full\nSchema version: 7\nRequired artifacts: 14\nRequired text artifacts: 1\nIssues: none"',
+  },
+  {
+    name: "repair_index",
+    desc: "Repair a broken prepared index by rerunning the full pipeline or one durable stage, then revalidate the repaired state.",
+    input:
+      "{ target: 'core' | 'full' | 'bootstrap' | 'file-search' | 'identifier-search' | 'full-artifacts' }",
+    output:
+      '"Repair target: full-artifacts\nRerun completed.\nValidation: prepared full index is now valid."',
+  },
+  {
     name: "tree",
     desc: "Get the structural AST tree of a project with file headers plus line-numbered function/class/method symbols. Dynamic token-aware pruning shrinks output automatically.",
     input:
