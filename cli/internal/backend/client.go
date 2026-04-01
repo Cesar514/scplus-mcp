@@ -40,10 +40,17 @@ type IndexValidationIssue struct {
 }
 
 type IndexValidationReport struct {
-	OK        bool                   `json:"ok"`
-	Mode      string                 `json:"mode"`
-	CheckedAt string                 `json:"checkedAt"`
-	Issues    []IndexValidationIssue `json:"issues"`
+	OK                            bool                   `json:"ok"`
+	Mode                          string                 `json:"mode"`
+	Generation                    int                    `json:"generation"`
+	ActiveGeneration              int                    `json:"activeGeneration"`
+	PendingGeneration             *int                   `json:"pendingGeneration"`
+	LatestGeneration              int                    `json:"latestGeneration"`
+	ActiveGenerationValidatedAt   string                 `json:"activeGenerationValidatedAt"`
+	ActiveGenerationFreshness     string                 `json:"activeGenerationFreshness"`
+	ActiveGenerationBlockedReason string                 `json:"activeGenerationBlockedReason"`
+	CheckedAt                     string                 `json:"checkedAt"`
+	Issues                        []IndexValidationIssue `json:"issues"`
 }
 
 type OllamaRuntimeModel struct {
@@ -61,8 +68,16 @@ type OllamaRuntimeStatus struct {
 }
 
 type DoctorReport struct {
-	GeneratedAt     string                `json:"generatedAt"`
-	Root            string                `json:"root"`
+	GeneratedAt string `json:"generatedAt"`
+	Root        string `json:"root"`
+	Serving     struct {
+		ActiveGeneration              int    `json:"activeGeneration"`
+		PendingGeneration             *int   `json:"pendingGeneration"`
+		LatestGeneration              int    `json:"latestGeneration"`
+		ActiveGenerationValidatedAt   string `json:"activeGenerationValidatedAt"`
+		ActiveGenerationFreshness     string `json:"activeGenerationFreshness"`
+		ActiveGenerationBlockedReason string `json:"activeGenerationBlockedReason"`
+	} `json:"serving"`
 	RepoStatus      RepoStatusSummary     `json:"repoStatus"`
 	IndexValidation IndexValidationReport `json:"indexValidation"`
 	HubSummary      struct {

@@ -13,7 +13,7 @@ import {
   type EmbeddingCache,
 } from "../core/embeddings.js";
 import { resolve } from "path";
-import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { getIndexGenerationContext, loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { computeFileContentHash, normalizeRelativePath } from "./invalidation.js";
 
 export interface SemanticIdentifierSearchOptions {
@@ -298,6 +298,11 @@ async function buildIdentifierIndex(
   if (canReuseCachedIndex) {
     const reusableIndex = cachedIndex;
     if (!reusableIndex) throw new Error("Identifier search cache was expected but missing.");
+    const generationContext = getIndexGenerationContext();
+    if (generationContext?.writeGeneration !== undefined && generationContext.writeGeneration !== generationContext.readGeneration) {
+      const cache = await loadEmbeddingCache(normalizedRootDir, IDENTIFIER_CACHE_FILE);
+      await saveEmbeddingCache(normalizedRootDir, cache, IDENTIFIER_CACHE_FILE);
+    }
     if (onProgress) {
       await onProgress({
         phase: "identifier-embeddings",
@@ -319,6 +324,10 @@ async function buildIdentifierIndex(
   }
 
   if (docs.length === 0) {
+    const generationContext = getIndexGenerationContext();
+    if (generationContext?.writeGeneration !== undefined && generationContext.writeGeneration !== generationContext.readGeneration) {
+      await saveEmbeddingCache(normalizedRootDir, {}, IDENTIFIER_CACHE_FILE);
+    }
     const empty: IdentifierIndex = { docs: [], vectors: [], fileLines };
     cachedIndex = empty;
     cachedRootDir = rootDir;
@@ -349,6 +358,10 @@ async function buildIdentifierIndex(
     }
   }
 
+  const generationContext = getIndexGenerationContext();
+  const shouldMaterializeGenerationWrite = generationContext?.writeGeneration !== undefined
+    && generationContext.writeGeneration !== generationContext.readGeneration;
+
   if (uncached.length > 0) {
     const batchSize = getEmbeddingBatchSize();
     for (let i = 0; i < uncached.length; i += batchSize) {
@@ -359,6 +372,9 @@ async function buildIdentifierIndex(
         cache[batch[j].key] = { hash: batch[j].hash, vector: embeddings[j] };
       }
     }
+  }
+
+  if (uncached.length > 0 || shouldMaterializeGenerationWrite) {
     await saveEmbeddingCache(normalizedRootDir, cache, IDENTIFIER_CACHE_FILE);
   }
 

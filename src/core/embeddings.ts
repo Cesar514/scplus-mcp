@@ -2,7 +2,7 @@
 // Supports Ollama (local) and OpenAI-compatible APIs (Gemini, OpenAI, etc.)
 // Indexes file headers and symbols, persists vectors in sqlite collections
 
-import { loadVectorCollection, replaceVectorCollection } from "./index-database.js";
+import { getIndexGenerationContext, loadVectorCollection, replaceVectorCollection } from "./index-database.js";
 
 const EMBED_TIMEOUT_MS = 60_000;
 let embedAbortController = new AbortController();
@@ -436,6 +436,12 @@ async function saveCache(rootDir: string, cache: EmbeddingCache): Promise<void> 
   await saveEmbeddingCache(rootDir, cache, CACHE_FILE);
 }
 
+function shouldMaterializeCurrentGenerationWrite(): boolean {
+  const generationContext = getIndexGenerationContext();
+  return generationContext?.writeGeneration !== undefined
+    && generationContext.writeGeneration !== generationContext.readGeneration;
+}
+
 export async function ensureEmbeddingCacheDir(rootDir: string): Promise<void> {
   await loadEmbeddingCache(rootDir, CACHE_FILE);
 }
@@ -501,6 +507,15 @@ export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache,
   }
 }
 
+export async function materializeEmbeddingCache(rootDir: string, fileName: string): Promise<void> {
+  const cache = await loadEmbeddingCache(rootDir, fileName);
+  await saveEmbeddingCache(rootDir, cache, fileName);
+}
+
+export async function materializeFileSearchEmbeddingCache(rootDir: string): Promise<void> {
+  await materializeEmbeddingCache(rootDir, CACHE_FILE);
+}
+
 function formatLineRange(line: number, endLine?: number): string {
   if (endLine && endLine > line) return `L${line}-L${endLine}`;
   return `L${line}`;
@@ -559,6 +574,9 @@ export class SearchIndex {
           }
         }
       }
+    }
+
+    if (uncached.length > 0 || shouldMaterializeCurrentGenerationWrite()) {
       await saveCache(rootDir, cache);
     }
 

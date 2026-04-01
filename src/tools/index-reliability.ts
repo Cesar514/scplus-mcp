@@ -1,10 +1,10 @@
 // Prepared-index validation and repair over durable sqlite-backed artifacts
 // FEATURE: Crash-only reliability checks and repair flows for prepared indexes
 
-import { INDEX_DATABASE_SCHEMA_VERSION, inspectIndexDatabase, loadIndexArtifact, type IndexArtifactKey } from "../core/index-database.js";
+import { INDEX_DATABASE_SCHEMA_VERSION, inspectIndexDatabase, loadIndexArtifact, loadIndexServingState, type IndexArtifactKey } from "../core/index-database.js";
 import { indexCodebase } from "./index-codebase.js";
 import { buildIndexContract, getStageDefinitions, INDEX_ARTIFACT_VERSION, type FileManifest, type FullArtifactManifest, type IndexMode, type IndexStageName, type PersistedIndexStageState, type ProjectIndexConfig } from "./index-contract.js";
-import { createIndexRuntime, loadIndexStatus, rerunIndexStage } from "./index-stages.js";
+import { createIndexRuntime, loadIndexStatus } from "./index-stages.js";
 
 export type IndexRepairTarget = IndexStageName | "core" | "full";
 
@@ -16,6 +16,13 @@ export interface IndexValidationIssue {
 export interface IndexValidationReport {
   ok: boolean;
   mode: IndexMode;
+  generation: number;
+  activeGeneration: number;
+  pendingGeneration: number | null;
+  latestGeneration: number;
+  activeGenerationValidatedAt?: string;
+  activeGenerationFreshness: "fresh" | "dirty" | "blocked";
+  activeGenerationBlockedReason?: string;
   checkedAt: string;
   schemaVersion: number | null;
   requiredArtifactKeys: string[];
@@ -30,6 +37,7 @@ export interface IndexValidationReport {
 export interface ValidatePreparedIndexOptions {
   rootDir: string;
   mode: IndexMode;
+  generation?: number;
 }
 
 export interface AssertPreparedIndexOptions extends ValidatePreparedIndexOptions {
@@ -73,10 +81,11 @@ function modeSatisfies(persistedMode: string | undefined, requestedMode: IndexMo
 async function loadRequiredArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
+  generation?: number,
 ): Promise<T> {
   return loadIndexArtifact(rootDir, artifactKey, () => {
     throw new Error(`Missing required artifact "${artifactKey}".`);
-  });
+  }, generation === undefined ? undefined : { generation });
 }
 
 function validateVersionFields(
@@ -124,7 +133,9 @@ function validateRequiredStages(
 
 export async function validatePreparedIndex(options: ValidatePreparedIndexOptions): Promise<IndexValidationReport> {
   const checkedAt = new Date().toISOString();
-  const inspection = await inspectIndexDatabase(options.rootDir);
+  const serving = await loadIndexServingState(options.rootDir);
+  const generation = options.generation ?? serving.activeGeneration;
+  const inspection = await inspectIndexDatabase(options.rootDir, { generation });
   const required = parseStageOutputs(options.mode);
   const issues: IndexValidationIssue[] = [];
   const contract = buildIndexContract();
@@ -154,9 +165,9 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
   }
 
   if (issues.length === 0) {
-    const config = await loadRequiredArtifact<ProjectIndexConfig>(options.rootDir, "project-config");
-    const fileManifest = await loadRequiredArtifact<FileManifest>(options.rootDir, "file-manifest");
-    const stageState = await loadRequiredArtifact<PersistedIndexStageState>(options.rootDir, "index-stage-state");
+    const config = await loadRequiredArtifact<ProjectIndexConfig>(options.rootDir, "project-config", generation);
+    const fileManifest = await loadRequiredArtifact<FileManifest>(options.rootDir, "file-manifest", generation);
+    const stageState = await loadRequiredArtifact<PersistedIndexStageState>(options.rootDir, "index-stage-state", generation);
     const runtime = await createIndexRuntime({ rootDir: options.rootDir, mode: config.indexMode });
     const status = await loadIndexStatus(runtime, checkedAt);
 
@@ -177,6 +188,15 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
     if (!modeSatisfies(status.indexMode, options.mode)) {
       addIssue(issues, "mode-mismatch", `index-status indexMode=${status.indexMode} cannot satisfy requested ${options.mode} validation.`);
     }
+    if (config.generation !== generation) {
+      addIssue(issues, "generation-mismatch", `project-config generation=${config.generation} does not match requested generation ${generation}.`);
+    }
+    if (fileManifest.generation !== generation) {
+      addIssue(issues, "generation-mismatch", `file-manifest generation=${fileManifest.generation} does not match requested generation ${generation}.`);
+    }
+    if (stageState.generation !== generation) {
+      addIssue(issues, "generation-mismatch", `index-stage-state generation=${stageState.generation} does not match requested generation ${generation}.`);
+    }
 
     if (config.rootDir !== status.rootDir) {
       addIssue(issues, "rootdir-mismatch", `project-config rootDir=${config.rootDir} does not match index-status rootDir=${status.rootDir}.`);
@@ -190,13 +210,26 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
     if (status.state === "failed") {
       addIssue(issues, "failed-status", `index-status is failed: ${status.error ?? "unknown error"}.`);
     }
+    if (generation === serving.activeGeneration && status.activeGeneration !== serving.activeGeneration) {
+      addIssue(issues, "generation-mismatch", `index-status activeGeneration=${status.activeGeneration} does not match serving activeGeneration=${serving.activeGeneration}.`);
+    }
+    if (generation !== serving.activeGeneration && status.runGeneration !== generation && status.pendingGeneration !== generation) {
+      addIssue(
+        issues,
+        "generation-mismatch",
+        `index-status does not reference requested generation ${generation}; runGeneration=${status.runGeneration}, pendingGeneration=${String(status.pendingGeneration)}.`,
+      );
+    }
     validateRequiredStages(issues, stageState, options.mode);
 
     if (options.mode === "full") {
-      const fullManifest = await loadRequiredArtifact<FullArtifactManifest>(options.rootDir, "full-index-manifest");
+      const fullManifest = await loadRequiredArtifact<FullArtifactManifest>(options.rootDir, "full-index-manifest", generation);
       validateVersionFields(issues, "full-index-manifest", fullManifest.artifactVersion, fullManifest.contractVersion);
       if (fullManifest.mode !== "full") {
         addIssue(issues, "mode-mismatch", `full-index-manifest mode=${fullManifest.mode} must be full.`);
+      }
+      if (fullManifest.generation !== generation) {
+        addIssue(issues, "generation-mismatch", `full-index-manifest generation=${fullManifest.generation} does not match requested generation ${generation}.`);
       }
       if (fullManifest.contract.contractVersion !== contract.contractVersion) {
         addIssue(
@@ -218,6 +251,13 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
   return {
     ok: issues.length === 0,
     mode: options.mode,
+    generation,
+    activeGeneration: serving.activeGeneration,
+    pendingGeneration: serving.pendingGeneration,
+    latestGeneration: serving.latestGeneration,
+    activeGenerationValidatedAt: serving.activeGenerationValidatedAt,
+    activeGenerationFreshness: serving.activeGenerationFreshness,
+    activeGenerationBlockedReason: serving.activeGenerationBlockedReason,
     checkedAt,
     schemaVersion: inspection.schemaVersion,
     requiredArtifactKeys: Array.from(required.artifactKeys).sort(),
@@ -235,6 +275,11 @@ export function formatIndexValidationReport(report: IndexValidationReport): stri
     `Index validation: ${report.ok ? "ok" : "failed"}`,
     `Checked at: ${report.checkedAt}`,
     `Mode: ${report.mode}`,
+    `Generation: ${report.generation}`,
+    `Serving active generation: ${report.activeGeneration}`,
+    `Serving pending generation: ${report.pendingGeneration === null ? "none" : String(report.pendingGeneration)}`,
+    `Latest generation: ${report.latestGeneration}`,
+    `Serving freshness: ${report.activeGenerationFreshness}`,
     `Database schemaVersion: ${String(report.schemaVersion)}`,
     `Required artifacts: ${report.requiredArtifactKeys.length}`,
     `Required text artifacts: ${report.requiredTextArtifactKeys.length}`,
@@ -266,16 +311,6 @@ export async function assertValidPreparedIndex(options: AssertPreparedIndexOptio
   );
 }
 
-function formatStageRepairResult(result: Awaited<ReturnType<typeof rerunIndexStage>>, target: IndexStageName): string {
-  const stage = result.stageState.stages[target];
-  return [
-    `Repaired stage: ${target}`,
-    `State: ${stage.state}`,
-    `Run count: ${stage.runCount}`,
-    `Last completed at: ${stage.lastCompletedAt ?? "n/a"}`,
-  ].join("\n");
-}
-
 export async function repairPreparedIndex(rootDir: string, target: IndexRepairTarget): Promise<string> {
   if (target === "core" || target === "full") {
     const output = await indexCodebase({ rootDir, mode: target });
@@ -284,8 +319,15 @@ export async function repairPreparedIndex(rootDir: string, target: IndexRepairTa
     return `${output}\n\n${formatIndexValidationReport(report)}`;
   }
 
-  const rerun = await rerunIndexStage({ rootDir, stage: target, mode: "full" });
+  const output = await indexCodebase({ rootDir, mode: "full" });
   const report = await validatePreparedIndex({ rootDir, mode: "full" });
   if (!report.ok) throw new Error(formatIndexValidationReport(report));
-  return `${formatStageRepairResult(rerun, target)}\n\n${formatIndexValidationReport(report)}`;
+  return [
+    `Repaired stage: ${target}`,
+    "Repair strategy: rebuilt a new validated full generation before switching serving state.",
+    "",
+    output,
+    "",
+    formatIndexValidationReport(report),
+  ].join("\n");
 }

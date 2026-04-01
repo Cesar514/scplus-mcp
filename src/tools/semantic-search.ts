@@ -7,12 +7,13 @@ import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
   getEmbeddingBatchSize,
+  materializeFileSearchEmbeddingCache,
   SearchIndex,
   type SearchDocument,
   type SearchIndexBuildStats,
   type SearchQueryOptions,
 } from "../core/embeddings.js";
-import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { getIndexGenerationContext, loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { computeFileContentHash, normalizeRelativePath } from "./invalidation.js";
 
 export interface SemanticSearchOptions {
@@ -237,6 +238,10 @@ export async function ensureFileSearchIndex(
   if (canReuseCachedIndex) {
     const reusableIndex = cachedIndex;
     if (!reusableIndex) throw new Error("File search cache was expected but missing.");
+    const generationContext = getIndexGenerationContext();
+    if (generationContext?.writeGeneration !== undefined && generationContext.writeGeneration !== generationContext.readGeneration) {
+      await materializeFileSearchEmbeddingCache(normalizedRootDir);
+    }
     if (onProgress) {
       await onProgress({
         phase: "file-embeddings",

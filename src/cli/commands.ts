@@ -222,6 +222,10 @@ function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>
   const lines = [
     `Doctor: ${report.root}`,
     "",
+    `Serving generation: ${report.serving.activeGeneration}`,
+    `Pending generation: ${report.serving.pendingGeneration ?? "none"}`,
+    `Serving freshness: ${report.serving.activeGenerationFreshness}`,
+    "",
     formatRepoStatusSummary(report.repoStatus, 10),
     "",
     formatIndexValidationReport(report.indexValidation),

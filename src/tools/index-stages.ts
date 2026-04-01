@@ -3,7 +3,15 @@
 
 import { readFile, readdir } from "fs/promises";
 import { basename, join, resolve } from "path";
-import { deleteLegacyArtifacts, loadIndexArtifact, saveIndexArtifact, saveIndexTextArtifact } from "../core/index-database.js";
+import {
+  deleteLegacyArtifacts,
+  loadIndexArtifact,
+  loadIndexServingState,
+  saveIndexArtifact,
+  saveIndexTextArtifact,
+  type IndexGenerationFreshness,
+  type IndexServingState,
+} from "../core/index-database.js";
 import { getContextTree } from "./context-tree.js";
 import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
@@ -54,6 +62,13 @@ export interface HybridRetrievalIndexStatus {
 export interface IndexStatus {
   state: "running" | "completed" | "failed";
   phase: IndexPhase;
+  runGeneration: number;
+  activeGeneration: number;
+  pendingGeneration: number | null;
+  latestGeneration: number;
+  activeGenerationValidatedAt?: string;
+  activeGenerationFreshness: IndexGenerationFreshness;
+  activeGenerationBlockedReason?: string;
   indexMode: IndexMode;
   contractVersion: number;
   artifactVersion: number;
@@ -64,6 +79,7 @@ export interface IndexStatus {
   lastUpdatedAt: string;
   completedAt?: string;
   elapsedMs?: number;
+  failedGeneration?: number;
   bootstrap?: {
     files: number;
     directories: number;
@@ -87,6 +103,8 @@ export interface IndexRuntimePaths {
 export interface IndexStageRuntime {
   rootDir: string;
   mode: IndexMode;
+  generation: number;
+  servingState: IndexServingState;
   layout: ContextplusLayout;
   config: ProjectIndexConfig;
   paths: IndexRuntimePaths;
@@ -115,9 +133,10 @@ export interface RerunIndexStageResult {
   stageState: PersistedIndexStageState;
 }
 
-function buildProjectConfig(rootDir: string, mode: IndexMode): ProjectIndexConfig {
+function buildProjectConfig(rootDir: string, mode: IndexMode, generation: number): ProjectIndexConfig {
   return {
     indexedAt: new Date().toISOString(),
+    generation,
     projectName: basename(resolve(rootDir)),
     rootDir: resolve(rootDir),
     artifactVersion: INDEX_ARTIFACT_VERSION,
@@ -133,7 +152,7 @@ function buildRuntimePaths(layout: ContextplusLayout): IndexRuntimePaths {
   };
 }
 
-function buildStageState(mode: IndexMode): PersistedIndexStageState {
+function buildStageState(mode: IndexMode, generation: number): PersistedIndexStageState {
   const definitions = getStageDefinitions();
   const stages = Object.fromEntries(
     Object.values(definitions).map((definition) => [
@@ -152,6 +171,7 @@ function buildStageState(mode: IndexMode): PersistedIndexStageState {
 
   return {
     generatedAt: new Date().toISOString(),
+    generation,
     contractVersion: buildIndexContract().contractVersion,
     artifactVersion: INDEX_ARTIFACT_VERSION,
     mode,
@@ -163,6 +183,13 @@ function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageSt
   return {
     state: "running",
     phase: "bootstrap",
+    runGeneration: runtime.generation,
+    activeGeneration: runtime.servingState.activeGeneration,
+    pendingGeneration: runtime.servingState.pendingGeneration,
+    latestGeneration: runtime.servingState.latestGeneration,
+    activeGenerationValidatedAt: runtime.servingState.activeGenerationValidatedAt,
+    activeGenerationFreshness: runtime.servingState.activeGenerationFreshness,
+    activeGenerationBlockedReason: runtime.servingState.activeGenerationBlockedReason,
     indexMode: runtime.mode,
     contractVersion: runtime.config.contract.contractVersion,
     artifactVersion: runtime.config.artifactVersion,
@@ -268,6 +295,7 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
   const manifest: FileManifest = {
     artifactVersion: runtime.config.artifactVersion,
     contractVersion: runtime.config.contract.contractVersion,
+    generation: runtime.generation,
     directories: directories.map((entry) => entry.relativePath),
     files: files.map((entry) => entry.relativePath),
     generatedAt: runtime.config.indexedAt,
@@ -275,9 +303,9 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
     rootDir: runtime.rootDir,
   };
 
-  await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config);
-  await saveIndexTextArtifact(runtime.rootDir, "context-tree", tree + "\n");
-  await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest);
+  await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config, { generation: runtime.generation });
+  await saveIndexTextArtifact(runtime.rootDir, "context-tree", tree + "\n", { generation: runtime.generation });
+  await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest, { generation: runtime.generation });
   const restorePoints = await loadIndexArtifact(runtime.rootDir, "restore-points", () => []);
   await saveIndexArtifact(runtime.rootDir, "restore-points", restorePoints.length === 0 && legacyRestorePoints ? legacyRestorePoints : restorePoints);
   await cleanupLegacyArtifacts(runtime.layout);
@@ -288,15 +316,19 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
   };
 }
 
-export async function createIndexRuntime(options: { rootDir: string; mode?: IndexMode }): Promise<IndexStageRuntime> {
+export async function createIndexRuntime(options: { rootDir: string; mode?: IndexMode; generation?: number }): Promise<IndexStageRuntime> {
   const rootDir = resolve(options.rootDir);
   const mode = options.mode ?? DEFAULT_INDEX_MODE;
   const layout = await ensureContextplusLayout(rootDir);
+  const servingState = await loadIndexServingState(rootDir);
+  const generation = options.generation ?? servingState.activeGeneration;
   return {
     rootDir,
     mode,
+    generation,
+    servingState,
     layout,
-    config: buildProjectConfig(rootDir, mode),
+    config: buildProjectConfig(rootDir, mode, generation),
     paths: buildRuntimePaths(layout),
   };
 }
@@ -309,16 +341,17 @@ export async function saveIndexStatus(runtime: IndexStageRuntime, status: IndexS
 
 export async function saveIndexStageState(runtime: IndexStageRuntime, stageState: PersistedIndexStageState): Promise<void> {
   stageState.generatedAt = new Date().toISOString();
-  await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState);
+  await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState, { generation: runtime.generation });
 }
 
 export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<PersistedIndexStageState> {
   const persisted = await loadIndexArtifact(
     runtime.rootDir,
     "index-stage-state",
-    () => buildStageState(runtime.mode),
+    () => buildStageState(runtime.mode, runtime.generation),
+    { generation: runtime.generation },
   );
-  const current = buildStageState(runtime.mode);
+  const current = buildStageState(runtime.mode, runtime.generation);
 
   for (const definition of Object.values(getStageDefinitions())) {
     const prior = persisted.stages[definition.name];
@@ -341,12 +374,19 @@ export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: str
   const persisted = await loadIndexArtifact(
     runtime.rootDir,
     "index-status",
-    () => buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode)),
+    () => buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode, runtime.generation)),
   );
-  const current = buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode));
+  const current = buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode, runtime.generation));
   return {
     ...current,
     ...persisted,
+    runGeneration: persisted.runGeneration ?? runtime.generation,
+    activeGeneration: persisted.activeGeneration ?? runtime.servingState.activeGeneration,
+    pendingGeneration: persisted.pendingGeneration ?? runtime.servingState.pendingGeneration,
+    latestGeneration: persisted.latestGeneration ?? runtime.servingState.latestGeneration,
+    activeGenerationValidatedAt: persisted.activeGenerationValidatedAt ?? runtime.servingState.activeGenerationValidatedAt,
+    activeGenerationFreshness: persisted.activeGenerationFreshness ?? runtime.servingState.activeGenerationFreshness,
+    activeGenerationBlockedReason: persisted.activeGenerationBlockedReason ?? runtime.servingState.activeGenerationBlockedReason,
     indexMode: runtime.mode,
     contractVersion: runtime.config.contract.contractVersion,
     artifactVersion: runtime.config.artifactVersion,

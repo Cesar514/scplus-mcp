@@ -13,9 +13,21 @@ process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
-    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    const generation = getActiveGenerationFromDb(dbPath);
+    const storedKey = generation === 0 ? artifactKey : `generation:${generation}:${artifactKey}`;
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(storedKey);
     if (!row) return null;
     return JSON.parse(row.artifact_json);
+  } finally {
+    db.close();
+  }
+}
+
+function getActiveGenerationFromDb(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT meta_value FROM index_db_meta WHERE meta_key = 'activeGeneration'").get();
+    return row?.meta_value ? Number.parseInt(row.meta_value, 10) : 0;
   } finally {
     db.close();
   }
@@ -80,8 +92,8 @@ describe("cluster-artifacts", () => {
       const manifest = readArtifactFromDb(dbPath, "full-index-manifest");
       const rendered = await semanticNavigate({ rootDir, maxDepth: 3, maxClusters: 10 });
 
-      assert.equal(clusterState.artifactVersion, 12);
-      assert.equal(clusterState.contractVersion, 10);
+      assert.equal(clusterState.artifactVersion, 13);
+      assert.equal(clusterState.contractVersion, 11);
       assert.equal(clusterState.mode, "full");
       assert.equal(clusterState.clusterCount >= 1, true);
       assert.equal(Object.keys(clusterState.relatedFiles).length >= 4, true);

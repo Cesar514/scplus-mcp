@@ -20,7 +20,8 @@ async function expectExists(path) {
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
-    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    const generation = getActiveGenerationFromDb(dbPath);
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(qualifyArtifactKey(artifactKey, generation));
     if (!row) return null;
     return JSON.parse(row.artifact_json);
   } finally {
@@ -31,11 +32,33 @@ function readArtifactFromDb(dbPath, artifactKey) {
 function readTextArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
-    const row = db.prepare("SELECT artifact_text FROM index_text_artifacts WHERE artifact_key = ?").get(artifactKey);
+    const generation = getActiveGenerationFromDb(dbPath);
+    const row = db.prepare("SELECT artifact_text FROM index_text_artifacts WHERE artifact_key = ?").get(qualifyArtifactKey(artifactKey, generation));
     return row?.artifact_text ?? null;
   } finally {
     db.close();
   }
+}
+
+function readMetaFromDb(dbPath, metaKey) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT meta_value FROM index_db_meta WHERE meta_key = ?").get(metaKey);
+    return row?.meta_value ?? null;
+  } finally {
+    db.close();
+  }
+}
+
+function getActiveGenerationFromDb(dbPath) {
+  const raw = readMetaFromDb(dbPath, "activeGeneration");
+  return raw === null ? 0 : Number.parseInt(raw, 10);
+}
+
+function qualifyArtifactKey(artifactKey, generation) {
+  if (artifactKey === "index-status" || artifactKey === "restore-points") return artifactKey;
+  if (generation === 0) return artifactKey;
+  return `generation:${generation}:${artifactKey}`;
 }
 
 describe("index", () => {
@@ -88,10 +111,11 @@ describe("index", () => {
       const tree = readTextArtifactFromDb(dbPath, "context-tree");
       const dbFullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
 
-      assert.equal(config.version, 12);
-      assert.equal(config.artifactVersion, 12);
+      assert.equal(config.version, 13);
+      assert.equal(config.artifactVersion, 13);
+      assert.equal(config.generation, 1);
       assert.equal(config.indexMode, "full");
-      assert.equal(config.contract.contractVersion, 10);
+      assert.equal(config.contract.contractVersion, 11);
       assert.equal(config.contract.defaultMode, "full");
       assert.equal(config.contract.storage.substrate, "sqlite");
       assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
@@ -100,22 +124,29 @@ describe("index", () => {
       assert.equal(config.contract.failureSemantics.policy, "crash-only");
       assert.equal(config.projectName.startsWith("contextplus-index-"), true);
       assert.ok(Array.isArray(manifest.files));
+      assert.equal(manifest.generation, 1);
       assert.ok(manifest.files.includes("src/app.ts"));
-      assert.equal(manifest.contractVersion, 10);
+      assert.equal(manifest.contractVersion, 11);
       assert.equal(manifest.indexMode, "full");
       assert.equal(indexStatus.state, "completed");
       assert.equal(indexStatus.phase, "completed");
+      assert.equal(indexStatus.runGeneration, 1);
+      assert.equal(indexStatus.activeGeneration, 1);
+      assert.equal(indexStatus.pendingGeneration, null);
+      assert.equal(indexStatus.latestGeneration, 1);
+      assert.equal(indexStatus.activeGenerationFreshness, "fresh");
       assert.equal(indexStatus.indexMode, "full");
-      assert.equal(indexStatus.contractVersion, 10);
-      assert.equal(indexStatus.artifactVersion, 12);
+      assert.equal(indexStatus.contractVersion, 11);
+      assert.equal(indexStatus.artifactVersion, 13);
       assert.ok(Array.isArray(indexStatus.stageOrder));
       assert.ok(indexStatus.stageOrder.includes("chunk-embeddings"));
       assert.ok(indexStatus.stageOrder.includes("hybrid-chunk-scan"));
       assert.ok(indexStatus.stageOrder.includes("hybrid-identifier-scan"));
       assert.ok(indexStatus.stageOrder.includes("cluster-scan"));
       assert.ok(indexStatus.stageOrder.includes("hub-scan"));
+      assert.equal(stageState.generation, 1);
       assert.equal(stageState.mode, "full");
-      assert.equal(stageState.contractVersion, 10);
+      assert.equal(stageState.contractVersion, 11);
       assert.equal(stageState.stages.bootstrap.state, "completed");
       assert.equal(stageState.stages["file-search"].state, "completed");
       assert.equal(stageState.stages["identifier-search"].state, "completed");
@@ -129,8 +160,8 @@ describe("index", () => {
       assert.equal(indexStatus.fullIndex?.semanticClusterIndex?.clusterCount >= 0, true);
       assert.ok(fileIndex.files["src/app.ts"]);
       assert.equal(identifierIndex.files["src/app.ts"].docs.some((doc) => doc.name === "run"), true);
-      assert.equal(chunkIndex.artifactVersion, 12);
-      assert.equal(chunkIndex.contractVersion, 10);
+      assert.equal(chunkIndex.artifactVersion, 13);
+      assert.equal(chunkIndex.contractVersion, 11);
       assert.equal(chunkIndex.mode, "full");
       const runChunk = chunkIndex.files["src/app.ts"].chunks.find((chunk) => chunk.symbolName === "run");
       assert.ok(runChunk);
@@ -139,20 +170,20 @@ describe("index", () => {
       assert.deepEqual(runChunk.symbolPath, ["run"]);
       assert.equal(runChunk.lineCount >= 1, true);
       assert.match(runChunk.contentHash, /^[a-f0-9]{64}$/);
-      assert.equal(hybridChunkIndex.artifactVersion, 12);
-      assert.equal(hybridChunkIndex.contractVersion, 10);
+      assert.equal(hybridChunkIndex.artifactVersion, 13);
+      assert.equal(hybridChunkIndex.contractVersion, 11);
       assert.equal(hybridChunkIndex.source, "chunk");
       assert.equal(hybridChunkIndex.documents[runChunk.id].embeddingCacheKey, runChunk.id);
       assert.equal(Object.keys(hybridChunkIndex.documents[runChunk.id].termFrequencies).includes("run"), true);
       const runIdentifier = identifierIndex.files["src/app.ts"].docs.find((doc) => doc.name === "run");
       assert.ok(runIdentifier);
-      assert.equal(hybridIdentifierIndex.artifactVersion, 12);
-      assert.equal(hybridIdentifierIndex.contractVersion, 10);
+      assert.equal(hybridIdentifierIndex.artifactVersion, 13);
+      assert.equal(hybridIdentifierIndex.contractVersion, 11);
       assert.equal(hybridIdentifierIndex.source, "identifier");
       assert.equal(hybridIdentifierIndex.documents[runIdentifier.id].embeddingCacheKey, `id:${runIdentifier.id}`);
       assert.equal(Object.keys(hybridIdentifierIndex.documents[runIdentifier.id].termFrequencies).includes("run"), true);
-      assert.equal(structureIndex.artifactVersion, 12);
-      assert.equal(structureIndex.contractVersion, 10);
+      assert.equal(structureIndex.artifactVersion, 13);
+      assert.equal(structureIndex.contractVersion, 11);
       assert.equal(structureIndex.mode, "full");
       assert.deepEqual(structureIndex.files["src/app.ts"].artifact.dependencyPaths, []);
       assert.equal(Array.isArray(structureIndex.fileToSymbolIds["src/app.ts"]), true);
@@ -174,19 +205,20 @@ describe("index", () => {
       assert.deepEqual(structureIndex.moduleSummaries["src"].filePaths, ["src/app.ts"]);
       assert.deepEqual(structureIndex.moduleImportEdges, []);
       assert.equal(structureIndex.files["src/app.ts"].artifact.symbols.some((symbol) => symbol.name === "run"), true);
-      assert.equal(semanticClusterIndex.artifactVersion, 12);
-      assert.equal(semanticClusterIndex.contractVersion, 10);
+      assert.equal(semanticClusterIndex.artifactVersion, 13);
+      assert.equal(semanticClusterIndex.contractVersion, 11);
       assert.equal(semanticClusterIndex.mode, "full");
       assert.equal(semanticClusterIndex.clusterCount >= 0, true);
       assert.equal(Object.keys(semanticClusterIndex.relatedFiles).length >= 1, true);
       assert.equal(Object.keys(semanticClusterIndex.subsystemSummaries).length >= 1, true);
-      assert.equal(hubSuggestionIndex.artifactVersion, 12);
-      assert.equal(hubSuggestionIndex.contractVersion, 10);
+      assert.equal(hubSuggestionIndex.artifactVersion, 13);
+      assert.equal(hubSuggestionIndex.contractVersion, 11);
       assert.equal(Object.keys(hubSuggestionIndex.suggestions).length >= 1, true);
       assert.equal(Object.keys(hubSuggestionIndex.featureGroups).length >= 0, true);
       assert.equal(fullManifest.mode, "full");
-      assert.equal(fullManifest.artifactVersion, 12);
-      assert.equal(fullManifest.contractVersion, 10);
+      assert.equal(fullManifest.generation, 1);
+      assert.equal(fullManifest.artifactVersion, 13);
+      assert.equal(fullManifest.contractVersion, 11);
       assert.equal(fullManifest.contract.defaultMode, "full");
       assert.equal(fullManifest.contract.storage.substrate, "sqlite");
       assert.equal(fullManifest.contract.storage.mirrorPolicy, "sqlite-only");
@@ -261,7 +293,7 @@ describe("index", () => {
       assert.equal(readArtifactFromDb(dbPath, "memory-graph"), null);
       assert.deepEqual(restorePoints, [{ id: "rp-1" }]);
       assert.equal(indexStatus.state, "completed");
-      assert.equal(indexStatus.contractVersion, 10);
+      assert.equal(indexStatus.contractVersion, 11);
       assert.equal(fullManifest.mode, "full");
       assert.equal(fullManifest.contract.failureSemantics.recovery, "rerun-from-persisted-artifacts");
       assert.equal(fullManifest.contract.storage.substrate, "sqlite");
@@ -303,10 +335,12 @@ describe("index", () => {
       const indexStatus = readArtifactFromDb(dbPath, "index-status");
 
       assert.equal(config.indexMode, "core");
+      assert.equal(config.generation, 1);
       assert.equal(config.contract.supportedModes.includes("core"), true);
       assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
       assert.equal(indexStatus.indexMode, "core");
-      assert.equal(indexStatus.contractVersion, 10);
+      assert.equal(indexStatus.activeGeneration, 1);
+      assert.equal(indexStatus.contractVersion, 11);
       await expectExists(join(cwd, ".contextplus", "state", "index.sqlite"));
       assert.deepEqual(await readdir(join(cwd, ".contextplus")), ["state"]);
       assert.equal(readArtifactFromDb(dbPath, "full-index-manifest"), null);

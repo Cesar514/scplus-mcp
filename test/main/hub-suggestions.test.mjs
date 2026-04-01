@@ -11,8 +11,20 @@ const { getFeatureHub } = await import("../../build/tools/feature-hub.js");
 function readArtifact(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
-    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    const generation = getActiveGenerationFromDb(dbPath);
+    const storedKey = generation === 0 ? artifactKey : `generation:${generation}:${artifactKey}`;
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(storedKey);
     return row ? JSON.parse(row.artifact_json) : null;
+  } finally {
+    db.close();
+  }
+}
+
+function getActiveGenerationFromDb(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT meta_value FROM index_db_meta WHERE meta_key = 'activeGeneration'").get();
+    return row?.meta_value ? Number.parseInt(row.meta_value, 10) : 0;
   } finally {
     db.close();
   }
@@ -65,8 +77,8 @@ describe("hub suggestions", () => {
       const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
       const state = readArtifact(dbPath, "hub-suggestion-index");
       assert.ok(state);
-      assert.equal(state.artifactVersion, 12);
-      assert.equal(state.contractVersion, 10);
+      assert.equal(state.artifactVersion, 13);
+      assert.equal(state.contractVersion, 11);
       assert.equal(Object.keys(state.suggestions).length >= 1, true);
       assert.equal(Object.keys(state.featureGroups).length >= 1, true);
 

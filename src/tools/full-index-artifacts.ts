@@ -7,7 +7,7 @@ import { flattenSymbols, analyzeFile, isSupportedFile } from "../core/parser.js"
 import { ensureContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest } from "./index-contract.js";
-import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { loadIndexArtifact, loadIndexServingState, saveIndexArtifact } from "../core/index-database.js";
 import { refreshChunkIndexState, warmChunkEmbeddings, type ChunkArtifactStats, type ChunkIndexProgress } from "./chunk-index.js";
 import { refreshHybridChunkIndex, refreshHybridIdentifierIndex, type HybridRetrievalStats } from "./hybrid-retrieval.js";
 import { refreshSemanticClusterState, type SemanticClusterStats } from "./cluster-artifacts.js";
@@ -561,6 +561,7 @@ export async function ensureFullIndexArtifacts(
   onProgress?: (progress: FullIndexProgress) => Promise<void> | void,
 ): Promise<FullIndexArtifactResult> {
   const rootDir = resolve(options.rootDir);
+  const servingState = await loadIndexServingState(rootDir);
   await ensureContextplusLayout(rootDir);
 
   const chunkResult = await refreshChunkIndexState(rootDir, async (progress: ChunkIndexProgress) => {
@@ -657,6 +658,7 @@ export async function ensureFullIndexArtifacts(
 
   const manifest: FullArtifactManifest = {
     generatedAt: new Date().toISOString(),
+    generation: servingState.pendingGeneration ?? servingState.activeGeneration,
     mode: "full",
     artifactVersion: INDEX_ARTIFACT_VERSION,
     contractVersion: buildIndexContract().contractVersion,

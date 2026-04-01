@@ -27,6 +27,14 @@ export interface OllamaRuntimeStatus {
 export interface BridgeDoctorReport {
   generatedAt: string;
   root: string;
+  serving: {
+    activeGeneration: number;
+    pendingGeneration: number | null;
+    latestGeneration: number;
+    activeGenerationValidatedAt?: string;
+    activeGenerationFreshness: "fresh" | "dirty" | "blocked";
+    activeGenerationBlockedReason?: string;
+  };
   repoStatus: RepoStatusSummary;
   indexValidation: IndexValidationReport;
   hubSummary: {
@@ -73,6 +81,14 @@ export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorRe
   return {
     generatedAt: new Date().toISOString(),
     root: rootDir,
+    serving: {
+      activeGeneration: indexValidation.activeGeneration,
+      pendingGeneration: indexValidation.pendingGeneration,
+      latestGeneration: indexValidation.latestGeneration,
+      activeGenerationValidatedAt: indexValidation.activeGenerationValidatedAt,
+      activeGenerationFreshness: indexValidation.activeGenerationFreshness,
+      activeGenerationBlockedReason: indexValidation.activeGenerationBlockedReason,
+    },
     repoStatus,
     indexValidation,
     hubSummary: {

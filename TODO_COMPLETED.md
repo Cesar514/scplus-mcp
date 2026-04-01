@@ -1,5 +1,17 @@
 # TODO Completed
 
+## v1.5
+
+- [x] add explicit index generations to the durable sqlite contract so a new index build writes into an inactive generation instead of mutating the live one
+- [x] add an active-generation pointer in sqlite and make query-time artifact and vector reads resolve through that serving pointer unless an explicit generation is requested
+- [x] make `indexCodebase()` reserve a pending generation, write stage artifacts into that generation, validate that generation fully, and switch the active pointer only after validation succeeds
+- [x] prevent partially completed stage output from becoming query-visible if indexing, validation, or artifact persistence fails mid-run
+- [x] materialize reused and empty vector namespaces into the pending generation so validation and serving semantics remain correct even when a reindex reuses existing embeddings or indexes zero documents
+- [x] add generation metadata, validation timestamp, and freshness metadata to validation reports, CLI bridge payloads, and operator status views
+- [x] add explicit serving-status output to `doctor` and overview surfaces so operators can see active generation, pending generation, last validation time, and freshness immediately
+- [x] define failure behavior for generation validation so the previous generation keeps serving, the failed generation is recorded, and freshness is not falsely advanced
+- [x] make prepared-index repair rebuild and validate a new generation before switching serving state, instead of mutating the live generation in place
+
 ## maintenance
 
 - [x] expose the full engine cleanly through the planned CLI and UX layers once the fast-path, indexing, retrieval, structure, and research primitives were stable

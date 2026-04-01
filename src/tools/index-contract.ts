@@ -84,6 +84,7 @@ export interface PersistedIndexStageRecord {
 
 export interface PersistedIndexStageState {
   generatedAt: string;
+  generation: number;
   contractVersion: number;
   artifactVersion: number;
   mode: IndexMode;
@@ -92,6 +93,7 @@ export interface PersistedIndexStageState {
 
 export interface ProjectIndexConfig {
   indexedAt: string;
+  generation: number;
   projectName: string;
   rootDir: string;
   artifactVersion: number;
@@ -103,6 +105,7 @@ export interface ProjectIndexConfig {
 export interface FileManifest {
   artifactVersion: number;
   contractVersion: number;
+  generation: number;
   directories: string[];
   files: string[];
   generatedAt: string;
@@ -112,6 +115,7 @@ export interface FileManifest {
 
 export interface FullArtifactManifest {
   generatedAt: string;
+  generation: number;
   mode: "full";
   artifactVersion: number;
   contractVersion: number;
@@ -172,8 +176,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 10;
-export const INDEX_ARTIFACT_VERSION = 12;
+export const INDEX_CONTRACT_VERSION = 11;
+export const INDEX_ARTIFACT_VERSION = 13;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";

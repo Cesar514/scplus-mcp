@@ -13,9 +13,21 @@ process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
-    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    const generation = getActiveGenerationFromDb(dbPath);
+    const storedKey = generation === 0 ? artifactKey : `generation:${generation}:${artifactKey}`;
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(storedKey);
     if (!row) return null;
     return JSON.parse(row.artifact_json);
+  } finally {
+    db.close();
+  }
+}
+
+function getActiveGenerationFromDb(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT meta_value FROM index_db_meta WHERE meta_key = 'activeGeneration'").get();
+    return row?.meta_value ? Number.parseInt(row.meta_value, 10) : 0;
   } finally {
     db.close();
   }
@@ -55,15 +67,15 @@ describe("hybrid-retrieval", () => {
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 
-      assert.equal(hybridChunk.state.artifactVersion, 12);
-      assert.equal(hybridChunk.state.contractVersion, 10);
+      assert.equal(hybridChunk.state.artifactVersion, 13);
+      assert.equal(hybridChunk.state.contractVersion, 11);
       assert.equal(hybridChunk.state.source, "chunk");
       assert.equal(hybridChunk.stats.indexedDocuments >= 2, true);
       assert.equal(hybridChunk.stats.uniqueTerms >= 4, true);
       assert.equal(Object.keys(dbHybridChunk.documents).length, hybridChunk.stats.indexedDocuments);
 
-      assert.equal(hybridIdentifier.state.artifactVersion, 12);
-      assert.equal(hybridIdentifier.state.contractVersion, 10);
+      assert.equal(hybridIdentifier.state.artifactVersion, 13);
+      assert.equal(hybridIdentifier.state.contractVersion, 11);
       assert.equal(hybridIdentifier.state.source, "identifier");
       assert.equal(hybridIdentifier.stats.indexedDocuments >= 2, true);
       assert.equal(hybridIdentifier.stats.uniqueTerms >= 4, true);

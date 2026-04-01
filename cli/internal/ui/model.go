@@ -557,6 +557,8 @@ func (m Model) renderOverview() string {
 			fmt.Sprintf("branch %s", m.doctor.RepoStatus.Branch),
 			fmt.Sprintf("changed %d | untracked %d", m.doctor.RepoStatus.UnstagedCount, m.doctor.RepoStatus.UntrackedCount),
 			indexLine,
+			fmt.Sprintf("active gen %d | pending %s", m.doctor.Serving.ActiveGeneration, formatOptionalInt(m.doctor.Serving.PendingGeneration)),
+			fmt.Sprintf("freshness %s", m.doctor.Serving.ActiveGenerationFreshness),
 			ollamaLine,
 		}, "\n")
 	}
@@ -644,6 +646,9 @@ func RenderDoctorPlain(report backend.DoctorReport) string {
 		fmt.Sprintf("Context+ CLI doctor for %s", report.Root),
 		fmt.Sprintf("Branch: %s", report.RepoStatus.Branch),
 		fmt.Sprintf("Unstaged: %d | Untracked: %d", report.RepoStatus.UnstagedCount, report.RepoStatus.UntrackedCount),
+		fmt.Sprintf("Active generation: %d", report.Serving.ActiveGeneration),
+		fmt.Sprintf("Pending generation: %s", formatOptionalInt(report.Serving.PendingGeneration)),
+		fmt.Sprintf("Freshness: %s", report.Serving.ActiveGenerationFreshness),
 	}
 	if report.IndexValidation.OK {
 		lines = append(lines, "Prepared index: OK")
@@ -682,4 +687,11 @@ func max(left int, right int) int {
 		return left
 	}
 	return right
+}
+
+func formatOptionalInt(value *int) string {
+	if value == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%d", *value)
 }
