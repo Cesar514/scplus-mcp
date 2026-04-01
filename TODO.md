@@ -18,15 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 4: Bridge Parity Between CLI And MCP
-
-- [ ] Expand [src/cli/commands.ts](/home/cesar514/Documents/agent_programming/contextplus/src/cli/commands.ts) until the CLI bridge can access the same high-value engine surfaces that MCP already exposes.
-- [ ] Add bridge commands for `search` with exact and related intent, including explicit retrieval mode controls and structured result payloads.
-- [ ] Add bridge commands for `symbol`, `word`, `outline`, and `deps` so the human operator can inspect the same exact-query substrate the agent uses.
-- [ ] Add bridge commands for `lint`, `blast_radius`, `research`, `checkpoint`, and `restore` so the CLI is not limited to a thin dashboard.
-- [ ] Add bridge commands for `status` and `changes` with typed payloads suitable for tables and detail panes, not just plain text.
-- [ ] Update [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) after bridge expansion so the documented human CLI matches the actual backend bridge surface.
-
 ## Phase 5: Vector Persistence Hot Path
 
 - [ ] Rewrite the embedding save path in [src/core/embeddings.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/embeddings.ts) so `saveEmbeddingCache()` stops mapping the whole cache back into entries and stops calling full-namespace replacement for every save.

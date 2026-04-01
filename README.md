@@ -175,7 +175,8 @@ Config file locations:
 - `hubs [path] [--query=<text>] [--feature-name=<name>] [--hub-path=<file>] [--show-orphans] [--json]` - Browse hub summaries, suggestions, and hub details from the terminal.
 - `restore-points [path] [--json]` - Print restore-point history for the repository.
 - `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, and Ollama runtime report.
-- `bridge <subcommand>` - Machine-readable JSON output for the human CLI. This is primarily for `contextplus-ui`.
+- `bridge <subcommand>` - Machine-readable JSON output for the human CLI and automation. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
+- `bridge-serve` - Persistent JSON-line session used by `contextplus-ui`. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
 
 ### Human CLI
@@ -197,7 +198,8 @@ The dashboard includes:
 - an animated magician header
 - repo, index, hub, restore-point, and Ollama health panels
 - full-text views for tree, hubs, restore points, and clusters
-- a background watcher that loudly triggers full reindex runs when source files change
+- a persistent backend session shared through `bridge-serve`
+- a backend-owned watcher that streams change batches and index-job events to the UI
 - a human hub-creation flow
 
 ### Codex

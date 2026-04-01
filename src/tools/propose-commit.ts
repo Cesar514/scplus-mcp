@@ -13,10 +13,18 @@ export interface ProposeCommitOptions {
   newContent: string;
 }
 
-interface ValidationError {
+export interface ValidationError {
   rule: string;
   message: string;
   line?: number;
+}
+
+export interface CheckpointReport {
+  filePath: string;
+  saved: boolean;
+  warnings: ValidationError[];
+  refreshMode: "core" | "full";
+  restorePointCreated: boolean;
 }
 
 function validateHeader(lines: string[], ext: string): ValidationError[] {
@@ -78,7 +86,20 @@ function validateAbstraction(lines: string[]): ValidationError[] {
   return errors;
 }
 
-export async function proposeCommit(options: ProposeCommitOptions): Promise<string> {
+export function formatCheckpointReport(report: CheckpointReport): string {
+  const result = [`✅ File saved: ${report.filePath}`];
+  if (report.warnings.length > 0) {
+    result.push(`\n⚠ ${report.warnings.length} warning(s):`);
+    for (const warning of report.warnings) {
+      result.push(`  ⚠ [${warning.rule}] ${warning.message}`);
+    }
+  }
+  result.push(`\nIndex refresh completed in ${report.refreshMode} mode.`);
+  result.push(`\nRestore point created. Use undo tools if needed.`);
+  return result.join("\n");
+}
+
+export async function buildCheckpointReport(options: ProposeCommitOptions): Promise<CheckpointReport> {
   const fullPath = resolve(options.rootDir, options.filePath);
   const ext = extname(fullPath);
   const lines = options.newContent.split("\n");
@@ -99,13 +120,15 @@ export async function proposeCommit(options: ProposeCommitOptions): Promise<stri
     cause: "checkpoint",
   });
 
-  const result = [`✅ File saved: ${options.filePath}`];
-  if (warnings.length > 0) {
-    result.push(`\n⚠ ${warnings.length} warning(s):`);
-    for (const w of warnings) result.push(`  ⚠ [${w.rule}] ${w.message}`);
-  }
-  result.push(`\nIndex refresh completed in ${refresh.mode} mode.`);
-  result.push(`\nRestore point created. Use undo tools if needed.`);
+  return {
+    filePath: options.filePath,
+    saved: true,
+    warnings,
+    refreshMode: refresh.mode,
+    restorePointCreated: true,
+  };
+}
 
-  return result.join("\n");
+export async function proposeCommit(options: ProposeCommitOptions): Promise<string> {
+  return formatCheckpointReport(await buildCheckpointReport(options));
 }

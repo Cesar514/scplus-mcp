@@ -11,65 +11,94 @@ export interface BlastRadiusOptions {
   fileContext?: string;
 }
 
-interface SymbolUsage {
+export interface BlastRadiusUsage {
   file: string;
   line: number;
   context: string;
 }
 
-export async function getBlastRadius(options: BlastRadiusOptions): Promise<string> {
-  const entries = await walkDirectory({ rootDir: options.rootDir, depthLimit: 0 });
-  const files = entries.filter((e) => !e.isDirectory && isSupportedFile(e.path));
-  const usages: SymbolUsage[] = [];
-  const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
+export interface BlastRadiusFileUsage {
+  file: string;
+  usages: BlastRadiusUsage[];
+}
 
-  for (const file of files) {
-    try {
-      const content = await readFile(file.path, "utf-8");
-      const lines = content.split("\n");
+export interface BlastRadiusReport {
+  symbolName: string;
+  fileContext?: string;
+  usageCount: number;
+  fileCount: number;
+  lowUsageWarning: boolean;
+  files: BlastRadiusFileUsage[];
+}
 
-      for (let i = 0; i < lines.length; i++) {
-        if (symbolPattern.test(lines[i])) {
-          const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
-          if (!isDefinition) {
-            usages.push({
-              file: file.relativePath,
-              line: i + 1,
-              context: lines[i].trim().substring(0, 120),
-            });
-          }
-          symbolPattern.lastIndex = 0;
-        }
-      }
-    } catch {
+export function formatBlastRadiusReport(report: BlastRadiusReport): string {
+  if (report.usageCount === 0) return `Symbol "${report.symbolName}" is not used anywhere in the codebase.`;
+
+  const lines: string[] = [
+    `Blast radius for "${report.symbolName}": ${report.usageCount} usages in ${report.fileCount} files\n`,
+  ];
+
+  for (const fileUsage of report.files) {
+    lines.push(`  ${fileUsage.file}:`);
+    for (const usage of fileUsage.usages) {
+      lines.push(`    L${usage.line}: ${usage.context}`);
     }
   }
 
-  if (usages.length === 0) return `Symbol "${options.symbolName}" is not used anywhere in the codebase.`;
+  if (report.lowUsageWarning) {
+    lines.push(`\n⚠ LOW USAGE: This symbol is used only ${report.usageCount} time(s). Consider inlining if it's under 20 lines.`);
+  }
 
-  const byFile = new Map<string, SymbolUsage[]>();
+  return lines.join("\n");
+}
+
+export async function buildBlastRadiusReport(options: BlastRadiusOptions): Promise<BlastRadiusReport> {
+  const entries = await walkDirectory({ rootDir: options.rootDir, depthLimit: 0 });
+  const files = entries.filter((e) => !e.isDirectory && isSupportedFile(e.path));
+  const usages: BlastRadiusUsage[] = [];
+  const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
+
+  for (const file of files) {
+    const content = await readFile(file.path, "utf-8");
+    const lines = content.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      if (symbolPattern.test(lines[i])) {
+        const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
+        if (!isDefinition) {
+          usages.push({
+            file: file.relativePath,
+            line: i + 1,
+            context: lines[i].trim().substring(0, 120),
+          });
+        }
+        symbolPattern.lastIndex = 0;
+      }
+    }
+  }
+
+  const byFile = new Map<string, BlastRadiusUsage[]>();
   for (const u of usages) {
     const existing = byFile.get(u.file) ?? [];
     existing.push(u);
     byFile.set(u.file, existing);
   }
 
-  const lines: string[] = [
-    `Blast radius for "${options.symbolName}": ${usages.length} usages in ${byFile.size} files\n`,
-  ];
+  return {
+    symbolName: options.symbolName,
+    fileContext: options.fileContext,
+    usageCount: usages.length,
+    fileCount: byFile.size,
+    lowUsageWarning: usages.length <= 1,
+    files: Array.from(byFile.entries()).map(([file, fileUsages]) => ({
+      file,
+      usages: fileUsages,
+    })),
+  };
+}
 
-  for (const [file, fileUsages] of byFile) {
-    lines.push(`  ${file}:`);
-    for (const u of fileUsages) {
-      lines.push(`    L${u.line}: ${u.context}`);
-    }
-  }
-
-  if (usages.length <= 1) {
-    lines.push(`\n⚠ LOW USAGE: This symbol is used only ${usages.length} time(s). Consider inlining if it's under 20 lines.`);
-  }
-
-  return lines.join("\n");
+export async function getBlastRadius(options: BlastRadiusOptions): Promise<string> {
+  return formatBlastRadiusReport(await buildBlastRadiusReport(options));
 }
 
 function escapeRegex(str: string): string {

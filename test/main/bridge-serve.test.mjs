@@ -191,4 +191,80 @@ describe("bridge-serve", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("serves the expanded bridge parity commands over the persistent session", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-parity-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// Bridge parity fixture for persistent backend command coverage\n// FEATURE: Verify bridge-serve exposes exact-query, search, lint, and restore commands\n\nexport function runApp() {\n  return helperValue();\n}\n\nfunction helperValue() {\n  return 1;\n}\n",
+      );
+      await writeFile(
+        join(cwd, "src", "runner.ts"),
+        "// Bridge parity fixture for persistent backend command coverage\n// FEATURE: Verify bridge-serve exposes exact-query, search, lint, and restore commands\n\nimport { runApp } from \"./app\";\n\nexport function startRunner() {\n  return runApp();\n}\n",
+      );
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const session = new BridgeSession(cwd);
+      try {
+        const symbol = await session.request("symbol", { root: cwd, query: "runApp", topK: 5 });
+        assert.equal(symbol.hits.length, 1);
+        assert.equal(symbol.freshnessHeader.includes("Index freshness"), true);
+
+        const search = await session.request("search", {
+          root: cwd,
+          intent: "exact",
+          searchType: "mixed",
+          query: "runApp",
+          topK: 5,
+        });
+        assert.equal(search.intent, "exact");
+        assert.equal(search.symbolHits.length, 1);
+
+        const lint = await session.request("lint", { root: cwd });
+        assert.equal(lint.report.filesInspected >= 2, true);
+
+        const checkpoint = await session.request("checkpoint", {
+          root: cwd,
+          filePath: "src/runner.ts",
+          newContent: "// Bridge parity fixture for persistent backend command coverage\n// FEATURE: Verify bridge-serve exposes exact-query, search, lint, and restore commands\n\nimport { runApp } from \"./app\";\n\nexport function startRunner() {\n  return runApp() + 1;\n}\n",
+        });
+        assert.equal(checkpoint.report.filePath, "src/runner.ts");
+
+        const status = await session.request("status", { root: cwd });
+        assert.equal(status.modifiedCount, 1);
+
+        const restorePoints = await session.request("restore-points", { root: cwd });
+        assert.equal(restorePoints.length, 1);
+
+        const restore = await session.request("restore", { root: cwd, pointId: restorePoints[0].id });
+        assert.deepEqual(restore.restoredFiles, ["src/runner.ts"]);
+
+        const cleanStatus = await session.request("status", { root: cwd });
+        assert.equal(cleanStatus.modifiedCount, 0);
+      } finally {
+        await session.close();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

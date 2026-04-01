@@ -7,18 +7,35 @@ import { createInterface } from "node:readline";
 import { getContextTree } from "../tools/context-tree.js";
 import { getFileSkeleton } from "../tools/file-skeleton.js";
 import {
+  formatDependencyInfo,
+  formatExactSymbolResults,
+  formatOutline,
+  formatPathCandidates,
   formatRepoChangesSummary,
   formatRepoStatusSummary,
+  formatWordMatches,
+  getDependencyInfo,
+  getOutline,
   getRepoChanges,
   getRepoStatus,
+  lookupExactSymbol,
+  lookupPathCandidates,
+  lookupWord,
 } from "../tools/exact-query.js";
 import { getFeatureHub } from "../tools/feature-hub.js";
-import { listRestorePoints } from "../git/shadow.js";
+import { listRestorePoints, restorePoint } from "../git/shadow.js";
 import { semanticNavigate } from "../tools/semantic-navigate.js";
 import { DEFAULT_INDEX_MODE } from "../tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "../tools/index-reliability.js";
 import { buildDoctorReport } from "./reports.js";
 import { createBackendCore } from "./backend-core.js";
+import { buildSearchByIntentReport, type SearchEntityType, type SearchIntent } from "../tools/query-intent.js";
+import { buildResearchReport, formatResearchReport } from "../tools/research.js";
+import { buildBlastRadiusReport, formatBlastRadiusReport } from "../tools/blast-radius.js";
+import { buildStaticAnalysisReport, formatStaticAnalysisReport } from "../tools/static-analysis.js";
+import { buildCheckpointReport, formatCheckpointReport } from "../tools/propose-commit.js";
+import { formatPreparedIndexFreshnessHeader } from "../tools/write-freshness.js";
+import type { RetrievalMode } from "../tools/unified-ranking.js";
 
 // Persistent CLI bridge protocol:
 // request  => {"type":"request","id":number,"command":string,"args":object}
@@ -226,6 +243,33 @@ function parseInteger(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function parseBridgeSearchIntent(value: string | undefined): SearchIntent {
+  if (!value) return "related";
+  if (value === "exact" || value === "related") return value;
+  throw new Error(`Unsupported search intent "${value}". Use "exact" or "related".`);
+}
+
+function parseBridgeSearchType(value: string | undefined): SearchEntityType {
+  if (!value) return "mixed";
+  if (value === "file" || value === "symbol" || value === "mixed") return value;
+  throw new Error(`Unsupported search type "${value}". Use "file", "symbol", or "mixed".`);
+}
+
+function parseBridgeRetrievalMode(value: string | undefined): RetrievalMode | undefined {
+  if (value === undefined) return undefined;
+  if (value === "semantic" || value === "keyword" || value === "both") return value;
+  throw new Error(`Unsupported retrieval mode "${value}". Use "semantic", "keyword", or "both".`);
+}
+
+function parseStringList(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length > 0 ? items : undefined;
 }
 
 function resolveRoot(parsed: ParsedArgs): string {
@@ -436,6 +480,17 @@ async function runDoctorCommand(args: string[], forceJson: boolean): Promise<voi
   process.stdout.write(`${formatDoctorReport(report)}\n`);
 }
 
+async function buildPreparedBridgePayload<TPayload extends object>(
+  rootDir: string,
+  payload: TPayload,
+): Promise<TPayload & { root: string; freshnessHeader: string }> {
+  return {
+    root: rootDir,
+    freshnessHeader: await formatPreparedIndexFreshnessHeader(rootDir),
+    ...payload,
+  };
+}
+
 async function writeBridgeFrame(frame: unknown): Promise<void> {
   await new Promise<void>((resolveWrite, rejectWrite) => {
     process.stdout.write(`${JSON.stringify(frame)}\n`, (error) => {
@@ -469,6 +524,43 @@ function assertBoolean(value: unknown, name: string): boolean {
   return value;
 }
 
+function assertOptionalString(value: unknown, name: string): string | undefined {
+  if (value === undefined) return undefined;
+  return assertString(value, name);
+}
+
+function assertOptionalPositiveNumber(value: unknown, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`Persistent bridge command requires positive numeric arg "${name}".`);
+  }
+  return Math.floor(value);
+}
+
+function assertOptionalStringArray(value: unknown, name: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.trim() === "")) {
+    throw new Error(`Persistent bridge command requires string[] arg "${name}".`);
+  }
+  return value.map((entry) => entry.trim());
+}
+
+function assertSearchIntent(value: unknown): SearchIntent {
+  if (value === "exact" || value === "related") return value;
+  throw new Error(`Persistent bridge command received invalid intent "${String(value)}".`);
+}
+
+function assertSearchType(value: unknown): SearchEntityType {
+  if (value === "file" || value === "symbol" || value === "mixed") return value;
+  throw new Error(`Persistent bridge command received invalid searchType "${String(value)}".`);
+}
+
+function assertRetrievalMode(value: unknown): RetrievalMode | undefined {
+  if (value === undefined) return undefined;
+  if (value === "semantic" || value === "keyword" || value === "both") return value;
+  throw new Error(`Persistent bridge command received invalid retrievalMode "${String(value)}".`);
+}
+
 function normalizePersistentIndexMode(value: unknown): "core" | "full" {
   if (value === undefined) return DEFAULT_INDEX_MODE;
   if (value === "core" || value === "full") return value;
@@ -483,39 +575,213 @@ function normalizeDebounceMs(value: unknown): number | undefined {
   return Math.floor(value);
 }
 
-async function executePersistentBridgeCommand(command: string, rawArgs: unknown): Promise<unknown> {
-  const args = rawArgs === undefined ? {} : assertObject(rawArgs, "Persistent bridge args must be an object.");
-  if (command === "doctor") {
-    return bridgeServiceCore.doctor(assertString(args.root, "root"));
+function normalizeBridgeCommand(command: string): string {
+  return command.replace(/_/g, "-");
+}
+
+async function executeSharedBridgeCommand(command: string, rawArgs: Record<string, unknown>): Promise<unknown> {
+  const normalizedCommand = normalizeBridgeCommand(command);
+  if (normalizedCommand === "doctor") {
+    return bridgeServiceCore.doctor(assertString(rawArgs.root, "root"));
   }
-  if (command === "tree") {
-    return bridgeServiceCore.tree(assertString(args.root, "root"));
+  if (normalizedCommand === "tree") {
+    return bridgeServiceCore.tree(assertString(rawArgs.root, "root"));
   }
-  if (command === "hubs") {
-    return bridgeServiceCore.hubs(assertString(args.root, "root"));
+  if (normalizedCommand === "hubs" || normalizedCommand === "find-hub") {
+    const root = assertString(rawArgs.root, "root");
+    const rendered = await getFeatureHub({
+      rootDir: root,
+      hubPath: assertOptionalString(rawArgs.hubPath, "hubPath"),
+      featureName: assertOptionalString(rawArgs.featureName, "featureName"),
+      query: assertOptionalString(rawArgs.query, "query"),
+      rankingMode: assertRetrievalMode(rawArgs.rankingMode),
+      showOrphans: rawArgs.showOrphans === undefined ? false : assertBoolean(rawArgs.showOrphans, "showOrphans"),
+    });
+    return { root, text: rendered };
   }
-  if (command === "cluster") {
-    return bridgeServiceCore.cluster(assertString(args.root, "root"));
+  if (normalizedCommand === "cluster") {
+    const root = assertString(rawArgs.root, "root");
+    const rendered = await semanticNavigate({
+      rootDir: root,
+      maxDepth: assertOptionalPositiveNumber(rawArgs.maxDepth, "maxDepth"),
+      maxClusters: assertOptionalPositiveNumber(rawArgs.maxClusters, "maxClusters"),
+    });
+    return { root, text: rendered };
   }
-  if (command === "restore-points") {
-    return bridgeServiceCore.restorePoints(assertString(args.root, "root"));
+  if (normalizedCommand === "restore-points") {
+    return bridgeServiceCore.restorePoints(assertString(rawArgs.root, "root"));
   }
-  if (command === "index") {
+  if (normalizedCommand === "index") {
     return {
-      output: await bridgeServiceCore.index(assertString(args.root, "root"), normalizePersistentIndexMode(args.mode)),
+      output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizePersistentIndexMode(rawArgs.mode)),
     };
   }
-  if (command === "watch-set") {
+  if (normalizedCommand === "status") {
+    return getRepoStatus(assertString(rawArgs.root, "root"));
+  }
+  if (normalizedCommand === "changes") {
+    return getRepoChanges(assertString(rawArgs.root, "root"), {
+      path: assertOptionalString(rawArgs.path, "path"),
+      limit: assertOptionalPositiveNumber(rawArgs.limit, "limit"),
+    });
+  }
+  if (normalizedCommand === "validate-index") {
+    return validatePreparedIndex({
+      rootDir: assertString(rawArgs.root, "root"),
+      mode: normalizePersistentIndexMode(rawArgs.mode),
+    });
+  }
+  if (normalizedCommand === "repair-index") {
+    const target = assertString(rawArgs.target, "target");
+    return {
+      root: assertString(rawArgs.root, "root"),
+      target,
+      output: await repairPreparedIndex(assertString(rawArgs.root, "root"), target as Parameters<typeof repairPreparedIndex>[1]),
+    };
+  }
+  if (normalizedCommand === "symbol") {
+    const root = assertString(rawArgs.root, "root");
+    const query = assertString(rawArgs.query, "query");
+    const topK = assertOptionalPositiveNumber(rawArgs.topK, "topK") ?? 10;
+    const hits = await lookupExactSymbol(root, query, topK);
+    return buildPreparedBridgePayload(root, {
+      query,
+      topK,
+      hits,
+      text: formatExactSymbolResults(query, hits),
+    });
+  }
+  if (normalizedCommand === "word") {
+    const root = assertString(rawArgs.root, "root");
+    const query = assertString(rawArgs.query, "query");
+    const topK = assertOptionalPositiveNumber(rawArgs.topK, "topK") ?? 10;
+    const hits = await lookupWord(root, query, topK);
+    return buildPreparedBridgePayload(root, {
+      query,
+      topK,
+      hits,
+      text: formatWordMatches(query, hits),
+    });
+  }
+  if (normalizedCommand === "outline") {
+    const root = assertString(rawArgs.root, "root");
+    const filePath = assertString(rawArgs.filePath, "filePath");
+    const outline = await getOutline(root, filePath);
+    return buildPreparedBridgePayload(root, {
+      filePath,
+      outline,
+      text: formatOutline(outline),
+    });
+  }
+  if (normalizedCommand === "deps") {
+    const root = assertString(rawArgs.root, "root");
+    const target = assertString(rawArgs.target, "target");
+    const dependencyInfo = await getDependencyInfo(root, target);
+    return buildPreparedBridgePayload(root, {
+      target,
+      dependencyInfo,
+      text: formatDependencyInfo(dependencyInfo),
+    });
+  }
+  if (normalizedCommand === "search") {
+    const root = assertString(rawArgs.root, "root");
+    const report = await buildSearchByIntentReport({
+      rootDir: root,
+      intent: assertSearchIntent(rawArgs.intent),
+      searchType: assertSearchType(rawArgs.searchType),
+      query: assertString(rawArgs.query, "query"),
+      retrievalMode: assertRetrievalMode(rawArgs.retrievalMode),
+      topK: assertOptionalPositiveNumber(rawArgs.topK, "topK"),
+      includeKinds: assertOptionalStringArray(rawArgs.includeKinds, "includeKinds"),
+    });
+    return buildPreparedBridgePayload(root, report);
+  }
+  if (normalizedCommand === "research") {
+    const root = assertString(rawArgs.root, "root");
+    const query = assertString(rawArgs.query, "query");
+    const report = await buildResearchReport({
+      rootDir: root,
+      query,
+      topK: assertOptionalPositiveNumber(rawArgs.topK, "topK"),
+      includeKinds: assertOptionalStringArray(rawArgs.includeKinds, "includeKinds"),
+      maxRelated: assertOptionalPositiveNumber(rawArgs.maxRelated, "maxRelated"),
+      maxSubsystems: assertOptionalPositiveNumber(rawArgs.maxSubsystems, "maxSubsystems"),
+      maxHubs: assertOptionalPositiveNumber(rawArgs.maxHubs, "maxHubs"),
+    });
+    return buildPreparedBridgePayload(root, {
+      query,
+      report,
+      text: formatResearchReport(report),
+    });
+  }
+  if (normalizedCommand === "lint") {
+    const root = assertString(rawArgs.root, "root");
+    const targetPath = assertOptionalString(rawArgs.targetPath, "targetPath");
+    const report = await buildStaticAnalysisReport({ rootDir: root, targetPath });
+    return {
+      root,
+      targetPath,
+      report,
+      text: formatStaticAnalysisReport(report),
+    };
+  }
+  if (normalizedCommand === "blast-radius") {
+    const root = assertString(rawArgs.root, "root");
+    const symbolName = assertString(rawArgs.symbolName, "symbolName");
+    const fileContext = assertOptionalString(rawArgs.fileContext, "fileContext");
+    const report = await buildBlastRadiusReport({ rootDir: root, symbolName, fileContext });
+    return {
+      root,
+      symbolName,
+      fileContext,
+      report,
+      text: formatBlastRadiusReport(report),
+    };
+  }
+  if (normalizedCommand === "checkpoint") {
+    const root = assertString(rawArgs.root, "root");
+    const filePath = assertString(rawArgs.filePath, "filePath");
+    const report = await buildCheckpointReport({
+      rootDir: root,
+      filePath,
+      newContent: assertString(rawArgs.newContent, "newContent"),
+    });
+    return {
+      root,
+      filePath,
+      report,
+      text: formatCheckpointReport(report),
+    };
+  }
+  if (normalizedCommand === "restore") {
+    const root = assertString(rawArgs.root, "root");
+    const pointId = assertString(rawArgs.pointId, "pointId");
+    const restoredFiles = await restorePoint(root, pointId);
+    return {
+      root,
+      pointId,
+      restoredFiles,
+      text: restoredFiles.length > 0
+        ? `Restored ${restoredFiles.length} file(s):\n${restoredFiles.join("\n")}`
+        : "No files were restored. The backup may be empty.",
+    };
+  }
+  if (normalizedCommand === "watch-set") {
     return bridgeServiceCore.setWatchEnabled(
-      assertString(args.root, "root"),
-      assertBoolean(args.enabled, "enabled"),
-      normalizeDebounceMs(args.debounceMs),
+      assertString(rawArgs.root, "root"),
+      assertBoolean(rawArgs.enabled, "enabled"),
+      normalizeDebounceMs(rawArgs.debounceMs),
     );
   }
-  if (command === "shutdown") {
+  if (normalizedCommand === "shutdown") {
     return { shuttingDown: true };
   }
-  throw new Error(`Unsupported persistent bridge command "${command}".`);
+  throw new Error(`Unsupported bridge command "${command}".`);
+}
+
+async function executePersistentBridgeCommand(command: string, rawArgs: unknown): Promise<unknown> {
+  const args = rawArgs === undefined ? {} : assertObject(rawArgs, "Persistent bridge args must be an object.");
+  return executeSharedBridgeCommand(command, args);
 }
 
 function parseBridgeServeRequest(line: string): BridgeServeRequest {
@@ -599,6 +865,10 @@ async function runBridgeServeCommand(): Promise<void> {
 async function runBridgeCommand(args: string[]): Promise<void> {
   const [subcommand, ...rest] = args;
   if (!subcommand) throw new Error("bridge requires a subcommand.");
+  const normalizedSubcommand = normalizeBridgeCommand(subcommand);
+  const parsed = parseArgs(rest);
+  const rootDir = resolve(getFlag(parsed.flags, "root") ?? process.cwd());
+  const positionals = parsed.positionals;
   if (subcommand === "doctor") {
     await runDoctorCommand(rest, true);
     return;
@@ -629,6 +899,126 @@ async function runBridgeCommand(args: string[]): Promise<void> {
   }
   if (subcommand === "tree") {
     await runTreeCommand(rest.concat("--json"));
+    return;
+  }
+  if (normalizedSubcommand === "symbol") {
+    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    if (!query) throw new Error("bridge symbol requires a query argument.");
+    writeJson(await executeSharedBridgeCommand("symbol", {
+      root: rootDir,
+      query,
+      topK: parseInteger(getFlag(parsed.flags, "top-k"), 10),
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "word") {
+    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    if (!query) throw new Error("bridge word requires a query argument.");
+    writeJson(await executeSharedBridgeCommand("word", {
+      root: rootDir,
+      query,
+      topK: parseInteger(getFlag(parsed.flags, "top-k"), 10),
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "outline") {
+    const filePath = getFlag(parsed.flags, "file-path") ?? positionals[0];
+    if (!filePath) throw new Error("bridge outline requires a file path argument.");
+    writeJson(await executeSharedBridgeCommand("outline", {
+      root: rootDir,
+      filePath,
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "deps") {
+    const target = getFlag(parsed.flags, "target") ?? positionals[0];
+    if (!target) throw new Error("bridge deps requires a target path argument.");
+    writeJson(await executeSharedBridgeCommand("deps", {
+      root: rootDir,
+      target,
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "search") {
+    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    if (!query) throw new Error("bridge search requires a query argument.");
+    writeJson(await executeSharedBridgeCommand("search", {
+      root: rootDir,
+      intent: parseBridgeSearchIntent(getFlag(parsed.flags, "intent")),
+      searchType: parseBridgeSearchType(getFlag(parsed.flags, "search-type")),
+      query,
+      retrievalMode: parseBridgeRetrievalMode(getFlag(parsed.flags, "retrieval-mode")),
+      topK: parseInteger(getFlag(parsed.flags, "top-k"), 5),
+      includeKinds: parseStringList(getFlag(parsed.flags, "include-kinds")),
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "research") {
+    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    if (!query) throw new Error("bridge research requires a query argument.");
+    writeJson(await executeSharedBridgeCommand("research", {
+      root: rootDir,
+      query,
+      topK: parseInteger(getFlag(parsed.flags, "top-k"), 5),
+      includeKinds: parseStringList(getFlag(parsed.flags, "include-kinds")),
+      maxRelated: getFlag(parsed.flags, "max-related") ? parseInteger(getFlag(parsed.flags, "max-related"), 6) : undefined,
+      maxSubsystems: getFlag(parsed.flags, "max-subsystems") ? parseInteger(getFlag(parsed.flags, "max-subsystems"), 3) : undefined,
+      maxHubs: getFlag(parsed.flags, "max-hubs") ? parseInteger(getFlag(parsed.flags, "max-hubs"), 4) : undefined,
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "lint") {
+    writeJson(await executeSharedBridgeCommand("lint", {
+      root: rootDir,
+      targetPath: getFlag(parsed.flags, "target-path") ?? positionals[0],
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "blast-radius") {
+    const symbolName = getFlag(parsed.flags, "symbol-name") ?? positionals[0];
+    if (!symbolName) throw new Error("bridge blast-radius requires a symbol name argument.");
+    writeJson(await executeSharedBridgeCommand("blast-radius", {
+      root: rootDir,
+      symbolName,
+      fileContext: getFlag(parsed.flags, "file-context"),
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "checkpoint") {
+    const filePath = getFlag(parsed.flags, "file-path") ?? positionals[0];
+    const newContent = getFlag(parsed.flags, "new-content");
+    if (!filePath) throw new Error("bridge checkpoint requires a file path argument.");
+    if (!newContent) throw new Error("bridge checkpoint requires --new-content.");
+    writeJson(await executeSharedBridgeCommand("checkpoint", {
+      root: rootDir,
+      filePath,
+      newContent,
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "restore") {
+    const pointId = getFlag(parsed.flags, "point-id") ?? positionals[0];
+    if (!pointId) throw new Error("bridge restore requires a restore point id.");
+    writeJson(await executeSharedBridgeCommand("restore", {
+      root: rootDir,
+      pointId,
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "validate-index") {
+    writeJson(await executeSharedBridgeCommand("validate-index", {
+      root: rootDir,
+      mode: normalizeIndexMode(getFlag(parsed.flags, "mode")),
+    }));
+    return;
+  }
+  if (normalizedSubcommand === "repair-index") {
+    const target = getFlag(parsed.flags, "target");
+    if (!target) throw new Error("bridge repair-index requires --target.");
+    writeJson(await executeSharedBridgeCommand("repair-index", {
+      root: rootDir,
+      target,
+    }));
     return;
   }
   throw new Error(`Unsupported bridge subcommand "${subcommand}".`);

@@ -2,6 +2,12 @@
 
 ## v1.5
 
+- [x] expand `src/cli/commands.ts` so the CLI bridge exposes the same high-value engine surfaces as MCP instead of stopping at the dashboard subset
+- [x] add bridge commands for `search` with exact and related intent, explicit retrieval-mode controls, and structured result payloads
+- [x] add bridge commands for `symbol`, `word`, `outline`, and `deps` so the human operator can inspect the same exact-query substrate the agent uses
+- [x] add bridge commands for `lint`, `blast_radius`, `research`, `checkpoint`, and `restore` so the CLI is not limited to a thin dashboard
+- [x] expose typed `status` and `changes` data through the persistent bridge so the future TUI can render tables and detail panes without scraping text
+- [x] update `README.md` so the documented CLI bridge surface matches the expanded shared backend command set and persistent `bridge-serve` protocol
 - [x] replace the repeated shell-out backend model in `cli/internal/backend/client.go` with a persistent local bridge session that survives across UI actions
 - [x] define a long-lived backend core that owns watcher state, index job state, active-generation service calls, and the persistent-process cache surface shared by the CLI bridge
 - [x] expose that backend core through two transports by routing MCP `index` through it and adding a local CLI stdio bridge transport for the human UI

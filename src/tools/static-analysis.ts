@@ -21,13 +21,13 @@ interface NativeLintConfig {
   tool: string;
 }
 
-interface NativeLintResult {
+export interface NativeLintResult {
   tool: string;
   output: string;
   exitCode: number;
 }
 
-interface RuleFinding {
+export interface RuleFinding {
   file: string;
   line?: number;
   rule: string;
@@ -35,10 +35,26 @@ interface RuleFinding {
   message: string;
 }
 
-interface ScoreSummary {
+export interface ScoreSummary {
   score: number;
   errors: number;
   warnings: number;
+}
+
+export interface StaticAnalysisFileScore {
+  file: string;
+  summary: ScoreSummary;
+}
+
+export interface StaticAnalysisReport {
+  targetPath?: string;
+  filesInspected: number;
+  inspectedFiles: string[];
+  nativeResults: NativeLintResult[];
+  nativeFailures: NativeLintResult[];
+  ruleFindings: RuleFinding[];
+  repoScore: ScoreSummary;
+  fileScores: StaticAnalysisFileScore[];
 }
 
 const COMMENT_PREFIXES: Record<string, string> = {
@@ -255,7 +271,7 @@ function summarizeRepoScore(findings: RuleFinding[], nativeFailures: NativeLintR
   };
 }
 
-function summarizeFileScores(findings: RuleFinding[]): Array<{ file: string; summary: ScoreSummary }> {
+function summarizeFileScores(findings: RuleFinding[]): StaticAnalysisFileScore[] {
   const grouped = new Map<string, RuleFinding[]>();
   for (const finding of findings) {
     grouped.set(finding.file, [...(grouped.get(finding.file) ?? []), finding]);
@@ -269,43 +285,33 @@ function summarizeFileScores(findings: RuleFinding[]): Array<{ file: string; sum
       || left.file.localeCompare(right.file));
 }
 
-export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise<string> {
-  const rootDir = resolve(options.rootDir);
-  const targetFiles = await getTargetFiles(rootDir, options.targetPath);
-  const relativeFiles = targetFiles.map((file) => relative(rootDir, file).replace(/\\/g, "/"));
-  const nativeLinters = await detectNativeLinters(rootDir, targetFiles, options.targetPath);
-  const nativeResults = await Promise.all(nativeLinters.map((config) => runCommand(config.cmd, config.args, rootDir, config.tool)));
-  const ruleFindings = await collectRuleFindings(rootDir, targetFiles);
-  const nativeFailures = nativeResults.filter((result) => result.exitCode !== 0);
-  const nativeOutput = nativeResults.filter((result) => result.output);
-  const repoScore = summarizeRepoScore(ruleFindings, nativeFailures);
-  const fileScores = summarizeFileScores(ruleFindings);
-
+export function formatStaticAnalysisReport(report: StaticAnalysisReport): string {
   const lines = [
-    `Lint target: ${options.targetPath ?? "."}`,
-    `Files inspected: ${relativeFiles.length}`,
-    `Native tools run: ${nativeResults.length > 0 ? nativeResults.map((result) => result.tool).join(", ") : "none"}`,
-    `Repo score: ${repoScore.score}/100`,
-    `Severity summary: ${repoScore.errors} errors, ${repoScore.warnings} warnings`,
-    `Rule findings: ${ruleFindings.length}`,
+    `Lint target: ${report.targetPath ?? "."}`,
+    `Files inspected: ${report.filesInspected}`,
+    `Native tools run: ${report.nativeResults.length > 0 ? report.nativeResults.map((result) => result.tool).join(", ") : "none"}`,
+    `Repo score: ${report.repoScore.score}/100`,
+    `Severity summary: ${report.repoScore.errors} errors, ${report.repoScore.warnings} warnings`,
+    `Rule findings: ${report.ruleFindings.length}`,
   ];
 
-  if (nativeFailures.length === 0 && ruleFindings.length === 0) {
+  if (report.nativeFailures.length === 0 && report.ruleFindings.length === 0) {
     lines.push("", "No issues found.");
   }
 
-  if (ruleFindings.length > 0) {
+  if (report.ruleFindings.length > 0) {
     lines.push("", "Context+ rule findings:");
-    lines.push(...formatFindings(ruleFindings));
+    lines.push(...formatFindings(report.ruleFindings));
   }
 
-  if (fileScores.length > 0) {
+  if (report.fileScores.length > 0) {
     lines.push("", "Lowest-scoring files:");
-    for (const entry of fileScores.slice(0, 5)) {
+    for (const entry of report.fileScores.slice(0, 5)) {
       lines.push(`- ${entry.file} score=${entry.summary.score}/100 errors=${entry.summary.errors} warnings=${entry.summary.warnings}`);
     }
   }
 
+  const nativeOutput = report.nativeResults.filter((result) => result.output);
   if (nativeOutput.length > 0) {
     lines.push("", "Native diagnostics:");
     for (const result of nativeOutput) {
@@ -314,11 +320,38 @@ export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise
     }
   }
 
-  if (nativeResults.length === 0 && targetFiles.length === 0) {
+  if (report.nativeResults.length === 0 && report.filesInspected === 0) {
     lines.push("", "No supported files found for linting.");
-  } else if (nativeResults.length === 0) {
+  } else if (report.nativeResults.length === 0) {
     lines.push("", "No native lint tool matched this target.");
   }
 
   return lines.join("\n");
+}
+
+export async function buildStaticAnalysisReport(options: StaticAnalysisOptions): Promise<StaticAnalysisReport> {
+  const rootDir = resolve(options.rootDir);
+  const targetFiles = await getTargetFiles(rootDir, options.targetPath);
+  const relativeFiles = targetFiles.map((file) => relative(rootDir, file).replace(/\\/g, "/"));
+  const nativeLinters = await detectNativeLinters(rootDir, targetFiles, options.targetPath);
+  const nativeResults = await Promise.all(nativeLinters.map((config) => runCommand(config.cmd, config.args, rootDir, config.tool)));
+  const ruleFindings = await collectRuleFindings(rootDir, targetFiles);
+  const nativeFailures = nativeResults.filter((result) => result.exitCode !== 0);
+  const repoScore = summarizeRepoScore(ruleFindings, nativeFailures);
+  const fileScores = summarizeFileScores(ruleFindings);
+
+  return {
+    targetPath: options.targetPath,
+    filesInspected: relativeFiles.length,
+    inspectedFiles: relativeFiles,
+    nativeResults,
+    nativeFailures,
+    ruleFindings,
+    repoScore,
+    fileScores,
+  };
+}
+
+export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise<string> {
+  return formatStaticAnalysisReport(await buildStaticAnalysisReport(options));
 }
