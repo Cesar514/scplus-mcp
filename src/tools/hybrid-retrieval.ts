@@ -45,6 +45,16 @@ export interface HybridRetrievalDocument {
   termFrequencies: Record<string, number>;
 }
 
+interface HybridLexicalPosting {
+  id: string;
+  frequency: number;
+}
+
+interface PersistedHybridLexicalIndex {
+  documentCount: number;
+  terms: Record<string, HybridLexicalPosting[]>;
+}
+
 export interface PersistedHybridRetrievalState {
   generatedAt: string;
   artifactVersion: number;
@@ -52,6 +62,7 @@ export interface PersistedHybridRetrievalState {
   mode: "full";
   source: "chunk" | "identifier";
   documents: Record<string, HybridRetrievalDocument>;
+  lexicalIndex: PersistedHybridLexicalIndex;
 }
 
 export interface HybridRetrievalStats {
@@ -79,6 +90,21 @@ export interface HybridSearchOptions {
   topK?: number;
   semanticWeight?: number;
   lexicalWeight?: number;
+}
+
+const MAX_LEXICAL_TERM_LENGTH = 64;
+const MAX_LEXICAL_TERMS_PER_DOCUMENT = 256;
+
+export interface HybridSearchDiagnostics {
+  totalDocuments: number;
+  lexicalCandidateCount: number;
+  rerankCandidateCount: number;
+  finalResultCount: number;
+}
+
+export interface HybridSearchResult {
+  matches: HybridSearchMatch[];
+  diagnostics: HybridSearchDiagnostics;
 }
 
 function clamp01(value: number): number {
@@ -115,33 +141,17 @@ function splitTerms(text: string): string[] {
 function buildTermFrequencies(text: string): Record<string, number> {
   const frequencies: Record<string, number> = {};
   for (const term of splitTerms(text)) {
+    if (term.length > MAX_LEXICAL_TERM_LENGTH) continue;
+    if (!/[a-z_]/.test(term)) continue;
     frequencies[term] = (frequencies[term] ?? 0) + 1;
   }
-  return frequencies;
-}
-
-function computeLexicalScore(query: string, queryTerms: string[], document: HybridRetrievalDocument): { score: number; matchedTerms: string[] } {
-  if (queryTerms.length === 0) return { score: 0, matchedTerms: [] };
-  const uniqueQueryTerms = Array.from(new Set(queryTerms));
-  let matched = 0;
-  let frequencyBoost = 0;
-  const matchedTerms: string[] = [];
-
-  for (const term of uniqueQueryTerms) {
-    const frequency = document.termFrequencies[term] ?? 0;
-    if (frequency > 0) {
-      matched++;
-      matchedTerms.push(term);
-      frequencyBoost += Math.min(0.12, frequency * 0.04);
-    }
-  }
-
-  const coverage = matched / uniqueQueryTerms.length;
-  const phraseBoost = query.trim().length > 0 && document.lexicalText.toLowerCase().includes(query.trim().toLowerCase()) ? 0.18 : 0;
-  return {
-    score: clamp01(coverage * 0.72 + frequencyBoost + phraseBoost),
-    matchedTerms,
-  };
+  const entries = Object.entries(frequencies);
+  if (entries.length <= MAX_LEXICAL_TERMS_PER_DOCUMENT) return frequencies;
+  return Object.fromEntries(
+    entries
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, MAX_LEXICAL_TERMS_PER_DOCUMENT),
+  );
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -158,6 +168,14 @@ function cosine(a: number[], b: number[]): number {
 }
 
 function buildChunkLexicalText(chunk: ChunkArtifact): string {
+  if (chunk.chunkType === "file-fallback") {
+    return [
+      chunk.path,
+      chunk.header,
+      chunk.symbolKind,
+      chunk.signature ?? "",
+    ].join(" ").trim();
+  }
   return [
     chunk.path,
     chunk.header,
@@ -220,6 +238,27 @@ function countUniqueTerms(documents: Record<string, HybridRetrievalDocument>): n
   return terms.size;
 }
 
+function buildLexicalIndex(documents: Record<string, HybridRetrievalDocument>): PersistedHybridLexicalIndex {
+  const terms = new Map<string, HybridLexicalPosting[]>();
+  for (const document of Object.values(documents)) {
+    for (const [term, frequency] of Object.entries(document.termFrequencies)) {
+      const postings = terms.get(term) ?? [];
+      postings.push({ id: document.id, frequency });
+      terms.set(term, postings);
+    }
+  }
+
+  return {
+    documentCount: Object.keys(documents).length,
+    terms: Object.fromEntries(
+      Array.from(terms.entries(), ([term, postings]) => [
+        term,
+        postings.sort((left, right) => right.frequency - left.frequency || left.id.localeCompare(right.id)),
+      ]),
+    ),
+  };
+}
+
 export async function loadHybridChunkIndexState(rootDir: string): Promise<PersistedHybridRetrievalState> {
   return loadIndexArtifact(rootDir, "hybrid-chunk-index", () => ({
     generatedAt: "",
@@ -228,6 +267,10 @@ export async function loadHybridChunkIndexState(rootDir: string): Promise<Persis
     mode: "full",
     source: "chunk",
     documents: {},
+    lexicalIndex: {
+      documentCount: 0,
+      terms: {},
+    },
   }));
 }
 
@@ -239,6 +282,10 @@ export async function loadHybridIdentifierIndexState(rootDir: string): Promise<P
     mode: "full",
     source: "identifier",
     documents: {},
+    lexicalIndex: {
+      documentCount: 0,
+      terms: {},
+    },
   }));
 }
 
@@ -268,6 +315,7 @@ export async function refreshHybridChunkIndex(rootDir: string, chunkState?: Pers
     mode: "full",
     source: "chunk",
     documents,
+    lexicalIndex: buildLexicalIndex(documents),
   };
   await saveIndexArtifact(rootDir, "hybrid-chunk-index", state);
   return {
@@ -307,6 +355,7 @@ export async function refreshHybridIdentifierIndex(rootDir: string): Promise<{ s
     mode: "full",
     source: "identifier",
     documents,
+    lexicalIndex: buildLexicalIndex(documents),
   };
   await saveIndexArtifact(rootDir, "hybrid-identifier-index", state);
   return {
@@ -326,30 +375,54 @@ async function searchHybridState(
   fileName: "chunk-embeddings-cache.json" | "identifier-embeddings-cache.json",
   query: string,
   options?: HybridSearchOptions,
-): Promise<HybridSearchMatch[]> {
+): Promise<HybridSearchResult> {
   const documents = Object.values(state.documents);
-  if (documents.length === 0) return [];
+  if (documents.length === 0) {
+    return {
+      matches: [],
+      diagnostics: {
+        totalDocuments: 0,
+        lexicalCandidateCount: 0,
+        rerankCandidateCount: 0,
+        finalResultCount: 0,
+      },
+    };
+  }
 
   const [queryVector] = await fetchEmbedding(query);
-  const queryTerms = splitTerms(query);
+  const queryTerms = Array.from(new Set(splitTerms(query)));
   const topK = normalizeTopK(options?.topK, 5);
   const semanticWeight = normalizeWeight(options?.semanticWeight, 0.68);
   const lexicalWeight = normalizeWeight(options?.lexicalWeight, 0.32);
   const totalWeight = semanticWeight + lexicalWeight;
-  const lexicalRanked = documents
-    .map((document) => {
-      const lexical = computeLexicalScore(query, queryTerms, document);
+  const candidateAccumulator = new Map<string, { matchedTerms: Set<string>; frequencyBoost: number }>();
+  for (const term of queryTerms) {
+    const postings = state.lexicalIndex.terms[term] ?? [];
+    for (const posting of postings) {
+      const candidate = candidateAccumulator.get(posting.id) ?? {
+        matchedTerms: new Set<string>(),
+        frequencyBoost: 0,
+      };
+      candidate.matchedTerms.add(term);
+      candidate.frequencyBoost += Math.min(0.12, posting.frequency * 0.04);
+      candidateAccumulator.set(posting.id, candidate);
+    }
+  }
+  const lexicalCandidates = Array.from(candidateAccumulator.entries())
+    .map(([documentId, lexicalCandidate]) => {
+      const document = state.documents[documentId];
+      if (!document) throw new Error(`Hybrid lexical index referenced missing document ${documentId}.`);
+      const coverage = queryTerms.length === 0 ? 0 : lexicalCandidate.matchedTerms.size / queryTerms.length;
+      const phraseBoost = query.trim().length > 0 && document.lexicalText.toLowerCase().includes(query.trim().toLowerCase()) ? 0.18 : 0;
       return {
         document,
-        lexicalScore: lexical.score,
-        matchedTerms: lexical.matchedTerms,
+        lexicalScore: clamp01(coverage * 0.72 + lexicalCandidate.frequencyBoost + phraseBoost),
+        matchedTerms: Array.from(lexicalCandidate.matchedTerms).sort(),
       };
     })
     .sort((left, right) => right.lexicalScore - left.lexicalScore || left.document.path.localeCompare(right.document.path));
-  const lexicalCandidates = lexicalRanked.filter((candidate) => candidate.lexicalScore > 0);
-  const candidatePool = lexicalCandidates.length > 0 ? lexicalCandidates : lexicalRanked;
-  const candidateLimit = Math.min(candidatePool.length, Math.max(topK * 12, 64));
-  const selectedCandidates = candidatePool.slice(0, candidateLimit);
+  const rerankCandidateCount = Math.min(lexicalCandidates.length, Math.max(topK * 12, 64));
+  const selectedCandidates = lexicalCandidates.slice(0, rerankCandidateCount);
   const candidateVectors = await loadEmbeddingCacheEntries(
     rootDir,
     fileName,
@@ -379,17 +452,26 @@ async function searchHybridState(
     });
   }
 
-  return ranked
+  const matches = ranked
     .sort((a, b) => b.score - a.score || b.lexicalScore - a.lexicalScore || b.semanticScore - a.semanticScore)
     .slice(0, topK);
+  return {
+    matches,
+    diagnostics: {
+      totalDocuments: documents.length,
+      lexicalCandidateCount: lexicalCandidates.length,
+      rerankCandidateCount: selectedCandidates.length,
+      finalResultCount: matches.length,
+    },
+  };
 }
 
-export async function searchHybridChunkIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchMatch[]> {
+export async function searchHybridChunkIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchResult> {
   const state = await loadHybridChunkIndexState(rootDir);
   return searchHybridState(rootDir, state, "chunk-embeddings-cache.json", query, options);
 }
 
-export async function searchHybridIdentifierIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchMatch[]> {
+export async function searchHybridIdentifierIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchResult> {
   const state = await loadHybridIdentifierIndexState(rootDir);
   return searchHybridState(rootDir, state, "identifier-embeddings-cache.json", query, options);
 }

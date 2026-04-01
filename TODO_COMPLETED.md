@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] replace the hybrid lexical scoring path that scanned all documents with a persisted lexical candidate-generation substrate in the hybrid retrieval artifacts
+- [x] rework hybrid retrieval so lexical retrieval returns a bounded candidate set first and semantic reranking runs only on those candidates
+- [x] keep the exact deterministic substrate separate from broad related retrieval while upgrading hybrid lexical candidate generation
+- [x] add explicit hybrid query-stage diagnostics so callers can inspect lexical candidate counts, rerank candidate counts, and final result counts
 - [x] rewrite `loadEmbeddingCache()` in `src/core/embeddings.ts` so query hot paths stop loading whole vector namespaces into a giant JS object on every search
 - [x] add a process-level cache keyed by namespace and generation so repeated vector reads can reuse already-loaded entries while the serving generation is unchanged
 - [x] add generation-aware invalidation so process-cache entries from the previous active generation are dropped as soon as serving switches

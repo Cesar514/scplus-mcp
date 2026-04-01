@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 7: Real Lexical Candidate Generation
-
-- [ ] Replace the current lexical scoring model that scans all documents with a real candidate-generation substrate such as FTS5 or an explicit inverted index.
-- [ ] Rework hybrid retrieval so lexical retrieval returns a small candidate set first, then semantic reranking runs only on those candidates.
-- [ ] Keep exact deterministic lookup separate from broad related retrieval so the lexical candidate generator does not weaken the exact substrate.
-- [ ] Add explicit query-stage reporting so operators can see lexical candidate counts, rerank candidate counts, and final result counts for a query.
-
 ## Phase 8: Refresh Cost And Invalidation Gates
 
 - [ ] Rewrite `refreshPersistedFileSearchState()` in [src/tools/semantic-search.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/semantic-search.ts) to use `(mtimeMs, size)` as the first invalidation gate instead of computing content hashes for every file on every refresh.

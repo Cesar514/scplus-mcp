@@ -67,19 +67,23 @@ describe("hybrid-retrieval", () => {
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 
-      assert.equal(hybridChunk.state.artifactVersion, 13);
-      assert.equal(hybridChunk.state.contractVersion, 11);
+      assert.equal(hybridChunk.state.artifactVersion, 14);
+      assert.equal(hybridChunk.state.contractVersion, 12);
       assert.equal(hybridChunk.state.source, "chunk");
       assert.equal(hybridChunk.stats.indexedDocuments >= 2, true);
       assert.equal(hybridChunk.stats.uniqueTerms >= 4, true);
       assert.equal(Object.keys(dbHybridChunk.documents).length, hybridChunk.stats.indexedDocuments);
+      assert.equal(Array.isArray(dbHybridChunk.lexicalIndex.terms.greeting), true);
+      assert.equal(dbHybridChunk.lexicalIndex.documentCount, hybridChunk.stats.indexedDocuments);
 
-      assert.equal(hybridIdentifier.state.artifactVersion, 13);
-      assert.equal(hybridIdentifier.state.contractVersion, 11);
+      assert.equal(hybridIdentifier.state.artifactVersion, 14);
+      assert.equal(hybridIdentifier.state.contractVersion, 12);
       assert.equal(hybridIdentifier.state.source, "identifier");
       assert.equal(hybridIdentifier.stats.indexedDocuments >= 2, true);
       assert.equal(hybridIdentifier.stats.uniqueTerms >= 4, true);
       assert.equal(Object.keys(dbHybridIdentifier.documents).length, hybridIdentifier.stats.indexedDocuments);
+      assert.equal(Array.isArray(dbHybridIdentifier.lexicalIndex.terms.shout), true);
+      assert.equal(dbHybridIdentifier.lexicalIndex.documentCount, hybridIdentifier.stats.indexedDocuments);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
@@ -120,8 +124,10 @@ describe("hybrid-retrieval", () => {
       await refreshHybridChunkIndex(rootDir, chunkRefresh.state);
       await refreshHybridIdentifierIndex(rootDir);
 
-      const chunkMatches = await searchHybridChunkIndex(rootDir, "shout greeting upper case", { topK: 2 });
-      const identifierMatches = await searchHybridIdentifierIndex(rootDir, "shout greeting upper case", { topK: 2 });
+      const chunkSearch = await searchHybridChunkIndex(rootDir, "shout greeting upper case", { topK: 2 });
+      const identifierSearch = await searchHybridIdentifierIndex(rootDir, "shout greeting upper case", { topK: 2 });
+      const chunkMatches = chunkSearch.matches;
+      const identifierMatches = identifierSearch.matches;
 
       assert.equal(chunkMatches.length >= 1, true);
       assert.equal(identifierMatches.length >= 1, true);
@@ -135,6 +141,12 @@ describe("hybrid-retrieval", () => {
       assert.equal(identifierMatches[0].score >= identifierMatches[1].score, true);
       assert.equal(chunkMatches[0].matchedTerms.includes("shout"), true);
       assert.equal(identifierMatches[0].matchedTerms.includes("greeting"), true);
+      assert.equal(chunkSearch.diagnostics.lexicalCandidateCount >= chunkSearch.diagnostics.finalResultCount, true);
+      assert.equal(identifierSearch.diagnostics.lexicalCandidateCount >= identifierSearch.diagnostics.finalResultCount, true);
+      assert.equal(chunkSearch.diagnostics.rerankCandidateCount >= chunkSearch.diagnostics.finalResultCount, true);
+      assert.equal(identifierSearch.diagnostics.rerankCandidateCount >= identifierSearch.diagnostics.finalResultCount, true);
+      assert.equal(chunkSearch.diagnostics.totalDocuments, 2);
+      assert.equal(identifierSearch.diagnostics.totalDocuments, 2);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

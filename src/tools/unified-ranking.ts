@@ -429,12 +429,12 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     candidates.set(id, candidate);
   }
 
-  const chunkMatches = await searchHybridChunkIndex(rootDir, options.query, {
+  const chunkSearch = await searchHybridChunkIndex(rootDir, options.query, {
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
   });
-  for (const match of chunkMatches) {
+  for (const match of chunkSearch.matches) {
     const candidateId = match.title === "file"
       ? getFileCandidateId(match.path)
       : getSymbolCandidateId(match.path, match.title, match.line);
@@ -449,12 +449,12 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     candidates.set(fileCandidateId, fileCandidate);
   }
 
-  const identifierMatches = await searchHybridIdentifierIndex(rootDir, options.query, {
+  const identifierSearch = await searchHybridIdentifierIndex(rootDir, options.query, {
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
   });
-  for (const match of identifierMatches) {
+  for (const match of identifierSearch.matches) {
     const candidateId = getSymbolCandidateId(match.path, match.title, match.line);
     const candidate = candidates.get(candidateId) ?? createCandidate(candidateId, "symbol", match.path, match.title, match.kind, match.line, match.endLine);
     applyHybridEvidence(candidate, match, "identifier");
