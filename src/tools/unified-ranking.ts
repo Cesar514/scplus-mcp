@@ -208,15 +208,18 @@ function getFileCandidateId(path: string): string {
 }
 
 function applyHybridEvidence(candidate: Candidate, match: HybridSearchMatch, source: "chunk" | "identifier"): void {
+  const normalizedScore = normalizeEvidenceScore(match.score);
+  const normalizedSemantic = normalizeEvidenceScore(match.semanticScore);
+  const normalizedLexical = normalizeEvidenceScore(match.lexicalScore);
   if (source === "chunk") {
-    candidate.chunkScore = Math.max(candidate.chunkScore, match.score);
+    candidate.chunkScore = Math.max(candidate.chunkScore, normalizedScore);
     candidate.supportingChunkIds.add(match.id);
   } else {
-    candidate.identifierScore = Math.max(candidate.identifierScore, match.score);
+    candidate.identifierScore = Math.max(candidate.identifierScore, normalizedScore);
     candidate.supportingIdentifierIds.add(match.id);
   }
-  candidate.semanticScore = Math.max(candidate.semanticScore, match.semanticScore);
-  candidate.lexicalScore = Math.max(candidate.lexicalScore, match.lexicalScore);
+  candidate.semanticScore = Math.max(candidate.semanticScore, normalizedSemantic);
+  candidate.lexicalScore = Math.max(candidate.lexicalScore, normalizedLexical);
   for (const term of match.matchedTerms) candidate.matchedTerms.add(term);
 }
 
@@ -437,9 +440,9 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
 
     const fileCandidateId = getFileCandidateId(match.path);
     const fileCandidate = candidates.get(fileCandidateId) ?? createCandidate(fileCandidateId, "file", match.path, match.path, "file", 1, 1);
-    fileCandidate.identifierScore = Math.max(fileCandidate.identifierScore, match.score);
-    fileCandidate.semanticScore = Math.max(fileCandidate.semanticScore, match.semanticScore);
-    fileCandidate.lexicalScore = Math.max(fileCandidate.lexicalScore, match.lexicalScore);
+    fileCandidate.identifierScore = Math.max(fileCandidate.identifierScore, normalizeEvidenceScore(match.score));
+    fileCandidate.semanticScore = Math.max(fileCandidate.semanticScore, normalizeEvidenceScore(match.semanticScore));
+    fileCandidate.lexicalScore = Math.max(fileCandidate.lexicalScore, normalizeEvidenceScore(match.lexicalScore));
     for (const term of match.matchedTerms) fileCandidate.matchedTerms.add(term);
     fileCandidate.supportingIdentifierIds.add(match.id);
     candidates.set(fileCandidateId, fileCandidate);

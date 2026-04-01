@@ -72,6 +72,13 @@ describe("unified-ranking", () => {
       assert.equal(symbolHits[0].evidence.structure > 0, true);
       assert.equal(symbolHits[0].evidence.semantic > 0, true);
       assert.equal(symbolHits[0].evidence.lexical > 0, true);
+      assert.equal(Number.isFinite(fileHits[0].score), true);
+      assert.equal(Number.isFinite(symbolHits[0].score), true);
+      assert.equal(Number.isFinite(fileHits[0].evidence.chunk), true);
+      assert.equal(Number.isFinite(symbolHits[0].evidence.chunk), true);
+      assert.equal(Number.isFinite(symbolHits[0].evidence.identifier), true);
+      assert.equal(Number.isFinite(symbolHits[0].evidence.semantic), true);
+      assert.equal(Number.isFinite(symbolHits[0].evidence.lexical), true);
       assert.equal(symbolHits[0].evidence.supportingChunkIds.length >= 1, true);
       assert.equal(symbolHits[0].evidence.supportingIdentifierIds.length >= 1, true);
       if (symbolHits[1]) {

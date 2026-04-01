@@ -24,7 +24,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 20:24Z) Completed Step 09. Persisted semantic clusters, related-file graphs, and subsystem summaries into sqlite as full-engine artifacts, then switched `cluster` to render those artifacts directly.
 - [x] (2026-04-01 21:35Z) Completed Step 10. Persisted hub suggestions and feature-group candidates from the cluster tree, related-file graph, structure graph, and file FEATURE tags, then materialized suggested markdown hubs under `.contextplus/hubs/suggested/` and verified them through sqlite plus `find_hub`.
 - [x] (2026-04-01 22:05Z) Dropped the former Step 11 and Step 12 product milestones. The product direction no longer treats memory and ACP features as core roadmap goals because TODO plus code comments are sufficient memory for this project direction.
-- [ ] Step 13. Add a unified `research` tool surface across code, structure, clusters, hubs, and related-context discovery.
+- [x] (2026-04-01 13:56Z) Completed Step 13. Added a unified `research` tool surface that aggregates ranked code hits, structure-backed related files, subsystem summaries, and hub context from the prepared full-engine artifacts, then verified it with focused coverage, the full suite, a real full index run, and a direct repository research query.
 - [ ] Step 14. Harden indexing and query reliability with crash-only repairable behavior.
 - [ ] Step 15. Add evaluation and benchmarking for retrieval, freshness, speed, and answer quality.
 - [ ] Step 16. Simplify the public tool surface by deleting superseded interfaces.
@@ -79,14 +79,15 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 13 is next and will build a unified research surface over code, structure, clusters, hubs, and related-context discovery.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, and Step 13 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 14 is now next and will harden reliability with explicit repair and validation paths.
 
 ## Context and Orientation
 
 The current indexing and query code lives in these files:
 
-- `src/index.ts`: the MCP and CLI entrypoint. It registers the `index`, `tree`, `search`, `cluster`, hub, and edit tools.
+- `src/index.ts`: the MCP and CLI entrypoint. It registers the `index`, `tree`, `search`, `research`, `cluster`, hub, and edit tools.
 - `src/tools/index-codebase.ts`: the top-level indexing pipeline. It writes the `.contextplus/config` files and runs file, identifier, and full derived artifact builders.
+- `src/tools/research.ts`: the unified research report builder over ranking, structure, cluster, and hub artifacts.
 - `src/tools/semantic-search.ts`: the file-level search indexer and query surface.
 - `src/tools/semantic-identifiers.ts`: the identifier-level search indexer and query surface.
 - `src/tools/full-index-artifacts.ts`: the current chunk and code-structure artifact builder used only in `full` mode.
@@ -108,7 +109,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, and structure evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand. The roadmap was then simplified by dropping the memory- and ACP-centered milestones so the remaining work focuses on code retrieval, reliability, evaluation, and tool simplification.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, and structure evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand. Step 13 then added the `research` surface on top of those durable artifacts so one tool can now combine top code hits, related files, subsystem summaries, and hubs without rebuilding context on demand. The roadmap was then simplified by dropping the memory- and ACP-centered milestones so the remaining work focuses on code retrieval, reliability, evaluation, and tool simplification.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -117,10 +118,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 13, add a unified `research` surface that aggregates code retrieval, structure artifacts, semantic clusters, hubs, and related-context discovery without depending on memory or ACP imports.
-3. Update the tests so the `research` surface proves it can pull the strongest relevant code and context artifacts together without bloated or overlapping outputs.
-4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and exercise the resulting `research` flow directly on this repository.
-5. Commit Step 13 with a message that names the unified research milestone.
+2. For Step 14, add explicit validation and repair paths for stale or incompatible artifacts, keeping failures loud and crash-only instead of silently rebuilding partial state in query tools.
+3. Update the tests so reliability failures are detected directly and repair commands prove the system returns to a valid state cleanly.
+4. Run the build, focused reliability coverage, full tests, and a real full index run plus repair/validation verification on this repository.
+5. Commit Step 14 with a message that names the reliability-hardening milestone.
 
 Verification transcript used for Step 01:
 

@@ -6,12 +6,12 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 13 and verify it directly
-- [ ] commit the verified step 13 work
+- [ ] finish roadmap step 14 and verify it directly
+- [ ] commit the verified step 14 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 13. add a unified `research` surface that aggregates code retrieval, structure artifacts, clusters, hubs, and related-context discovery in one tool
+- [x] 13. add a unified `research` surface that aggregates code retrieval, structure artifacts, clusters, hubs, and related-context discovery in one tool
 - [ ] 14. harden indexing and query reliability with crash-only behavior, explicit repair commands, artifact-version checks, snapshot/index consistency validation, and no silent fallbacks
 - [ ] 15. add evaluation and benchmarking for retrieval quality, navigation quality, reindex speed, artifact freshness, and agent-answer quality so changes are measured instead of vibe-judged
 - [ ] 16. simplify the public tool surface only after the full engine exists, deleting superseded tools and parameters instead of keeping overlapping abstractions alive

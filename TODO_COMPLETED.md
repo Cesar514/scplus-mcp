@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 13 by adding a unified `research` tool that aggregates ranked code hits, related files, subsystem summaries, and hub context from the prepared full-engine artifacts
+- [x] verify roadmap step 13 directly with build, focused research coverage, the full test suite, a real full index run on the repository, and a direct `research` query against this repository
+- [x] commit the verified step 13 work
 - [x] evaluate removing the current memory graph and memory MCP tools after deciding the feature should not be part of the product
 - [x] drop roadmap steps 11 and 12 as forward product goals after deciding memory and ACP features are not worth their token and codebase cost for this project direction
 - [x] remove the dropped step 11 memory subsystem from the runtime, tests, and mirrored docs

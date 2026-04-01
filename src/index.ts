@@ -22,6 +22,7 @@ import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
+import { runResearch } from "./tools/research.js";
 import { runCanonicalSearch } from "./tools/unified-ranking.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
@@ -239,6 +240,33 @@ server.tool(
       }),
     }],
   })),
+);
+
+server.tool(
+  "research",
+  "Aggregate code retrieval, structure-backed related files, subsystem summaries, and relevant hubs into one bounded report.",
+  {
+    query: z.string().describe("Natural language repository question to investigate."),
+    top_k: z.number().optional().describe("How many top ranked code hits to include. Default: 5."),
+    include_kinds: z.array(z.string()).optional().describe("Optional symbol-kind filter for the ranked code hits."),
+    max_related: z.number().optional().describe("Maximum related files to include. Default: 6."),
+    max_subsystems: z.number().optional().describe("Maximum subsystem summaries to include. Default: 3."),
+    max_hubs: z.number().optional().describe("Maximum relevant manual or suggested hubs to include. Default: 4."),
+  },
+  withRequestActivity(async ({ query, top_k, include_kinds, max_related, max_subsystems, max_hubs }) => ({
+    content: [{
+      type: "text" as const,
+      text: await runResearch({
+        rootDir: ROOT_DIR,
+        query,
+        topK: top_k,
+        includeKinds: include_kinds,
+        maxRelated: max_related,
+        maxSubsystems: max_subsystems,
+        maxHubs: max_hubs,
+      }),
+    }],
+  }), { useEmbeddingTracker: true }),
 );
 
 server.tool(

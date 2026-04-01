@@ -127,11 +127,12 @@ Strict order within every file:
 
 | Tool                         | When to Use                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
-| \`index\`                      | Build or refresh repo-local \`.contextplus/\` state, including persisted file and identifier search indexes plus indexing status. |
+| \`index\`                      | Build or refresh repo-local \`.contextplus/\` state, including persisted file, identifier, chunk, structure, cluster, and hub artifacts plus indexing status. |
 | \`tree\`                       | Start of every task. Map files + symbols with line ranges.                         |
-| \`cluster\`                    | Browse codebase by meaning, not directory structure.                               |
+| \`cluster\`                    | Browse persisted semantic clusters, subsystem summaries, and related files from the full index. |
 | \`skeleton\`                   | MUST run before full reads. Get signatures + line ranges first.                    |
-| \`search\`                     | Find relevant files or identifiers by concept using \`search_type\`.               |
+| \`search\`                     | Canonical full-engine search over persisted artifacts. Use \`search_type\` = \`file\`, \`symbol\`, or \`mixed\`. |
+| \`research\`                   | Unified research report that combines ranked code hits, related files, subsystem summaries, and hubs from prepared artifacts. |
 | \`blast_radius\`               | Before deleting or modifying any symbol.                                           |
 | \`lint\`                       | After writing code. Catch dead code deterministically.                             |
 | \`checkpoint\`                 | The ONLY way to save files. Validates before writing.                              |
