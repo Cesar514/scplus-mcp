@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 8: Refresh Cost And Invalidation Gates
-
-- [ ] Rewrite `refreshPersistedFileSearchState()` in [src/tools/semantic-search.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/semantic-search.ts) to use `(mtimeMs, size)` as the first invalidation gate instead of computing content hashes for every file on every refresh.
-- [ ] Only compute a content hash when metadata changed, so no-op refreshes stop paying a full-file hashing pass across the repo.
-- [ ] Persist enough file metadata to support this stat-based prefilter cleanly and deterministically.
-- [ ] Ensure stat-based prefiltering still escalates to content-hash verification when metadata indicates change.
-- [ ] Verify refresh latency on unchanged repos before and after this rewrite so the no-op path becomes materially cheaper.
-
 ## Phase 9: Tree-Sitter Performance And Strictness
 
 - [ ] Remove the redundant `await readFile(wasmPath)` in `loadGrammar()` inside [src/core/tree-sitter.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/tree-sitter.ts) before `Parser.Language.load(wasmPath)`.

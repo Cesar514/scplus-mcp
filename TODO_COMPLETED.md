@@ -2,6 +2,11 @@
 
 ## v1.5
 
+- [x] rewrite `refreshPersistedFileSearchState()` in `src/tools/semantic-search.ts` to use `(mtimeMs, size)` as the first invalidation gate instead of computing content hashes for every file on every refresh
+- [x] compute a content hash only when metadata changed, so no-op file-search refreshes stop paying a full-file hashing pass across the repo
+- [x] persist file metadata in the file-search index state so the stat-based prefilter is deterministic and reusable across refreshes
+- [x] keep stat-based prefiltering strict by escalating to content-hash verification when metadata indicates change, including metadata-only touches where content stays identical
+- [x] verify the unchanged-repo refresh path is materially cheaper with regression tests and a direct benchmark over a no-op second refresh
 - [x] replace the hybrid lexical scoring path that scanned all documents with a persisted lexical candidate-generation substrate in the hybrid retrieval artifacts
 - [x] rework hybrid retrieval so lexical retrieval returns a bounded candidate set first and semantic reranking runs only on those candidates
 - [x] keep the exact deterministic substrate separate from broad related retrieval while upgrading hybrid lexical candidate generation

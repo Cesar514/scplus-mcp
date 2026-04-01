@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ollama } from "ollama";
 import {
+  ensureFileSearchIndex,
   invalidateSearchCache,
   semanticCodeSearch,
 } from "../../build/tools/semantic-search.js";
@@ -163,6 +164,8 @@ describe("semantic-search", () => {
 
         assert.match(firstResult, /alpha\.ts/);
         assert.equal(Boolean(initialState.files["alpha.ts"]), true);
+        assert.equal(typeof initialState.files["alpha.ts"].mtimeMs, "number");
+        assert.equal(typeof initialState.files["alpha.ts"].size, "number");
 
         await writeFile(
           join(rootDir, "alpha.ts"),
@@ -189,6 +192,59 @@ describe("semantic-search", () => {
         assert.match(refreshedState.files["alpha.ts"].doc.content, /saluteAlpha/);
         assert.match(dbState.files["alpha.ts"].doc.content, /saluteAlpha/);
         await assert.rejects(access(join(rootDir, ".contextplus", "embeddings", "file-search-index.json")));
+      } finally {
+        Ollama.prototype.embed = originalEmbed;
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("skips content hashing on unchanged refreshes and hashes only when file metadata changes", async () => {
+      const rootDir = await mkdtemp(
+        join(tmpdir(), "contextplus-semantic-search-"),
+      );
+      const originalEmbed = Ollama.prototype.embed;
+      const alphaContent = [
+        "// File search fixture header line one two three four",
+        "// FEATURE: metadata-gated refresh coverage",
+        "export function greetAlpha(name: string): string {",
+        "  return `hello ${name}`;",
+        "}",
+        "",
+      ].join("\n");
+
+      Ollama.prototype.embed = async function ({ input }) {
+        const batch = Array.isArray(input) ? input : [input];
+        return {
+          embeddings: batch.map((value) => {
+            const lower = value.toLowerCase();
+            return [
+              lower.includes("greet") ? 1 : 0.1,
+              lower.includes("alpha") ? 1 : 0.1,
+            ];
+          }),
+        };
+      };
+
+      try {
+        await writeFile(join(rootDir, "alpha.ts"), alphaContent);
+
+        invalidateSearchCache();
+        const firstRefresh = await ensureFileSearchIndex(rootDir);
+        assert.equal(firstRefresh.stats.hashedFiles, 1);
+        assert.equal(firstRefresh.stats.changedFiles, 1);
+
+        const secondRefresh = await ensureFileSearchIndex(rootDir);
+        assert.equal(secondRefresh.stats.hashedFiles, 0);
+        assert.equal(secondRefresh.stats.changedFiles, 0);
+        assert.equal(secondRefresh.stats.reusedDocuments, 1);
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await writeFile(join(rootDir, "alpha.ts"), alphaContent);
+
+        const touchedRefresh = await ensureFileSearchIndex(rootDir);
+        assert.equal(touchedRefresh.stats.hashedFiles, 1);
+        assert.equal(touchedRefresh.stats.changedFiles, 0);
+        assert.equal(touchedRefresh.stats.reusedDocuments, 1);
       } finally {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });

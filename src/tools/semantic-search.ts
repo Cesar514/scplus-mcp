@@ -44,12 +44,15 @@ export interface FileSearchIndexStats {
   indexedDocuments: number;
   changedFiles: number;
   removedFiles: number;
+  hashedFiles: number;
   embeddedDocuments: number;
   reusedDocuments: number;
 }
 
 interface PersistedFileSearchEntry {
   contentHash: string;
+  mtimeMs: number;
+  size: number;
   doc: SearchDocument;
 }
 
@@ -92,6 +95,11 @@ function toIntegerOr(value: string | undefined, fallback: number): number {
 
 function getMaxEmbedFileSize(): number {
   return Math.max(1024, toIntegerOr(process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE, DEFAULT_MAX_EMBED_FILE_SIZE));
+}
+
+function normalizeMtimeMs(value: number): number {
+  if (!Number.isFinite(value)) throw new Error(`Expected finite mtimeMs, received ${String(value)}.`);
+  return Math.trunc(value);
 }
 
 function extractPlainTextHeader(content: string): string {
@@ -172,20 +180,38 @@ async function refreshPersistedFileSearchState(
   const seen = new Set<string>();
   let processedFiles = 0;
   let changedFiles = 0;
+  let hashedFiles = 0;
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
     const fullPath = resolve(rootDir, relativePath);
-    const contentHash = await computeFileContentHash(fullPath);
+    const fileStats = await stat(fullPath);
+    const mtimeMs = normalizeMtimeMs(fileStats.mtimeMs);
+    const size = fileStats.size;
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.contentHash === contentHash) {
+    if (previousEntry && previousEntry.mtimeMs === mtimeMs && previousEntry.size === size) {
       nextFiles[relativePath] = previousEntry;
     } else {
-      const doc = await buildSearchDocumentForFile(rootDir, relativePath);
-      changedFiles++;
-      if (doc) {
-        nextFiles[relativePath] = { contentHash, doc };
+      const contentHash = await computeFileContentHash(fullPath);
+      hashedFiles++;
+      if (previousEntry && previousEntry.contentHash === contentHash) {
+        nextFiles[relativePath] = {
+          ...previousEntry,
+          mtimeMs,
+          size,
+        };
+      } else {
+        const doc = await buildSearchDocumentForFile(rootDir, relativePath);
+        changedFiles++;
+        if (doc) {
+          nextFiles[relativePath] = {
+            contentHash,
+            mtimeMs,
+            size,
+            doc,
+          };
+        }
       }
     }
 
@@ -218,6 +244,7 @@ async function refreshPersistedFileSearchState(
       indexedDocuments: Object.keys(nextFiles).length,
       changedFiles,
       removedFiles,
+      hashedFiles,
     },
   };
 }
