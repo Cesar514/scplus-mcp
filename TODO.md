@@ -6,8 +6,8 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 20 and verify it directly
-- [ ] commit the verified step 20 work
+- [ ] finish roadmap step 21 and verify it directly
+- [ ] commit the verified step 21 work
 
 ## full engine roadmap (ordered)
 
@@ -18,7 +18,7 @@ ai agents may update this file to remove completed work, keep the backlog accura
 - [x] 17. add a fast exact-query substrate on top of the prepared index with hot in-memory caches for symbol lookup, word lookup, file outlines, reverse dependencies, and change/status tracking so agents can answer common navigation questions without paying full ranked-search cost
 - [x] 18. expose that substrate through tiny low-token MCP primitives such as `outline`, `word`, `deps`, `status`, and `changes`, with deterministic structured outputs designed for the agent execution loop rather than broad discovery
 - [x] 19. refactor `search` and `research` around explicit query intent so exact questions use the fast substrate, related-item and pattern discovery uses ranked `search`, and broad subsystem understanding uses `research`
-- [ ] 20. extend evaluation and benchmarking to measure hot-query latency, estimated token cost, and end-to-end task efficiency for the new fast-path plus intelligence hybrid, proving that token reduction does not regress codebase understanding quality
+- [x] 20. extend evaluation and benchmarking to measure hot-query latency, estimated token cost, and end-to-end task efficiency for the new fast-path plus intelligence hybrid, proving that token reduction does not regress codebase understanding quality
 - [ ] 21. expose the full engine cleanly through the planned CLI and UX layers only after the underlying fast-path, indexing, retrieval, structure, and research primitives are stable
 
 ## v1

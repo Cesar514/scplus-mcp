@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 20 by extending the evaluation suite to measure hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency
+- [x] verify roadmap step 20 directly with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
+- [x] commit the verified step 20 work
 - [x] finish roadmap step 19 by routing `search` by explicit intent so exact questions use the fast substrate, related-item discovery stays on ranked search, and `research` is documented as the broad-context tool
 - [x] verify roadmap step 19 directly with a built-server MCP routing test, build, the full main test suite, Context+ blast-radius/lint checks, and the landing production build
 - [x] commit the verified step 19 work

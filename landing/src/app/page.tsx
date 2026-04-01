@@ -104,10 +104,10 @@ const toolRefRows = [
   },
   {
     name: "evaluate",
-    desc: "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality.",
+    desc: "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality.",
     input: "{}",
     output:
-      '"Evaluation suite: default\nOverall: PASS\nValidation: initial=ok | refresh=ok\nTimings: initialIndexMs=210.35 | refreshIndexMs=98.44\n\nRetrieval quality: 3/3\nNavigation quality: 3/3\nAnswer quality: 4/4\nArtifact freshness: 3/3"',
+      '"Evaluation suite: default\nOverall: PASS\nValidation: initial=ok | refresh=ok\nTimings: initialIndexMs=2104.19 | refreshIndexMs=511.71 | hotExactSearchMs=2.27 | relatedSearchMs=127.15 | broadResearchMs=143.84\nToken cost: exact=31 (123 chars) | related=323 (1292 chars) | research=952 (3806 chars)\n\nRetrieval quality: 3/3\nNavigation quality: 3/3\nAnswer quality: 4/4\nHybrid efficiency: 4/4\nArtifact freshness: 3/3"',
   },
   {
     name: "blast_radius",

@@ -32,7 +32,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 17:37Z) Completed Step 17. Added a fast exact-query substrate over the prepared full index with hot in-memory caches for exact symbol lookup, word lookup, file outlines, reverse dependencies, and git-backed change/status tracking, then verified it with focused coverage, build, and the full suite.
 - [x] (2026-04-01 18:02Z) Completed Step 18. Exposed the fast substrate through tiny public MCP tools for exact symbol lookup, word lookup, file outlines, dependency tracing, git status, and git changes, then verified the real built server with MCP integration coverage, the full suite, and the landing production build.
 - [x] (2026-04-01 18:18Z) Completed Step 19. Routed `search` by explicit intent so exact questions use the fast substrate while related discovery stays on the ranked engine, tightened `research` docs around broad subsystem understanding, and verified the built server routing behavior plus the full suite and landing build.
-- [ ] Step 20. Extend evaluation to benchmark hot-query latency, estimated token cost, and end-to-end task efficiency for the hybrid fast-path plus intelligence stack.
+- [x] (2026-04-01 18:22Z) Completed Step 20. Extended evaluation to benchmark hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency, then verified the focused suite, the direct built evaluation output, the full suite, and the landing build.
 - [ ] Step 21. Expose the full engine cleanly through the CLI and UX layers.
 
 ## Surprises & Discoveries
@@ -92,7 +92,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, Step 13, Step 14, Step 15, Step 16, Step 17, Step 18, and Step 19 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 20 is now next and will measure whether the new hybrid exact-plus-intelligence stack actually improves latency and token efficiency without regressing understanding quality.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, Step 13, Step 14, Step 15, Step 16, Step 17, Step 18, Step 19, and Step 20 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 21 is now next and will expose the full engine cleanly through the CLI and UX layers.
 
 ## Context and Orientation
 

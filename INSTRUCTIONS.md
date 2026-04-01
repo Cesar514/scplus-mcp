@@ -140,7 +140,7 @@ Strict order within every file:
 | `changes`                    | Use for changed-file summaries and line-range hunks, optionally scoped to one file. |
 | `search`                     | Route repository search by explicit intent. Use `intent` = `exact` for deterministic fast-substrate answers and `intent` = `related` for ranked discovery. `search_type` stays `file`, `symbol`, or `mixed`. |
 | `research`                   | Use only for broad subsystem understanding after exact lookup and related-item search are no longer enough. |
-| `evaluate`                   | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |
+| `evaluate`                   | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
 | `blast_radius`               | Before deleting or modifying any symbol.                                           |
 | `lint`                       | After writing code. Catch dead code deterministically.                             |
 | `checkpoint`                 | The ONLY way to save files. Validates before writing.                              |

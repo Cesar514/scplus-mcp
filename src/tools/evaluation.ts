@@ -8,6 +8,7 @@ import { performance } from "perf_hooks";
 import { getFeatureHub } from "./feature-hub.js";
 import { indexCodebase } from "./index-codebase.js";
 import { validatePreparedIndex } from "./index-reliability.js";
+import { runSearchByIntent } from "./query-intent.js";
 import { runResearch } from "./research.js";
 import { semanticNavigate } from "./semantic-navigate.js";
 import { rankUnifiedSearch, type UnifiedRankedHit } from "./unified-ranking.js";
@@ -27,6 +28,18 @@ interface EvaluationCategory {
 interface EvaluationTiming {
   initialIndexMs: number;
   refreshIndexMs: number;
+  hotExactSearchMs: number;
+  relatedSearchMs: number;
+  broadResearchMs: number;
+}
+
+interface EvaluationTokenCost {
+  exactSearchChars: number;
+  exactSearchEstimatedTokens: number;
+  relatedSearchChars: number;
+  relatedSearchEstimatedTokens: number;
+  broadResearchChars: number;
+  broadResearchEstimatedTokens: number;
 }
 
 export interface EvaluationReport {
@@ -41,7 +54,9 @@ export interface EvaluationReport {
   retrievalQuality: EvaluationCategory;
   navigationQuality: EvaluationCategory;
   answerQuality: EvaluationCategory;
+  hybridEfficiency: EvaluationCategory;
   artifactFreshness: EvaluationCategory;
+  tokenCost: EvaluationTokenCost;
 }
 
 async function writeFixtureRepo(rootDir: string): Promise<void> {
@@ -149,6 +164,10 @@ function formatHit(hit: UnifiedRankedHit | undefined): string {
   return `${hit.path} :: ${hit.title}`;
 }
 
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
 export async function runEvaluationSuite(): Promise<EvaluationReport> {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "contextplus-evaluation-"));
 
@@ -237,6 +256,66 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
       ),
     ]);
 
+    await runSearchByIntent({
+      rootDir: fixtureRoot,
+      intent: "exact",
+      searchType: "symbol",
+      query: "verifyToken",
+      topK: 3,
+    });
+    const exactSearch = await timeOperation(() => runSearchByIntent({
+      rootDir: fixtureRoot,
+      intent: "exact",
+      searchType: "symbol",
+      query: "verifyToken",
+      topK: 3,
+    }));
+    const relatedSearch = await timeOperation(() => runSearchByIntent({
+      rootDir: fixtureRoot,
+      intent: "related",
+      searchType: "symbol",
+      query: "verifyToken",
+      topK: 3,
+    }));
+    const broadResearch = await timeOperation(() => runResearch({
+      rootDir: fixtureRoot,
+      query: "How does auth token verification and session creation work in this repository?",
+      topK: 4,
+      maxRelated: 4,
+      maxSubsystems: 3,
+      maxHubs: 3,
+    }));
+    const tokenCost: EvaluationTokenCost = {
+      exactSearchChars: exactSearch.value.length,
+      exactSearchEstimatedTokens: estimateTokens(exactSearch.value),
+      relatedSearchChars: relatedSearch.value.length,
+      relatedSearchEstimatedTokens: estimateTokens(relatedSearch.value),
+      broadResearchChars: broadResearch.value.length,
+      broadResearchEstimatedTokens: estimateTokens(broadResearch.value),
+    };
+    const hybridChecks = summarizeChecks([
+      buildCheck(
+        "exact search stays on fast exact output",
+        exactSearch.value.includes("Exact symbol matches for \"verifyToken\""),
+        exactSearch.value.split("\n")[0] ?? "missing exact search output",
+      ),
+      buildCheck(
+        "related search stays on ranked discovery output",
+        relatedSearch.value.includes("Search: \"verifyToken\"") && relatedSearch.value.includes("[symbol]"),
+        relatedSearch.value.split("\n")[0] ?? "missing related search output",
+      ),
+      buildCheck(
+        "exact search uses fewer estimated tokens than related search for the same exact question",
+        tokenCost.exactSearchEstimatedTokens < tokenCost.relatedSearchEstimatedTokens,
+        `exact=${tokenCost.exactSearchEstimatedTokens} related=${tokenCost.relatedSearchEstimatedTokens}`,
+      ),
+      buildCheck(
+        "broad research still returns auth context after intent routing",
+        broadResearch.value.includes("src/auth/jwt.ts") && broadResearch.value.includes("Subsystem context:"),
+        broadResearch.value.split("\n").slice(0, 4).join(" | "),
+      ),
+    ]);
+
     await writeFile(
       join(fixtureRoot, "src", "auth", "session.ts"),
       [
@@ -292,10 +371,14 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
         && retrievalChecks.passed === retrievalChecks.total
         && navigationChecks.passed === navigationChecks.total
         && answerChecks.passed === answerChecks.total
+        && hybridChecks.passed === hybridChecks.total
         && freshnessChecks.passed === freshnessChecks.total,
       timings: {
         initialIndexMs: initialIndex.durationMs,
         refreshIndexMs: refreshIndex.durationMs,
+        hotExactSearchMs: exactSearch.durationMs,
+        relatedSearchMs: relatedSearch.durationMs,
+        broadResearchMs: broadResearch.durationMs,
       },
       validation: {
         initialOk: initialValidation.ok,
@@ -304,7 +387,9 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
       retrievalQuality: retrievalChecks,
       navigationQuality: navigationChecks,
       answerQuality: answerChecks,
+      hybridEfficiency: hybridChecks,
       artifactFreshness: freshnessChecks,
+      tokenCost,
     };
 
     return report;
@@ -327,13 +412,15 @@ export function formatEvaluationReport(report: EvaluationReport): string {
     `Generated at: ${report.generatedAt}`,
     `Overall: ${report.ok ? "PASS" : "FAIL"}`,
     `Validation: initial=${report.validation.initialOk ? "ok" : "failed"} | refresh=${report.validation.refreshOk ? "ok" : "failed"}`,
-    `Timings: initialIndexMs=${report.timings.initialIndexMs.toFixed(2)} | refreshIndexMs=${report.timings.refreshIndexMs.toFixed(2)}`,
+    `Timings: initialIndexMs=${report.timings.initialIndexMs.toFixed(2)} | refreshIndexMs=${report.timings.refreshIndexMs.toFixed(2)} | hotExactSearchMs=${report.timings.hotExactSearchMs.toFixed(2)} | relatedSearchMs=${report.timings.relatedSearchMs.toFixed(2)} | broadResearchMs=${report.timings.broadResearchMs.toFixed(2)}`,
+    `Token cost: exact=${report.tokenCost.exactSearchEstimatedTokens} (${report.tokenCost.exactSearchChars} chars) | related=${report.tokenCost.relatedSearchEstimatedTokens} (${report.tokenCost.relatedSearchChars} chars) | research=${report.tokenCost.broadResearchEstimatedTokens} (${report.tokenCost.broadResearchChars} chars)`,
     "",
   ];
 
   formatCategory(lines, "Retrieval quality", report.retrievalQuality);
   formatCategory(lines, "Navigation quality", report.navigationQuality);
   formatCategory(lines, "Answer quality", report.answerQuality);
+  formatCategory(lines, "Hybrid efficiency", report.hybridEfficiency);
   formatCategory(lines, "Artifact freshness", report.artifactFreshness);
 
   return lines.join("\n");
