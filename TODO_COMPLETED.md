@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] remove dead landing files and redundant bun lockfiles after confirming npm is the canonical package manager for this repo
+- [x] verify the removed landing component/assets and deleted bun lockfiles have no remaining repo references, then rebuild and rerun the test suite
+- [x] commit the verified repo cleanup
 - [x] audit the published docs, landing copies, and shared `contextplus-mcp` skill after steps 13-16 so they match the shipped tool surface and removed memory features
 - [x] remove stale memory references and stale roadmap text from the server description, ExecPlan, and shared skill, and verify the active public docs no longer mention deleted search/research knobs
 - [x] commit the verified repo-side documentation sync
