@@ -12,13 +12,17 @@
   - [x] rename propose_commit to checkpoint
   - [x] rename list_restore_points to restore_points
   - [x] rename undo_change to restore
+  - [x] rename get_feature_hub to find_hub
 - [x] create a new tool called index that initializes the project by creating a context tree and .contextplus folder
   - [x] use .contextplus/hubs for feature hubs
   - [x] use .contextplus/embeddings for storing file and symbol embeddings
   - [x] use .contextplus/config for configuration files
+- [x] extend `restore` so it can restore to a specific checkpoint point with the shipped `restore_points` -> `restore(point_id)` UX
+- [x] make `find_hub` return the all-hubs context when called with no parameters
 
 ## maintenance
 
+- [x] audit `TODO.md` against the current codebase and recent roadmap commits, then move stale completed items out of the active TODO
 - [x] finish roadmap step 20 by extending the evaluation suite to measure hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency
 - [x] verify roadmap step 20 directly with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
 - [x] commit the verified step 20 work
