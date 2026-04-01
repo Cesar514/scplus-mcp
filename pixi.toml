@@ -1,0 +1,14 @@
+[workspace]
+name = "contextplus"
+version = "0.1.0"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tasks.build-cli]
+cmd = "cd cli && go build -o ../build/contextplus-ui ./cmd/contextplus-ui"
+
+[tasks.test-cli]
+cmd = "cd cli && go test ./..."
+
+[dependencies]
+go = "1.24.*"

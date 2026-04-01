@@ -24,6 +24,7 @@ dist/
 .mcp_data/
 .turbo/
 .wrangler/
+.pixi/
 npm-debug.log
 yarn-error.log
 

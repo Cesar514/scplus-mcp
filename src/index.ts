@@ -4,9 +4,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { mkdir, writeFile } from "fs/promises";
-import { dirname, resolve } from "path";
+import { resolve } from "path";
 import { z } from "zod";
+import { CLI_SUBCOMMANDS, handleCliCommand } from "./cli/commands.js";
 import { createEmbeddingTrackerController } from "./core/embedding-tracker.js";
 import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeError, runCleanup, startParentMonitor } from "./core/process-lifecycle.js";
 import { getContextTree } from "./tools/context-tree.js";
@@ -41,21 +41,8 @@ import {
   lookupWord,
 } from "./tools/exact-query.js";
 import { runSearchByIntent } from "./tools/query-intent.js";
-
-type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
-
-const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
-  claude: ".mcp.json",
-  cursor: ".cursor/mcp.json",
-  vscode: ".vscode/mcp.json",
-  windsurf: ".windsurf/mcp.json",
-  opencode: "opencode.json",
-  codex: ".codex/config.toml",
-};
-
-const SUB_COMMANDS = ["init", "index", "skeleton", "tree"];
 const passthroughArgs = process.argv.slice(2);
-const ROOT_DIR = passthroughArgs[0] && !SUB_COMMANDS.includes(passthroughArgs[0])
+const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
   : process.cwd();
 const INSTRUCTIONS_SOURCE_URL = "https://contextplus.vercel.app/api/instructions";
@@ -73,126 +60,6 @@ function withRequestActivity<TArgs, TResult>(
     if (options?.useEmbeddingTracker) ensureTrackerRunning();
     return handler(args);
   };
-}
-
-function parseAgentTarget(input?: string): AgentTarget {
-  const normalized = (input ?? "claude").toLowerCase();
-  if (normalized === "claude" || normalized === "claude-code") return "claude";
-  if (normalized === "cursor") return "cursor";
-  if (normalized === "vscode" || normalized === "vs-code" || normalized === "vs") return "vscode";
-  if (normalized === "windsurf") return "windsurf";
-  if (normalized === "opencode" || normalized === "open-code") return "opencode";
-  if (normalized === "codex") return "codex";
-  throw new Error(`Unsupported coding agent \"${input}\". Use one of: claude, cursor, vscode, windsurf, opencode, codex.`);
-}
-
-function parseRunner(args: string[]): "npx" | "bunx" {
-  const explicit = args.find((arg) => arg.startsWith("--runner="));
-  if (explicit) {
-    const value = explicit.split("=")[1];
-    if (value === "npx" || value === "bunx") return value;
-    throw new Error(`Unsupported runner \"${value}\". Use --runner=npx or --runner=bunx.`);
-  }
-  const runnerFlagIndex = args.findIndex((arg) => arg === "--runner");
-  if (runnerFlagIndex >= 0) {
-    const value = args[runnerFlagIndex + 1];
-    if (value === "npx" || value === "bunx") return value;
-    throw new Error(`Unsupported runner \"${value}\". Use --runner=npx or --runner=bunx.`);
-  }
-  const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
-  const execPath = (process.env.npm_execpath ?? "").toLowerCase();
-  if (userAgent.includes("bun/") || execPath.includes("bun")) return "bunx";
-  return "npx";
-}
-
-function buildMcpConfig(runner: "npx" | "bunx") {
-  const commandArgs = runner === "npx" ? ["-y", "contextplus"] : ["contextplus"];
-  return JSON.stringify(
-    {
-      mcpServers: {
-        contextplus: {
-          command: runner,
-          args: commandArgs,
-          env: {
-            OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
-            OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
-            OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
-            CONTEXTPLUS_EMBED_BATCH_SIZE: "8",
-            CONTEXTPLUS_EMBED_TRACKER: "lazy",
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
-}
-
-function buildOpenCodeConfig(runner: "npx" | "bunx") {
-  const command = runner === "npx" ? ["npx", "-y", "contextplus"] : ["bunx", "contextplus"];
-  return JSON.stringify(
-    {
-      $schema: "https://opencode.ai/config.json",
-      mcp: {
-        contextplus: {
-          type: "local",
-          command,
-          enabled: true,
-          environment: {
-            OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
-            OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
-            OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
-            CONTEXTPLUS_EMBED_BATCH_SIZE: "8",
-            CONTEXTPLUS_EMBED_TRACKER: "lazy",
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
-}
-
-function buildCodexConfig(runner: "npx" | "bunx") {
-  const command = runner;
-  const args = runner === "npx" ? ["-y", "contextplus"] : ["contextplus"];
-  return [
-    "[mcp_servers.contextplus]",
-    `command = ${JSON.stringify(command)}`,
-    `args = ${JSON.stringify(args)}`,
-    "",
-    "[mcp_servers.contextplus.env]",
-    'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
-    'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
-    'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
-    'CONTEXTPLUS_EMBED_BATCH_SIZE = "8"',
-    'CONTEXTPLUS_EMBED_TRACKER = "lazy"',
-    "",
-  ].join("\n");
-}
-
-async function runInitCommand(args: string[]) {
-  const nonFlags = args.filter((arg) => !arg.startsWith("--"));
-  const target = parseAgentTarget(nonFlags[0]);
-  const runner = parseRunner(args);
-  const outputPath = resolve(process.cwd(), AGENT_CONFIG_PATH[target]);
-  const content = target === "opencode"
-    ? buildOpenCodeConfig(runner)
-    : target === "codex"
-      ? buildCodexConfig(runner)
-      : buildMcpConfig(runner);
-  await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${content}\n`, "utf8");
-  console.error(`Context+ initialized for ${target} using ${runner}.`);
-  console.error(`Wrote MCP config: ${outputPath}`);
-}
-
-async function runIndexCommand(args: string[]) {
-  const targetRootArg = args.find((arg) => !arg.startsWith("--"));
-  const modeArg = args.find((arg) => arg.startsWith("--mode="));
-  const mode = modeArg?.split("=")[1] === "core" ? "core" : DEFAULT_INDEX_MODE;
-  const targetRoot = targetRootArg ? resolve(targetRootArg) : process.cwd();
-  process.stdout.write(await indexCodebase({ rootDir: targetRoot, mode }) + "\n");
 }
 
 const server = new McpServer({
@@ -597,22 +464,7 @@ server.tool(
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args[0] === "init") {
-    await runInitCommand(args.slice(1));
-    return;
-  }
-  if (args[0] === "index") {
-    await runIndexCommand(args.slice(1));
-    return;
-  }
-  if (args[0] === "skeleton" || args[0] === "tree") {
-    const targetRoot = args[1] ? resolve(args[1]) : process.cwd();
-    const tree = await getContextTree({
-      rootDir: targetRoot,
-      includeSymbols: true,
-      maxTokens: 50000,
-    });
-    process.stdout.write(tree + "\n");
+  if (await handleCliCommand(args)) {
     return;
   }
   const trackerController = createEmbeddingTrackerController({

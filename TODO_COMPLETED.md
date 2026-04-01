@@ -2,6 +2,21 @@
 
 ## maintenance
 
+- [x] expose the full engine cleanly through the planned CLI and UX layers once the fast-path, indexing, retrieval, structure, and research primitives were stable
+- [x] create the human CLI under `cli/`
+- [x] visualize restore points, hubs, cluster data, tree data, and repo health in the CLI
+- [x] build the human CLI with Charm's Bubble Tea stack
+- [x] ship backend commands such as `contextplus index`, `validate-index`, `status`, `changes`, `cluster`, and machine-readable `bridge` subcommands
+- [x] add a create-hub flow for humans in the CLI
+- [x] include CLI build and installation in `install-contextplus.sh` and expose the global `contextplus-ui` command
+- [x] add Node bridge commands with machine-readable output for index health, hubs, restore points, git status, and cluster data
+- [x] add a project-local Go toolchain path via Pixi so the Bubble Tea CLI can build without requiring a global Go install
+- [x] add a dashboard snapshot / non-interactive verification mode for the CLI so it can be tested directly
+- [x] make the CLI able to initialize and index a repo, report Ollama runtime state, watch for code changes, and trigger loud background reindexing
+- [x] add the animated CLI magician companion to the dashboard
+- [x] bootstrap a fresh Context+ full index for this repository
+- [x] validate the prepared full index after indexing
+- [x] verify `.contextplus/state/index.sqlite` and generated durable artifacts directly on disk
 - [x] reorder the remaining v1 items so query-ranked hubs, explicit search retrieval modes, stronger lint scoring, and vector-database-backed embedding/search storage land before the old roadmap step 21
 - [x] finish roadmap step 21 by extending `find_hub` with query-ranked keyword, semantic, and blended hub discovery
 - [x] finish roadmap step 22 by exposing explicit `retrieval_mode` controls on the unified `search` surface

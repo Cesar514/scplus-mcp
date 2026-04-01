@@ -4,15 +4,19 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "contextplus": "./build/index.js"
+    "contextplus": "./build/index.js",
+    "contextplus-ui": "./build/cli-launcher.js"
   },
   "scripts": {
     "build": "tsc",
+    "build:cli": "pixi run build-cli",
+    "build:all": "npm run build && npm run build:cli",
     "dev": "tsc --watch",
     "start": "node build/index.js",
     "test": "node --test test/main/*.test.mjs",
+    "test:cli": "pixi run test-cli",
     "test:demo": "node --test test/demo/*.demo.mjs",
-    "test:all": "node --test test/main/*.test.mjs test/demo/*.demo.mjs"
+    "test:all": "node --test test/main/*.test.mjs test/demo/*.demo.mjs && npm run test:cli"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

@@ -18,16 +18,20 @@ What it does:
 
 - runs `npm install`
 - runs `npm run build`
+- runs `npm run build:cli`
 - runs `npm link`
 - verifies the linked `contextplus` command resolves to this checkout
+- verifies the linked `contextplus-ui` command resolves to this checkout
 
 After editing this repo, rebuild the linked CLI with:
 
 ```bash
-npm run build
+npm run build:all
 ```
 
-Because `npm link` points `contextplus` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js), future builds update the command Codex launches.
+The human CLI is built with Bubble Tea in Go and uses a project-local Go toolchain through Pixi. `pixi` must be installed before running the install script.
+
+Because `npm link` points `contextplus` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `contextplus-ui` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
 
 To add it to Codex, put this in `~/.codex/config.toml` as a separate manual step:
 
@@ -161,10 +165,40 @@ Config file locations:
 
 - `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`).
 - `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. The authoritative durable machine state now lives only in `state/index.sqlite`. `core` persists the project config, context-tree export, file manifest, stage state, indexing status, and eager file/identifier search state in SQLite. `full` also persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, and the full-manifest plus vector collections in SQLite. Dense retrieval now writes into `vector_collections` and `vector_entries` instead of artifact-shaped embedding-cache blobs, while the hybrid layer keeps lexical term maps plus embedding keys so later search surfaces can combine lexical and dense evidence without rebuilding transient indexes. The structure layer now includes per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol maps, ownership edges, module summaries, and module import edges. Refresh uses file content hashes for file and identifier artifacts, file-plus-chunk content hashes for chunk reuse, dependency hashes for structure artifacts so local import changes invalidate affected downstream files, and embed-provider/model-aware cache hashes so vector reuse stops immediately when the embedding backend changes. Legacy JSON artifact files are deleted during bootstrap so the database remains the only source of truth. The persisted contract metadata covers supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics.
-- `validate_index` - Verify that a prepared `core` or `full` index is still version-compatible and internally consistent before query tools rely on it.
-- `repair_index` - Repair a broken prepared index by rerunning `core`, `full`, or a specific stage target like `full-artifacts`, then revalidate the result.
-- `skeleton [path]` or `tree [path]` - **(New)** View the structural tree of a project with file headers and symbol definitions directly in your terminal.
+- `validate-index [path]` - Verify that a prepared `core` or `full` index is still version-compatible and internally consistent before query tools rely on it. `validate_index` remains supported as an alias.
+- `repair-index [path] --target=<core|full|bootstrap|file-search|identifier-search|full-artifacts>` - Repair a broken prepared index and revalidate it. `repair_index` remains supported as an alias.
+- `tree [path] [--json]` - Print the structural tree for a repo directly in the terminal.
+- `skeleton <file> [--root=<repo>] [--json]` - Print the structural skeleton for a single indexed file.
+- `status [path] [--json]` - Print the git-aware repo status summary from the fast exact-query substrate.
+- `changes [path] [--path=<file>] [--limit=<n>] [--json]` - Print changed-file summaries and optional line-range detail.
+- `cluster [path] [--json]` - Render the persisted semantic cluster view for the prepared full index.
+- `hubs [path] [--query=<text>] [--feature-name=<name>] [--hub-path=<file>] [--show-orphans] [--json]` - Browse hub summaries, suggestions, and hub details from the terminal.
+- `restore-points [path] [--json]` - Print restore-point history for the repository.
+- `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, and Ollama runtime report.
+- `bridge <subcommand>` - Machine-readable JSON output for the human CLI. This is primarily for `contextplus-ui`.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
+
+### Human CLI
+
+The Bubble Tea terminal app is exposed as `contextplus-ui`.
+
+- `contextplus-ui` - Launch the interactive dashboard.
+- `contextplus-ui snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
+- `contextplus-ui doctor --root .` - Print a concise health summary from the human CLI.
+- `contextplus-ui index --root .` - Trigger a full index run through the backend.
+- `contextplus-ui tree --root .`
+- `contextplus-ui hubs --root .`
+- `contextplus-ui cluster --root .`
+- `contextplus-ui restore-points --root .`
+- `contextplus-ui hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
+
+The dashboard includes:
+
+- an animated magician header
+- repo, index, hub, restore-point, and Ollama health panels
+- full-text views for tree, hubs, restore points, and clusters
+- a background watcher that loudly triggers full reindex runs when source files change
+- a human hub-creation flow
 
 ### Codex
 
