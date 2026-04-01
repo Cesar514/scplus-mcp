@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] expand the roadmap before the former step 17 to add a `codedb`-inspired fast exact-query phase that reduces tokens without removing Context+ intelligence features
+- [x] align `TODO.md` and the ExecPlan so the next implementation phase is the fast-path plus escalation stack, and move the CLI/UX milestone to step 21
+- [x] commit the verified roadmap expansion
 - [x] remove dead landing files and redundant bun lockfiles after confirming npm is the canonical package manager for this repo
 - [x] verify the removed landing component/assets and deleted bun lockfiles have no remaining repo references, then rebuild and rerun the test suite
 - [x] commit the verified repo cleanup

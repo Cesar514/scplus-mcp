@@ -15,7 +15,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 - [x] 14. harden indexing and query reliability with crash-only behavior, explicit repair commands, artifact-version checks, snapshot/index consistency validation, and no silent fallbacks
 - [x] 15. add evaluation and benchmarking for retrieval quality, navigation quality, reindex speed, artifact freshness, and agent-answer quality so changes are measured instead of vibe-judged
 - [x] 16. simplify the public tool surface only after the full engine exists, deleting superseded tools and parameters instead of keeping overlapping abstractions alive
-- [ ] 17. expose the full engine cleanly through the planned CLI and UX layers only after the underlying indexing, retrieval, structure, and research primitives are stable
+- [ ] 17. add a fast exact-query substrate on top of the prepared index with hot in-memory caches for symbol lookup, word lookup, file outlines, reverse dependencies, and change/status tracking so agents can answer common navigation questions without paying full ranked-search cost
+- [ ] 18. expose that substrate through tiny low-token MCP primitives such as `outline`, `word`, `deps`, `status`, and `changes`, with deterministic structured outputs designed for the agent execution loop rather than broad discovery
+- [ ] 19. refactor the current `search` and `research` path into hierarchical escalation, so exact fast-path answers are attempted first and the richer ranking/research layer is used only when the fast path is ambiguous or insufficient
+- [ ] 20. extend evaluation and benchmarking to measure hot-query latency, estimated token cost, and end-to-end task efficiency for the new fast-path plus intelligence hybrid, proving that token reduction does not regress codebase understanding quality
+- [ ] 21. expose the full engine cleanly through the planned CLI and UX layers only after the underlying fast-path, indexing, retrieval, structure, and research primitives are stable
 
 ## v1
 
