@@ -7,6 +7,7 @@ import { deleteLegacyArtifacts, loadIndexArtifact, saveIndexArtifact, saveIndexT
 import { getContextTree } from "./context-tree.js";
 import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
+import { createEmptyMemoryStore, migrateGraphStore } from "../core/memory-graph.js";
 import { ensureFileSearchIndex, type FileSearchIndexProgress, type FileSearchIndexStats } from "./semantic-search.js";
 import { ensureIdentifierSearchIndex, type IdentifierIndexProgress, type IdentifierIndexStats } from "./semantic-identifiers.js";
 import { ensureFullIndexArtifacts, type FullIndexArtifactStats, type FullIndexProgress } from "./full-index-artifacts.js";
@@ -277,12 +278,15 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
   await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config);
   await saveIndexTextArtifact(runtime.rootDir, "context-tree", tree + "\n");
   await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest);
-  const graph = await loadIndexArtifact(runtime.rootDir, "memory-graph", () => ({ nodes: {}, edges: {} }));
+  const graph = migrateGraphStore(await loadIndexArtifact(runtime.rootDir, "memory-graph", () => createEmptyMemoryStore()));
   await saveIndexArtifact(
     runtime.rootDir,
     "memory-graph",
-    Object.keys(graph.nodes).length === 0 && Object.keys(graph.edges).length === 0 && legacyGraph
-      ? { nodes: legacyGraph.nodes ?? {}, edges: legacyGraph.edges ?? {} }
+    Object.keys(graph.nodes).length === 0
+      && Object.keys(graph.edges).length === 0
+      && Object.keys(graph.documents).length === 0
+      && legacyGraph
+      ? migrateGraphStore({ nodes: legacyGraph.nodes ?? {}, edges: legacyGraph.edges ?? {} })
       : graph,
   );
   const restorePoints = await loadIndexArtifact(runtime.rootDir, "restore-points", () => []);

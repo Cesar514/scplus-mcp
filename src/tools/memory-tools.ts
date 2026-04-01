@@ -63,6 +63,7 @@ export async function toolUpsertMemoryNode(options: UpsertMemoryNodeOptions): Pr
     `✅ Memory node upserted: ${node.label}`,
     `  ID: ${node.id}`,
     `  Type: ${node.type}`,
+    `  Markdown: ${node.documentPath}`,
     `  Access count: ${node.accessCount}`,
     `\nGraph: ${stats.nodes} nodes, ${stats.edges} edges`,
   ].join("\n");
@@ -116,7 +117,7 @@ export async function toolAddInterlinkedContext(options: AddInterlinkedContextOp
   ];
 
   for (const node of result.nodes) {
-    sections.push(`  [${node.type}] ${node.label} → ${node.id}`);
+    sections.push(`  [${node.type}] ${node.label} → ${node.id} (${node.documentPath})`);
   }
 
   if (result.edges.length > 0) {

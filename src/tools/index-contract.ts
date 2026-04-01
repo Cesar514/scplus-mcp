@@ -170,8 +170,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 8;
-export const INDEX_ARTIFACT_VERSION = 10;
+export const INDEX_CONTRACT_VERSION = 9;
+export const INDEX_ARTIFACT_VERSION = 11;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";

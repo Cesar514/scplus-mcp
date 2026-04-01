@@ -1,6 +1,6 @@
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, rm, readFile } from "fs/promises";
+import { mkdir, rm, readFile, writeFile } from "fs/promises";
 import { join, resolve } from "path";
 import { Ollama } from "ollama";
 
@@ -93,6 +93,33 @@ describe("memory-graph core", () => {
         restore();
       }
     });
+
+    it("writes a markdown document for each memory node", async () => {
+      const restore = mockEmbedding();
+      try {
+        const node = await upsertNode(FIXTURE, "concept", "Markdown Backed Memory", "Persist me to markdown");
+        const markdown = await readFile(resolve(FIXTURE, node.documentPath), "utf8");
+        assert.match(markdown, /^---/);
+        assert.match(markdown, /label: Markdown Backed Memory/);
+        assert.match(markdown, /Persist me to markdown/);
+      } finally {
+        restore();
+      }
+    });
+
+    it("syncs manual markdown edits back into the graph on search", async () => {
+      const restore = mockEmbedding();
+      try {
+        const node = await upsertNode(FIXTURE, "note", "Manual Edit Memory", "Original body");
+        const originalMarkdown = await readFile(resolve(FIXTURE, node.documentPath), "utf8");
+        const updatedMarkdown = originalMarkdown.replace("Original body", "Updated from markdown");
+        await writeFile(resolve(FIXTURE, node.documentPath), updatedMarkdown);
+        const result = await searchGraph(FIXTURE, "Updated from markdown", 0, 3);
+        assert.equal(result.direct.some((entry) => entry.node.label === "Manual Edit Memory" && entry.node.content.includes("Updated from markdown")), true);
+      } finally {
+        restore();
+      }
+    });
   });
 
   describe("createRelation", () => {
@@ -130,6 +157,22 @@ describe("memory-graph core", () => {
         const second = await createRelation(FIXTURE, a.id, b.id, "references", 0.95);
         assert.equal(first.id, second.id);
         assert.equal(second.weight, 0.95);
+      } finally {
+        restore();
+      }
+    });
+
+    it("creates automatic wikilink and similarity relations on memory writes", async () => {
+      const restore = mockEmbedding();
+      try {
+        const target = await upsertNode(FIXTURE, "concept", "Auto Linked Target", "Target node");
+        const source = await upsertNode(FIXTURE, "note", "Auto Linked Source", "See [[Auto Linked Target]] and related testing concepts", { tags: "testing" });
+        const sibling = await upsertNode(FIXTURE, "note", "Auto Linked Sibling", "related testing concepts and notes", { tags: "testing" });
+        const stats = await getGraphStats(FIXTURE);
+        assert.equal(stats.relations.references >= 1, true);
+        assert.equal(stats.relations.similar_to >= 1, true);
+        const traversal = await retrieveWithTraversal(FIXTURE, source.id, 1);
+        assert.equal(traversal.some((entry) => entry.node.id === target.id || entry.node.id === sibling.id), true);
       } finally {
         restore();
       }
