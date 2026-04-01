@@ -4,7 +4,7 @@ This ExecPlan must be maintained in accordance with `/home/cesar514/.codex/.agen
 
 ## Purpose / Big Picture
 
-After this program is complete, Context+ will have a real full-engine mode rather than a partial indexing foundation. An agent will be able to prepare a repository once, then query a unified set of durable artifacts that cover files, identifiers, chunks, code structure, semantic clusters, memory, and research context. The user-visible outcome is that `index` in `full` mode will produce the full durable context substrate, `search` will become the canonical query surface over that substrate, and the system will provide explicit repair, evaluation, and operational guarantees instead of a loose collection of partially overlapping tools.
+After this program is complete, Context+ will have a real full-engine mode rather than a partial indexing foundation. An agent will be able to prepare a repository once, then query a unified set of durable artifacts that cover files, identifiers, chunks, code structure, semantic clusters, hubs, and research context. The user-visible outcome is that `index` in `full` mode will produce the full durable context substrate, `search` will become the canonical query surface over that substrate, and the system will provide explicit repair, evaluation, and operational guarantees instead of a loose collection of partially overlapping tools.
 
 The work is large enough that it must be delivered in validated increments. Each roadmap step below is a milestone. Every milestone must end with direct verification, an atomic git commit, and an update to this plan and the repo TODO files before the next milestone starts.
 
@@ -23,9 +23,8 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 20:03Z) Completed Step 08. Routed the public `search` surface through the unified ranking engine, simplified the search contract to `file` / `symbol` / `mixed`, and verified canonical output directly.
 - [x] (2026-04-01 20:24Z) Completed Step 09. Persisted semantic clusters, related-file graphs, and subsystem summaries into sqlite as full-engine artifacts, then switched `cluster` to render those artifacts directly.
 - [x] (2026-04-01 21:35Z) Completed Step 10. Persisted hub suggestions and feature-group candidates from the cluster tree, related-file graph, structure graph, and file FEATURE tags, then materialized suggested markdown hubs under `.contextplus/hubs/suggested/` and verified them through sqlite plus `find_hub`.
-- [ ] Step 11. Replace the current memory store with the planned graph-plus-markdown-plus-vector memory system.
-- [ ] Step 12. Integrate ACP and external session memories into the same graph.
-- [ ] Step 13. Add a unified `research` tool surface across code, structure, memory, and ACP.
+- [x] (2026-04-01 22:05Z) Dropped the former Step 11 and Step 12 product milestones. The product direction no longer treats memory and ACP features as core roadmap goals because TODO plus code comments are sufficient memory for this project direction.
+- [ ] Step 13. Add a unified `research` tool surface across code, structure, clusters, hubs, and related-context discovery.
 - [ ] Step 14. Harden indexing and query reliability with crash-only repairable behavior.
 - [ ] Step 15. Add evaluation and benchmarking for retrieval, freshness, speed, and answer quality.
 - [ ] Step 16. Simplify the public tool surface by deleting superseded interfaces.
@@ -74,9 +73,13 @@ The work is large enough that it must be delivered in validated increments. Each
   Rationale: The best full-engine architecture needs one source of truth. SQLite-only persistence removes drift risk, simplifies later ranking and repair logic, and matches the user goal of a fully migrated local engine.
   Date/Author: 2026-04-01 / Codex
 
+- Decision: Drop memory and ACP features from the forward roadmap and treat TODO plus code comments as the primary durable project memory.
+  Rationale: The user decided those features are not worth the token cost, maintenance cost, or codebase surface area for this project direction. Future roadmap work should optimize for code retrieval, structure, reliability, evaluation, and simpler tool surfaces instead.
+  Date/Author: 2026-04-01 / Codex
+
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. Step 11 is next and will replace the current memory store with the planned graph-plus-markdown-plus-vector memory system.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. The former Step 11 and Step 12 were dropped as product goals. Step 13 is next and will build a unified research surface over code, structure, clusters, hubs, and related-context discovery.
 
 ## Context and Orientation
 
@@ -105,7 +108,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, structure, and memory evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, structure, and memory evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand. The roadmap was then simplified by dropping the memory- and ACP-centered milestones so the remaining work focuses on code retrieval, reliability, evaluation, and tool simplification.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -114,10 +117,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 11, replace the current memory store with the planned graph-plus-markdown-plus-vector memory system and make memory writes update embeddings and relations automatically.
-3. Update the tests so memory markdown, graph state, embeddings, and automatic relations are verified together instead of only graph writes.
-4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and inspect the upgraded memory store plus markdown outputs directly.
-5. Commit Step 11 with a message that names the memory-system milestone.
+2. For Step 13, add a unified `research` surface that aggregates code retrieval, structure artifacts, semantic clusters, hubs, and related-context discovery without depending on memory or ACP imports.
+3. Update the tests so the `research` surface proves it can pull the strongest relevant code and context artifacts together without bloated or overlapping outputs.
+4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and exercise the resulting `research` flow directly on this repository.
+5. Commit Step 13 with a message that names the unified research milestone.
 
 Verification transcript used for Step 01:
 

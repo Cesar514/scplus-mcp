@@ -24,6 +24,7 @@
 
 ## maintenance
 
+- [x] drop roadmap steps 11 and 12 as forward product goals after deciding memory and ACP features are not worth their token and codebase cost for this project direction
 - [x] finish roadmap step 11 by replacing the prior memory store with the planned graph-plus-markdown-plus-vector memory system and making memory writes update embeddings and relations automatically
 - [x] verify roadmap step 11 directly with focused memory-graph and index coverage, the full main test suite, build validation, and a built-runtime proof that wrote markdown memories and observed automatic relations
 - [x] commit the verified step 11 work
