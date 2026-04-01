@@ -7,7 +7,6 @@ import { deleteLegacyArtifacts, loadIndexArtifact, saveIndexArtifact, saveIndexT
 import { getContextTree } from "./context-tree.js";
 import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
-import { createEmptyMemoryStore, migrateGraphStore } from "../core/memory-graph.js";
 import { ensureFileSearchIndex, type FileSearchIndexProgress, type FileSearchIndexStats } from "./semantic-search.js";
 import { ensureIdentifierSearchIndex, type IdentifierIndexProgress, type IdentifierIndexStats } from "./semantic-identifiers.js";
 import { ensureFullIndexArtifacts, type FullIndexArtifactStats, type FullIndexProgress } from "./full-index-artifacts.js";
@@ -192,7 +191,7 @@ async function cleanupLegacyArtifacts(layout: ContextplusLayout): Promise<void> 
     join(layout.config, "file-manifest.json"),
     join(layout.config, INDEX_STATUS_FILE),
     join(layout.config, INDEX_STAGE_STATE_FILE),
-    join(layout.memories, "memory-graph.json"),
+    join(layout.root, "memories", "memory-graph.json"),
     join(layout.checkpoints, "restore-points.json"),
     join(layout.checkpoints, "backups"),
     join(layout.derived, "chunk-search-index.json"),
@@ -251,9 +250,6 @@ function assertStageCanRun(stageState: PersistedIndexStageState, stage: IndexSta
 }
 
 async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: IndexStatus): Promise<void> {
-  const legacyGraph = await loadLegacyJsonIfPresent<{ nodes?: Record<string, unknown>; edges?: Record<string, unknown> }>(
-    join(runtime.layout.memories, "memory-graph.json"),
-  );
   const legacyRestorePoints = await loadLegacyJsonIfPresent<unknown[]>(
     join(runtime.layout.checkpoints, "restore-points.json"),
   );
@@ -278,17 +274,6 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
   await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config);
   await saveIndexTextArtifact(runtime.rootDir, "context-tree", tree + "\n");
   await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest);
-  const graph = migrateGraphStore(await loadIndexArtifact(runtime.rootDir, "memory-graph", () => createEmptyMemoryStore()));
-  await saveIndexArtifact(
-    runtime.rootDir,
-    "memory-graph",
-    Object.keys(graph.nodes).length === 0
-      && Object.keys(graph.edges).length === 0
-      && Object.keys(graph.documents).length === 0
-      && legacyGraph
-      ? migrateGraphStore({ nodes: legacyGraph.nodes ?? {}, edges: legacyGraph.edges ?? {} })
-      : graph,
-  );
   const restorePoints = await loadIndexArtifact(runtime.rootDir, "restore-points", () => []);
   await saveIndexArtifact(runtime.rootDir, "restore-points", restorePoints.length === 0 && legacyRestorePoints ? legacyRestorePoints : restorePoints);
   await cleanupLegacyArtifacts(runtime.layout);

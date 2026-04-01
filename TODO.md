@@ -39,12 +39,11 @@ code update:
 - [ ] remove overengineered tools and parameters
 - [ ] remove vibeslop code (if any)
 - [ ] remove ollama bugs and spam for embeddings with a smarter embedding generation system that continuously watches for file changes and updates embeddings in the background, only init one time in the project and then its automatically watched
-- [ ] evaluate removing the current memory graph and memory MCP tools if they do not earn their maintenance cost
 
 new features:
 
 - [ ] ctx+ cli in cli/ folder
-  - [ ] visualize memory graphs, unto commits, hubs in the cli
+  - [ ] visualize undo commits, hubs in the cli
   - [ ] use charm's tui library - bubble or tea
   - [ ] features like `contextplus index`
   - [ ] visualize context tree, undo commits, hubs list, and more in the cli

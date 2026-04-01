@@ -248,7 +248,6 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
         "sqlite:index_artifacts/file-manifest",
         "sqlite:index_artifacts/index-status",
         "sqlite:index_artifacts/index-stage-state",
-        "sqlite:index_artifacts/memory-graph",
         "sqlite:index_artifacts/restore-points",
       ],
     },

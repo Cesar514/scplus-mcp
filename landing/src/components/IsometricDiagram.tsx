@@ -83,24 +83,6 @@ const functions = [
     desc: "Lightweight git worktree operations",
     color: "#999999",
   },
-  {
-    id: "memory-search",
-    label: "Memory Search",
-    desc: "RAG-powered search with graph traversal",
-    color: "#2a4a6a",
-  },
-  {
-    id: "memory-upsert",
-    label: "Memory Upsert",
-    desc: "Persist learned context as graph nodes",
-    color: "#3a5a7a",
-  },
-  {
-    id: "memory-traverse",
-    label: "Graph Traverse",
-    desc: "Walk linked nodes by relation and decay",
-    color: "#4a6a8a",
-  },
 ];
 
 function getCardConfig(width: number) {

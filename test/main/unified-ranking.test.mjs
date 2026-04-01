@@ -1,5 +1,5 @@
-// Unified ranking engine tests over persisted full-index and memory evidence
-// FEATURE: Combined file, chunk, identifier, structure, and memory ranking
+// Unified ranking engine tests over persisted full-index ranking evidence
+// FEATURE: Combined file, chunk, identifier, and structure ranking coverage
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -10,9 +10,8 @@ import { join } from "node:path";
 process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 
 describe("unified-ranking", () => {
-  it("combines file, chunk, identifier, structure, and memory evidence for symbol ranking", async () => {
+  it("combines file, chunk, identifier, and structure evidence for symbol ranking", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
-    const { upsertNode } = await import("../../build/core/memory-graph.js");
     const { rankUnifiedSearch } = await import("../../build/tools/unified-ranking.js");
     const rootDir = await mkdtemp(join(tmpdir(), "contextplus-unified-ranking-"));
     try {
@@ -33,7 +32,7 @@ describe("unified-ranking", () => {
         join(rootDir, "src", "services", "ranking.ts"),
         [
           "// Ranking service for unified search fixture",
-          "// FEATURE: file, symbol, structure, and memory evidence should converge",
+          "// FEATURE: file, symbol, chunk, and structure evidence should converge",
           "import { normalizeUserQuery } from '../lib/normalize';",
           "",
           "export function rankUnifiedResults(query: string): string {",
@@ -45,17 +44,6 @@ describe("unified-ranking", () => {
       );
 
       await indexCodebase({ rootDir, mode: "full" });
-      await upsertNode(
-        rootDir,
-        "note",
-        "ranking evidence memory",
-        "rank unified results should favor the ranking service symbol",
-        {
-          path: "src/services/ranking.ts",
-          symbolName: "rankUnifiedResults",
-          line: "5",
-        },
-      );
 
       const fileHits = await rankUnifiedSearch({
         rootDir,
@@ -82,12 +70,10 @@ describe("unified-ranking", () => {
       assert.equal(symbolHits[0].evidence.chunk > 0, true);
       assert.equal(symbolHits[0].evidence.identifier > 0, true);
       assert.equal(symbolHits[0].evidence.structure > 0, true);
-      assert.equal(symbolHits[0].evidence.memory > 0, true);
       assert.equal(symbolHits[0].evidence.semantic > 0, true);
       assert.equal(symbolHits[0].evidence.lexical > 0, true);
       assert.equal(symbolHits[0].evidence.supportingChunkIds.length >= 1, true);
       assert.equal(symbolHits[0].evidence.supportingIdentifierIds.length >= 1, true);
-      assert.equal(symbolHits[0].evidence.supportingMemoryNodeIds.length >= 1, true);
       if (symbolHits[1]) {
         assert.equal(symbolHits[0].score >= symbolHits[1].score, true);
       }

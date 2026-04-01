@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
 const toolRefRows = [
   {
     name: "index",
-    desc: "Create or refresh repo-local .contextplus state. Writes project config, a context-tree snapshot, a file manifest, and durable memory/checkpoint storage.",
+    desc: "Create or refresh repo-local .contextplus state. Writes project config, a context-tree snapshot, a file manifest, and durable checkpoint/index storage.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/config/project.json\n  .contextplus/config/context-tree.txt\n  .contextplus/config/file-manifest.json\n  .contextplus/memories/memory-graph.json\n  .contextplus/checkpoints/restore-points.json"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/config/project.json\n  .contextplus/config/context-tree.txt\n  .contextplus/config/file-manifest.json\n  .contextplus/checkpoints/restore-points.json"',
   },
   {
     name: "tree",
@@ -157,7 +157,7 @@ export default async function Home() {
             }}
           >
             Context+ is an MCP server designed for developers who demand 99%
-            accuracy. By combining RAG, Treesitter AST & Spectral
+            accuracy. By combining Treesitter AST & Spectral
             Clustering, Context+ turns a massive codebase into a searchable,
             hierarchical graph.
           </p>
@@ -219,8 +219,7 @@ export default async function Home() {
         >
           Context+ guarantees minimal context bloat. It gives your agent deep
           semantic understanding of your codebase, from AST parsing and symbol
-          navigation to blast radius analysis and commit validation. Nothing
-          misses the context, with RAG.
+          navigation to blast radius analysis and commit validation.
         </p>
         <table
           style={{

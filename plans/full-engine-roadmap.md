@@ -14,12 +14,12 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-03-31 19:34Z) Completed Step 01. Added a shared indexing contract module, versioned persisted schema metadata, explicit invalidation semantics, explicit failure semantics, and direct test coverage for those fields.
 - [x] (2026-03-31 19:35Z) Completed Step 02. Split the indexing pipeline into durable rerunnable stages, persisted stage state in `.contextplus/config/index-stages.json`, and added direct rerun coverage that enforces `core` prerequisites before `full-artifacts`.
 - [x] (2026-04-01 10:39Z) Completed Step 02.5. Moved the durable index substrate into `.contextplus/state/index.sqlite`, made SQLite the authoritative storage contract, and kept inspectable JSON mirrors for direct artifact inspection.
-- [x] (2026-04-01 12:55Z) Completed the sqlite-only follow-up migration. Removed JSON mirror persistence, migrated memory graph, restore-point state, restore-point backups, embedding caches, and context-tree storage into SQLite, and made bootstrap delete legacy artifact files before rebuilding.
+- [x] (2026-04-01 12:55Z) Completed the sqlite-only follow-up migration. Removed JSON mirror persistence, migrated restore-point state, restore-point backups, embedding caches, and context-tree storage into SQLite, and made bootstrap delete legacy artifact files before rebuilding.
 - [x] (2026-04-01 14:20Z) Completed Step 03. Extracted chunk indexing into its own first-class module with explicit artifact/state/progress contracts, added direct chunk-index tests for symbol chunks, fallback chunks, and embedding-cache reuse, and verified the persisted chunk contract in SQLite after a real full index run.
 - [x] (2026-04-01 15:15Z) Completed Step 04. Added sqlite-backed hybrid chunk and identifier retrieval indexes with lexical term maps plus dense embedding-cache references, surfaced their progress/status in full indexing, and verified the persisted hybrid artifacts and ranking behavior directly.
 - [x] (2026-04-01 18:11Z) Completed Step 05. Replaced size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation driven by local import hashes, then verified both same-size content changes and dependent-file refresh behavior directly.
 - [x] (2026-04-01 19:06Z) Completed Step 06. Expanded the structure artifact into a richer graph-backed substrate with per-file module metadata, normalized symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges, then verified the persisted shape directly.
-- [x] (2026-04-01 19:45Z) Completed Step 07. Added a unified ranking engine that combines persisted file, chunk, identifier, structure, and memory evidence into one scoreable file/symbol result set, then verified it with focused ranking tests and a real full-index rerun.
+- [x] (2026-04-01 19:45Z) Completed Step 07. Added a unified ranking engine that combines persisted file, chunk, identifier, and structure evidence into one scoreable file/symbol result set, then verified it with focused ranking tests and a real full-index rerun.
 - [x] (2026-04-01 20:03Z) Completed Step 08. Routed the public `search` surface through the unified ranking engine, simplified the search contract to `file` / `symbol` / `mixed`, and verified canonical output directly.
 - [x] (2026-04-01 20:24Z) Completed Step 09. Persisted semantic clusters, related-file graphs, and subsystem summaries into sqlite as full-engine artifacts, then switched `cluster` to render those artifacts directly.
 - [x] (2026-04-01 21:35Z) Completed Step 10. Persisted hub suggestions and feature-group candidates from the cluster tree, related-file graph, structure graph, and file FEATURE tags, then materialized suggested markdown hubs under `.contextplus/hubs/suggested/` and verified them through sqlite plus `find_hub`.
@@ -45,7 +45,7 @@ The work is large enough that it must be delivered in validated increments. Each
   Evidence: Step 02 added `.contextplus/config/index-stages.json`, and direct verification showed durable stage dependencies, stage-local run counts, and completed-state gating for `full-artifacts`.
 
 - Observation: The JSON-mirror transition step made the final sqlite-only migration straightforward once the remaining file-backed subsystems were enumerated.
-  Evidence: After Step 02.5, the remaining file-backed state was isolated to the memory graph, restore-point manifests and backup payloads, context-tree text export, and embedding caches.
+  Evidence: After Step 02.5, the remaining file-backed state was isolated to restore-point manifests and backup payloads, context-tree text export, and embedding caches.
 
 ## Decision Log
 
@@ -79,13 +79,13 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. The former Step 11 and Step 12 were dropped as product goals. Step 13 is next and will build a unified research surface over code, structure, clusters, hubs, and related-context discovery.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, and Step 10 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 13 is next and will build a unified research surface over code, structure, clusters, hubs, and related-context discovery.
 
 ## Context and Orientation
 
 The current indexing and query code lives in these files:
 
-- `src/index.ts`: the MCP and CLI entrypoint. It registers the `index`, `tree`, `search`, `cluster`, memory, and edit tools.
+- `src/index.ts`: the MCP and CLI entrypoint. It registers the `index`, `tree`, `search`, `cluster`, hub, and edit tools.
 - `src/tools/index-codebase.ts`: the top-level indexing pipeline. It writes the `.contextplus/config` files and runs file, identifier, and full derived artifact builders.
 - `src/tools/semantic-search.ts`: the file-level search indexer and query surface.
 - `src/tools/semantic-identifiers.ts`: the identifier-level search indexer and query surface.
@@ -108,7 +108,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, structure, and memory evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand. The roadmap was then simplified by dropping the memory- and ACP-centered milestones so the remaining work focuses on code retrieval, reliability, evaluation, and tool simplification.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, and structure evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary. Step 09 persisted semantic clusters, related-file neighborhoods, and subsystem summaries so the `cluster` tool now renders durable full-index artifacts instead of recomputing them on demand. The roadmap was then simplified by dropping the memory- and ACP-centered milestones so the remaining work focuses on code retrieval, reliability, evaluation, and tool simplification.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 

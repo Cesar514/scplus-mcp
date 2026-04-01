@@ -12,22 +12,18 @@
   - [x] rename propose_commit to checkpoint
   - [x] rename list_restore_points to restore_points
   - [x] rename undo_change to restore
-  - [x] rename upsert_memory_node to create_memory
-  - [x] rename search_memory_graph to search_memory
-  - [x] rename retrieve_with_traversal to explore_memory
-  - [x] add_interlinked_context to bulk_memory
 - [x] create a new tool called index that initializes the project by creating a context tree and .contextplus folder
   - [x] use .contextplus/hubs for feature hubs
   - [x] use .contextplus/embeddings for storing file and symbol embeddings
   - [x] use .contextplus/config for configuration files
-  - [x] use .contextplus/memories for memory graph data
 
 ## maintenance
 
+- [x] evaluate removing the current memory graph and memory MCP tools after deciding the feature should not be part of the product
 - [x] drop roadmap steps 11 and 12 as forward product goals after deciding memory and ACP features are not worth their token and codebase cost for this project direction
-- [x] finish roadmap step 11 by replacing the prior memory store with the planned graph-plus-markdown-plus-vector memory system and making memory writes update embeddings and relations automatically
-- [x] verify roadmap step 11 directly with focused memory-graph and index coverage, the full main test suite, build validation, and a built-runtime proof that wrote markdown memories and observed automatic relations
-- [x] commit the verified step 11 work
+- [x] remove the dropped step 11 memory subsystem from the runtime, tests, and mirrored docs
+- [x] verify the repository still builds and tests cleanly without the removed memory subsystem
+- [x] commit the verified step 11 removal
 - [x] finish roadmap step 10 by generating persisted hub suggestions and feature-group candidates automatically from clusters, structure graphs, and file FEATURE tags
 - [x] verify roadmap step 10 directly with focused hub-suggestion and feature-hub coverage, the index integration suite, and a real full index run plus sqlite inspection
 - [x] finish roadmap step 06 by expanding the persisted structure artifact into a richer per-file and per-module graph with symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges
@@ -41,7 +37,7 @@
 - [x] run a fresh Context+ full index for this repository through the MCP tool
 - [x] verify the refreshed `.contextplus/state/index.sqlite` and durable artifacts directly on disk
 - [x] complete the sqlite-only follow-up migration so `.contextplus/state/index.sqlite` becomes the single authoritative machine-state store
-- [x] migrate the remaining file-backed machine state into sqlite, including the memory graph, restore-point manifest, restore-point backups, context-tree export, and embedding caches
+- [x] migrate the remaining file-backed machine state into sqlite, including restore-point manifest, restore-point backups, context-tree export, and embedding caches
 - [x] delete legacy json and cache artifacts during bootstrap and verify they stay absent after a real full index run and an MCP `index` run
 - [x] finish roadmap step 02.5 by moving the durable full-engine index substrate onto sqlite-backed local storage under `.contextplus/state/index.sqlite`
 - [x] verify roadmap step 02.5 directly with build, tests, a real full index run, and direct sqlite artifact inspection
@@ -71,13 +67,12 @@
 - [x] verify the generated `.contextplus` layout and manifests match the documented project state
 - [x] update the `contextplus-mcp` skill so it explicitly covers repo-local instruction precedence for reindex tasks
 - [x] remove the remaining old-storage handling from runtime ignore logic
-- [x] update the memory-graph tests to create `.contextplus/memories` fixtures in the current storage layout
 - [x] verify runtime code and focused tests no longer depend on the previous storage layout
 - [x] remove the blanket no-comments policy from repo instructions and mirrored landing instructions
 - [x] allow ordinary post-header comments in `checkpoint` while keeping header, feature, and size checks
 - [x] rebuild `lint` so it runs valid native commands and reports practical repo-rule findings
 - [x] verify the updated lint and checkpoint behavior with targeted suites and the full main test run
-- [x] finish roadmap step 07 by building a unified ranking engine that combines file, chunk, identifier, structure, and memory evidence over the persisted sqlite artifacts
+- [x] finish roadmap step 07 by building a unified ranking engine that combines file, chunk, identifier, and structure evidence over the persisted sqlite artifacts
 - [x] verify roadmap step 07 directly with the focused unified-ranking test and a clean full-index rerun on the repository
 - [x] finish roadmap step 08 by routing the public `search` surface through the unified ranking engine and simplifying the search contract around file, symbol, and mixed result types
 - [x] verify roadmap step 08 directly with focused canonical-search coverage and a real full-index plus canonical-search run on the repository

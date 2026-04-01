@@ -26,20 +26,16 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 - `static-analysis.ts` - Native linter runner (tsc, eslint, py_compile, cargo check, go vet).
 - `propose-commit.ts` - Code gatekeeper validating headers, FEATURE tag, nesting, and file length.
 - `feature-hub.ts` - Obsidian-style feature hub navigator with bundled skeleton views.
-- `memory-tools.ts` - Memory graph MCP wrappers (upsert, relate, search, prune, interlink, traverse).
-
-The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MUST use `search_memory` at the start of every task to retrieve prior context, and persist learnings with `create_memory` and `create_relation` after completing work. This prevents redundant exploration and builds cumulative knowledge across sessions.
 
 **Core Layer** (continued):
 
 - `hub.ts` - Wikilink parser for `[[path]]` links, cross-link tags, hub discovery, orphan detection.
-- `memory-graph.ts` - In-memory property graph with sqlite persistence, decay scoring, and auto-similarity edges.
 
 **Git Layer** (`src/git/`):
 
 - `shadow.ts` - Shadow restore point system for undo without touching git history.
 
-**Entry Point**: `src/index.ts` registers 17 MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to `process.cwd()`).
+**Entry Point**: `src/index.ts` registers the public MCP tools and starts the stdio transport. Accepts an optional CLI argument for the target project root directory (defaults to `process.cwd()`).
 
 ## Environment Variables
 
@@ -53,7 +49,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 | `CONTEXTPLUS_EMBED_TRACKER_MAX_FILES`   | `8`                | Max changed files per tracker tick (hard-capped to 5-10)      |
 | `CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS` | `700`              | Debounce before applying tracker refresh                      |
 
-Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, memory graph store, restore-point manifest, context-tree export, embedding caches, and persisted file/identifier/chunk/structure/cluster search state. The authoritative durable machine state lives only in `.contextplus/state/index.sqlite`. `index` defaults to `full` mode, which persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, semantic cluster artifacts, and hub-suggestion artifacts in SQLite in addition to the core file and identifier indexes. The structure layer now stores per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges so later ranking and canonical search can query a stable graph instead of rebuilding one ad hoc. The hybrid retrieval artifacts store lexical term maps plus embedding-cache keys so lexical and dense evidence can be combined from durable state instead of rebuilt ad hoc, the unified ranking layer combines file, chunk, identifier, structure, and memory evidence into one scoreable result set, the cluster artifacts persist labeled subsystem trees, related-file graphs, and subsystem summaries for the `cluster` tool, and the hub-suggestion artifact turns those persisted clusters, structure graphs, and feature tags into suggested markdown hubs and feature-group candidates under `.contextplus/hubs/suggested/`. Refresh uses content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, dependency hashes for structure artifacts so import-linked files are recomputed when local dependencies change, and a full rerun refreshes the persisted semantic clustering artifacts. Legacy JSON and cache artifacts are deleted during bootstrap so the database remains the only source of truth. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics. Later `search`, `cluster`, and `find_hub` calls query the prepared artifacts instead of rebuilding them on demand, while the realtime tracker keeps ignoring `.contextplus/`.
+Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, restore-point manifest, context-tree export, embedding caches, and persisted file/identifier/chunk/structure/cluster search state. The authoritative durable machine state lives only in `.contextplus/state/index.sqlite`. `index` defaults to `full` mode, which persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, semantic cluster artifacts, and hub-suggestion artifacts in SQLite in addition to the core file and identifier indexes. The structure layer now stores per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges so later ranking and canonical search can query a stable graph instead of rebuilding one ad hoc. The hybrid retrieval artifacts store lexical term maps plus embedding-cache keys so lexical and dense evidence can be combined from durable state instead of rebuilt ad hoc, the unified ranking layer combines file, chunk, identifier, and structure evidence into one scoreable result set, the cluster artifacts persist labeled subsystem trees, related-file graphs, and subsystem summaries for the `cluster` tool, and the hub-suggestion artifact turns those persisted clusters, structure graphs, and feature tags into suggested markdown hubs and feature-group candidates under `.contextplus/hubs/suggested/`. Refresh uses content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, dependency hashes for structure artifacts so import-linked files are recomputed when local dependencies change, and a full rerun refreshes the persisted semantic clustering artifacts. Legacy JSON and cache artifacts are deleted during bootstrap so the database remains the only source of truth. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics. Later `search`, `cluster`, and `find_hub` calls query the prepared artifacts instead of rebuilding them on demand, while the realtime tracker keeps ignoring `.contextplus/`.
 
 ## Fast Execute Mode (Mandatory)
 
@@ -129,7 +125,7 @@ Strict order within every file:
 
 | Tool                         | When to Use                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists the authoritative sqlite index substrate at `.contextplus/state/index.sqlite`, including file, identifier, chunk, structure, memory, restore-point, and context-tree state with no JSON mirrors. |
+| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists the authoritative sqlite index substrate at `.contextplus/state/index.sqlite`, including file, identifier, chunk, structure, restore-point, and context-tree state with no JSON mirrors. |
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse persisted semantic clusters, subsystem summaries, and related files from the full index. |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |
@@ -140,13 +136,6 @@ Strict order within every file:
 | `restore_points`             | See undo history.                                                                  |
 | `restore`                    | Revert a bad AI change without touching git.                                       |
 | `find_hub`                   | Browse handwritten hubs plus suggested hubs and feature groups from the full index. Find orphaned files. |
-| `create_memory`              | Create/update memory nodes (concept, file, symbol, note) with auto-embedding.      |
-| `create_relation`            | Create typed edges between memory nodes (depends_on, implements, etc).             |
-| `search_memory`              | Semantic search + graph traversal across 1st/2nd-degree neighbors.                 |
-| `prune_stale_links`          | Remove decayed edges (e^(-λt)) and orphan nodes periodically.                      |
-| `bulk_memory`                | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72).                       |
-| `explore_memory`             | Start from a node, walk outward, return scored neighbors by decay and depth.       |
-
 ## Anti-Patterns to Avoid
 
 1. Reading entire files without checking the skeleton first.

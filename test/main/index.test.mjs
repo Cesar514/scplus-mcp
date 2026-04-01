@@ -66,7 +66,6 @@ describe("index", () => {
       await expectExists(join(cwd, ".contextplus"));
       await expectExists(join(cwd, ".contextplus", "hubs"));
       await expectExists(join(cwd, ".contextplus", "embeddings"));
-      await expectExists(join(cwd, ".contextplus", "memories"));
       await expectExists(join(cwd, ".contextplus", "config"));
       await expectExists(join(cwd, ".contextplus", "checkpoints"));
       await expectExists(join(cwd, ".contextplus", "derived"));
@@ -87,7 +86,6 @@ describe("index", () => {
       const semanticClusterIndex = readArtifactFromDb(dbPath, "semantic-cluster-index");
       const hubSuggestionIndex = readArtifactFromDb(dbPath, "hub-suggestion-index");
       const fullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
-      const graph = readArtifactFromDb(dbPath, "memory-graph");
       const restorePoints = readArtifactFromDb(dbPath, "restore-points");
       const tree = readTextArtifactFromDb(dbPath, "context-tree");
       const dbFullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
@@ -211,7 +209,6 @@ describe("index", () => {
       assert.equal(dbFullManifest?.hybridIdentifierIndexPath, "sqlite:index_artifacts/hybrid-identifier-index");
       assert.equal(dbFullManifest?.semanticClusterIndexPath, "sqlite:index_artifacts/semantic-cluster-index");
       assert.equal(dbFullManifest?.hubSuggestionIndexPath, "sqlite:index_artifacts/hub-suggestion-index");
-      assert.deepEqual(graph, { version: 2, nodes: {}, edges: {}, documents: {} });
       assert.deepEqual(restorePoints, []);
       assert.ok(tree.includes("src/"));
       assert.ok(stdout.includes("Indexed"));
@@ -227,6 +224,7 @@ describe("index", () => {
       await assert.rejects(access(join(cwd, ".contextplus", "config", "context-tree.txt")));
       await assert.rejects(access(join(cwd, ".contextplus", "embeddings", "file-search-index.json")));
       await assert.rejects(access(join(cwd, ".contextplus", "derived", "full-index-manifest.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "memories")));
       await assert.rejects(access(join(cwd, ".contextplus", "memories", "memory-graph.json")));
       await assert.rejects(access(join(cwd, ".contextplus", "checkpoints", "restore-points.json")));
     } finally {
@@ -234,7 +232,7 @@ describe("index", () => {
     }
   });
 
-  it("migrates legacy memory and checkpoint manifests into sqlite and deletes old files on reindex", async () => {
+  it("migrates legacy checkpoint manifests into sqlite and deletes legacy memory files on reindex", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
     try {
       await mkdir(join(cwd, ".contextplus", "memories"), { recursive: true });
@@ -258,16 +256,11 @@ describe("index", () => {
       );
 
       const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
-      const graph = readArtifactFromDb(dbPath, "memory-graph");
       const restorePoints = readArtifactFromDb(dbPath, "restore-points");
       const indexStatus = readArtifactFromDb(dbPath, "index-status");
       const fullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
 
-      assert.equal(graph.version, 2);
-      assert.equal(graph.nodes.a.id, "a");
-      assert.equal(graph.nodes.a.type, "note");
-      assert.deepEqual(graph.edges, {});
-      assert.deepEqual(graph.documents, {});
+      assert.equal(readArtifactFromDb(dbPath, "memory-graph"), null);
       assert.deepEqual(restorePoints, [{ id: "rp-1" }]);
       assert.equal(indexStatus.state, "completed");
       assert.equal(indexStatus.contractVersion, 9);

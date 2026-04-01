@@ -2,7 +2,7 @@
 
 Semantic Intelligence for Large-Scale Engineering.
 
-Context+ is an MCP server designed for developers who demand 99% accuracy. By combining RAG, Tree-sitter AST, Spectral Clustering, and Obsidian-style linking, Context+ turns a massive codebase into a searchable, hierarchical feature graph.
+Context+ is an MCP server designed for developers who demand 99% accuracy. By combining Tree-sitter AST, Spectral Clustering, and Obsidian-style linking, Context+ turns a massive codebase into a searchable, hierarchical feature graph.
 
 https://github.com/user-attachments/assets/a97a451f-c9b4-468d-b036-15b65fc13e79
 
@@ -49,7 +49,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 
 | Tool                         | Description                                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, writes indexing status, preserves durable memories/checkpoints, refreshes incrementally using content hashes plus dependency-aware structure invalidation, and prepares the unified ranking substrate used by canonical search. |
+| `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, writes indexing status, preserves restore-point state, refreshes incrementally using content hashes plus dependency-aware structure invalidation, and prepares the unified ranking substrate used by canonical search. |
 | `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
 | `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
 | `search`                    | Canonical full-engine search. Use `search_type: "file"` for file results, `search_type: "symbol"` for symbol results, or `search_type: "mixed"` to rank both together over the unified evidence model. |
@@ -75,17 +75,6 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | --------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `restore_points` | List all shadow restore points created by `checkpoint`. Each captures file state before AI changes.    |
 | `restore`        | Restore files to their state before a specific AI change. Uses shadow restore points. Does not affect git. |
-
-### Memory & RAG
-
-| Tool                      | Description                                                                                              |
-| ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `create_memory`          | Create or update a memory node (concept, file, symbol, note) with auto-generated embeddings.             |
-| `create_relation`         | Create typed edges between nodes (relates_to, depends_on, implements, references, similar_to, contains). |
-| `search_memory`          | Semantic search with graph traversal — finds direct matches then walks 1st/2nd-degree neighbors.         |
-| `prune_stale_links`       | Remove decayed edges (e^(-λt) below threshold) and orphan nodes with low access counts.                  |
-| `bulk_memory`            | Bulk-add nodes with auto-similarity linking (cosine ≥ 0.72 creates edges automatically).                 |
-| `explore_memory`         | Start from a node and walk outward — returns all reachable neighbors scored by decay and depth.          |
 
 ## Setup
 
@@ -278,13 +267,13 @@ Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.co
 
 Three layers built with TypeScript over stdio using the Model Context Protocol SDK:
 
-**Core** (`src/core/`) - Multi-language AST parsing (tree-sitter, 43 extensions), gitignore-aware traversal, Ollama vector embeddings with disk cache, wikilink hub graph, in-memory property graph with decay scoring.
+**Core** (`src/core/`) - Multi-language AST parsing (tree-sitter, 43 extensions), gitignore-aware traversal, Ollama vector embeddings with disk cache, and wikilink hub graph.
 
-**Tools** (`src/tools/`) - 17 MCP tools exposing structural, semantic, operational, and memory graph capabilities.
+**Tools** (`src/tools/`) - MCP tools exposing structural, semantic, and operational codebase capabilities.
 
 **Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
 
-**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, memory graph data, restore-point manifests, embedding caches, and suggested hub markdown under `.contextplus/hubs/suggested/`. Later searches refresh only changed files before querying the prepared state.
+**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, restore-point manifests, embedding caches, and suggested hub markdown under `.contextplus/hubs/suggested/`. Later searches refresh only changed files before querying the prepared state.
 
 ## Config
 

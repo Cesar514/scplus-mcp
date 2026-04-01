@@ -367,7 +367,7 @@ export default function ToolDiagram() {
               border: "none",
             }}
           >
-            RAG Functions
+            Core Functions
           </span>
         </div>
       </div>

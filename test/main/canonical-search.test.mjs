@@ -12,7 +12,6 @@ process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 describe("canonical-search", () => {
   it("formats mixed and symbol search output from the unified ranker", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
-    const { upsertNode } = await import("../../build/core/memory-graph.js");
     const { runCanonicalSearch } = await import("../../build/tools/unified-ranking.js");
     const rootDir = await mkdtemp(join(tmpdir(), "contextplus-canonical-search-"));
     try {
@@ -30,13 +29,6 @@ describe("canonical-search", () => {
       );
 
       await indexCodebase({ rootDir, mode: "full" });
-      await upsertNode(
-        rootDir,
-        "note",
-        "search memory note",
-        "search knowledge base is the preferred canonical symbol",
-        { path: "src/search.ts", symbolName: "searchKnowledgeBase", line: "3" },
-      );
 
       const mixed = await runCanonicalSearch({
         rootDir,
@@ -57,7 +49,6 @@ describe("canonical-search", () => {
       assert.match(mixed, /evidence file=/);
       assert.match(mixed, /supporting chunks:/);
       assert.match(mixed, /supporting identifiers:/);
-      assert.match(mixed, /supporting memory nodes:/);
       assert.match(symbolOnly, /Requested result types: symbol/);
       assert.match(symbolOnly, /\[symbol\] searchKnowledgeBase \(function\)/);
       assert.doesNotMatch(symbolOnly, /\[symbol\].+\(interface\)/);

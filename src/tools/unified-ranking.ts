@@ -1,8 +1,7 @@
-// Unified ranking engine over persisted full-index artifacts and memory evidence
+// Unified ranking engine over persisted full-index artifacts and structure evidence
 // FEATURE: Canonical ranking layer for file and symbol search over sqlite state
 
 import { loadIndexArtifact } from "../core/index-database.js";
-import { searchGraph, type TraversalResult } from "../core/memory-graph.js";
 import { ensureFileSearchIndex } from "./semantic-search.js";
 import { searchHybridChunkIndex, searchHybridIdentifierIndex, type HybridSearchMatch } from "./hybrid-retrieval.js";
 
@@ -83,7 +82,6 @@ export interface UnifiedRankingOptions {
   chunkWeight?: number;
   identifierWeight?: number;
   structureWeight?: number;
-  memoryWeight?: number;
   topCallsPerIdentifier?: number;
   includeKinds?: string[];
 }
@@ -93,13 +91,11 @@ export interface UnifiedSearchEvidence {
   chunk: number;
   identifier: number;
   structure: number;
-  memory: number;
   lexical: number;
   semantic: number;
   matchedTerms: string[];
   supportingChunkIds: string[];
   supportingIdentifierIds: string[];
-  supportingMemoryNodeIds: string[];
 }
 
 export interface UnifiedRankedHit {
@@ -130,21 +126,11 @@ interface Candidate {
   chunkScore: number;
   identifierScore: number;
   structureScore: number;
-  memoryScore: number;
   semanticScore: number;
   lexicalScore: number;
   matchedTerms: Set<string>;
   supportingChunkIds: Set<string>;
   supportingIdentifierIds: Set<string>;
-  supportingMemoryNodeIds: Set<string>;
-}
-
-interface MemoryContributionTarget {
-  candidateId: string;
-  path?: string;
-  symbolName?: string;
-  score: number;
-  nodeId: string;
 }
 
 function splitTerms(text: string): string[] {
@@ -191,13 +177,11 @@ function createCandidate(id: string, entityType: EntityType, path: string, title
     chunkScore: 0,
     identifierScore: 0,
     structureScore: 0,
-    memoryScore: 0,
     semanticScore: 0,
     lexicalScore: 0,
     matchedTerms: new Set<string>(),
     supportingChunkIds: new Set<string>(),
     supportingIdentifierIds: new Set<string>(),
-    supportingMemoryNodeIds: new Set<string>(),
   };
 }
 
@@ -221,16 +205,6 @@ function getSymbolCandidateId(path: string, title: string, line: number): string
 
 function getFileCandidateId(path: string): string {
   return `file:${path}`;
-}
-
-function getMemoryTarget(result: TraversalResult): { path?: string; symbolName?: string; candidateId?: string } {
-  const metadata = result.node.metadata ?? {};
-  const path = metadata.path || metadata.filePath;
-  const symbolName = metadata.symbolName || metadata.symbol;
-  if (path && symbolName) return { path, symbolName, candidateId: getSymbolCandidateId(path, symbolName, pickLine(Number(metadata.line) || 1)) };
-  if (path) return { path, candidateId: getFileCandidateId(path) };
-  if (/\.[a-z0-9]+$/i.test(result.node.label)) return { path: result.node.label, candidateId: getFileCandidateId(result.node.label) };
-  return { path, symbolName };
 }
 
 function applyHybridEvidence(candidate: Candidate, match: HybridSearchMatch, source: "chunk" | "identifier"): void {
@@ -325,17 +299,15 @@ function finalizeCandidate(candidate: Candidate, options: UnifiedRankingOptions)
   const chunkWeight = normalizeWeight(options.chunkWeight, 0.22);
   const identifierWeight = normalizeWeight(options.identifierWeight, 0.24);
   const structureWeight = normalizeWeight(options.structureWeight, 0.18);
-  const memoryWeight = normalizeWeight(options.memoryWeight, 0.16);
-  const total = fileWeight + chunkWeight + identifierWeight + structureWeight + memoryWeight;
+  const total = fileWeight + chunkWeight + identifierWeight + structureWeight;
   const score = total > 0
     ? clamp01((
       candidate.fileScore * fileWeight
       + candidate.chunkScore * chunkWeight
       + candidate.identifierScore * identifierWeight
       + candidate.structureScore * structureWeight
-      + candidate.memoryScore * memoryWeight
     ) / total)
-    : clamp01(candidate.fileScore + candidate.chunkScore + candidate.identifierScore + candidate.structureScore + candidate.memoryScore);
+    : clamp01(candidate.fileScore + candidate.chunkScore + candidate.identifierScore + candidate.structureScore);
 
   return {
     id: candidate.id,
@@ -352,13 +324,11 @@ function finalizeCandidate(candidate: Candidate, options: UnifiedRankingOptions)
       chunk: candidate.chunkScore,
       identifier: candidate.identifierScore,
       structure: candidate.structureScore,
-      memory: candidate.memoryScore,
       lexical: candidate.lexicalScore,
       semantic: candidate.semanticScore,
       matchedTerms: Array.from(candidate.matchedTerms).sort(),
       supportingChunkIds: Array.from(candidate.supportingChunkIds).sort(),
       supportingIdentifierIds: Array.from(candidate.supportingIdentifierIds).sort(),
-      supportingMemoryNodeIds: Array.from(candidate.supportingMemoryNodeIds).sort(),
     },
   };
 }
@@ -369,7 +339,6 @@ function formatEvidenceSummary(hit: UnifiedRankedHit): string {
     `chunk=${hit.evidence.chunk.toFixed(2)}`,
     `identifier=${hit.evidence.identifier.toFixed(2)}`,
     `structure=${hit.evidence.structure.toFixed(2)}`,
-    `memory=${hit.evidence.memory.toFixed(2)}`,
     `semantic=${hit.evidence.semantic.toFixed(2)}`,
     `lexical=${hit.evidence.lexical.toFixed(2)}`,
   ].join(" | ");
@@ -396,7 +365,6 @@ export function formatUnifiedSearchResults(query: string, entityTypes: EntityTyp
     if (hit.evidence.matchedTerms.length > 0) lines.push(`  matched terms: ${hit.evidence.matchedTerms.join(", ")}`);
     if (hit.evidence.supportingChunkIds.length > 0) lines.push(`  supporting chunks: ${hit.evidence.supportingChunkIds.slice(0, 3).join(", ")}`);
     if (hit.evidence.supportingIdentifierIds.length > 0) lines.push(`  supporting identifiers: ${hit.evidence.supportingIdentifierIds.slice(0, 3).join(", ")}`);
-    if (hit.evidence.supportingMemoryNodeIds.length > 0) lines.push(`  supporting memory nodes: ${hit.evidence.supportingMemoryNodeIds.slice(0, 3).join(", ")}`);
     lines.push("");
   }
 
@@ -475,43 +443,6 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     for (const term of match.matchedTerms) fileCandidate.matchedTerms.add(term);
     fileCandidate.supportingIdentifierIds.add(match.id);
     candidates.set(fileCandidateId, fileCandidate);
-  }
-
-  const memoryResults = await searchGraph(rootDir, options.query, 1, Math.max(topK * 3, 10));
-  const memoryTargets: MemoryContributionTarget[] = [];
-  for (const result of [...memoryResults.direct, ...memoryResults.neighbors]) {
-    const target = getMemoryTarget(result);
-    const score = clamp01(result.relevanceScore / 100);
-    if (target.candidateId) {
-      memoryTargets.push({
-        candidateId: target.candidateId,
-        path: target.path,
-        symbolName: target.symbolName,
-        score,
-        nodeId: result.node.id,
-      });
-    } else if (target.path) {
-      memoryTargets.push({
-        candidateId: getFileCandidateId(target.path),
-        path: target.path,
-        symbolName: target.symbolName,
-        score,
-        nodeId: result.node.id,
-      });
-    }
-  }
-
-  for (const contribution of memoryTargets) {
-    const candidate = candidates.get(contribution.candidateId)
-      ?? (contribution.symbolName && contribution.path
-        ? createCandidate(contribution.candidateId, "symbol", contribution.path, contribution.symbolName, "memory", 1, 1)
-        : contribution.path
-          ? createCandidate(contribution.candidateId, "file", contribution.path, contribution.path, "file", 1, 1)
-          : null);
-    if (!candidate) continue;
-    candidate.memoryScore = Math.max(candidate.memoryScore, contribution.score);
-    candidate.supportingMemoryNodeIds.add(contribution.nodeId);
-    candidates.set(contribution.candidateId, candidate);
   }
 
   for (const candidate of candidates.values()) {
