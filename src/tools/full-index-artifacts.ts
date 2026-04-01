@@ -3,12 +3,12 @@
 
 import { readFile, stat } from "fs/promises";
 import { extname, resolve } from "path";
-import { flattenSymbols, type SymbolLocation, analyzeFile, isSupportedFile } from "../core/parser.js";
-import { getEmbeddingBatchSize, fetchEmbedding, loadEmbeddingCache, saveEmbeddingCache } from "../core/embeddings.js";
+import { flattenSymbols, analyzeFile, isSupportedFile } from "../core/parser.js";
 import { ensureContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest } from "./index-contract.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { refreshChunkIndexState, warmChunkEmbeddings, type ChunkArtifactStats, type ChunkIndexProgress } from "./chunk-index.js";
 
 export interface FullIndexArtifactOptions {
   rootDir: string;
@@ -24,16 +24,6 @@ export interface FullIndexProgress {
   indexedStructures: number;
 }
 
-export interface ChunkArtifactStats {
-  totalFiles: number;
-  processedFiles: number;
-  changedFiles: number;
-  removedFiles: number;
-  indexedChunks: number;
-  embeddedChunks: number;
-  reusedChunks: number;
-}
-
 export interface StructureArtifactStats {
   totalFiles: number;
   processedFiles: number;
@@ -45,29 +35,6 @@ export interface StructureArtifactStats {
 export interface FullIndexArtifactStats {
   chunkIndex: ChunkArtifactStats;
   structureIndex: StructureArtifactStats;
-}
-
-interface ChunkArtifact {
-  id: string;
-  path: string;
-  header: string;
-  symbolName?: string;
-  symbolKind?: string;
-  parentName?: string;
-  signature?: string;
-  line: number;
-  endLine: number;
-  content: string;
-}
-
-interface PersistedChunkFileEntry {
-  fingerprint: string;
-  chunks: ChunkArtifact[];
-}
-
-interface PersistedChunkIndexState {
-  generatedAt: string;
-  files: Record<string, PersistedChunkFileEntry>;
 }
 
 interface ImportInfo {
@@ -121,24 +88,12 @@ export interface FullIndexArtifactResult {
   stats: FullIndexArtifactStats;
 }
 
-const CHUNK_CACHE_FILE = "chunk-embeddings-cache.json";
-const MAX_CHUNK_CHARS = 6000;
-const MAX_FALLBACK_FILE_CHARS = 6000;
-
 function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
 function buildFingerprint(size: number, mtimeMs: number): string {
   return `${size}:${Math.floor(mtimeMs)}`;
-}
-
-function hashText(text: string): string {
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-  }
-  return String(hash);
 }
 
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
@@ -155,66 +110,6 @@ function detectLanguage(filePath: string): string {
   if (ext === ".java") return "java";
   if (ext === ".cs") return "csharp";
   return ext.replace(/^\./, "") || "unknown";
-}
-
-function getChunkId(relativePath: string, symbol: Pick<ChunkArtifact, "line" | "endLine" | "symbolName" | "signature">): string {
-  return `${relativePath}:${symbol.line}:${symbol.endLine}:${symbol.symbolName ?? "file"}:${symbol.signature ?? ""}`;
-}
-
-function sliceLines(lines: string[], line: number, endLine: number): string {
-  const start = Math.max(0, line - 1);
-  const end = Math.max(start + 1, endLine);
-  return lines.slice(start, end).join("\n").slice(0, MAX_CHUNK_CHARS).trim();
-}
-
-function buildSymbolChunks(relativePath: string, header: string, symbols: SymbolLocation[], lines: string[]): ChunkArtifact[] {
-  const chunks: ChunkArtifact[] = [];
-  for (const symbol of symbols) {
-    const content = sliceLines(lines, symbol.line, symbol.endLine);
-    if (!content) continue;
-    chunks.push({
-      id: getChunkId(relativePath, {
-        line: symbol.line,
-        endLine: symbol.endLine,
-        symbolName: symbol.name,
-        signature: symbol.signature,
-      }),
-      path: relativePath,
-      header,
-      symbolName: symbol.name,
-      symbolKind: symbol.kind,
-      parentName: symbol.parentName,
-      signature: symbol.signature,
-      line: symbol.line,
-      endLine: symbol.endLine,
-      content,
-    });
-  }
-  return chunks;
-}
-
-function buildFallbackChunk(relativePath: string, header: string, content: string, lineCount: number): ChunkArtifact[] {
-  const trimmed = content.slice(0, MAX_FALLBACK_FILE_CHARS).trim();
-  if (!trimmed) return [];
-  return [{
-    id: getChunkId(relativePath, { line: 1, endLine: Math.max(1, lineCount), symbolName: "file", signature: header }),
-    path: relativePath,
-    header,
-    symbolName: "file",
-    symbolKind: "file",
-    signature: header,
-    line: 1,
-    endLine: Math.max(1, lineCount),
-    content: trimmed,
-  }];
-}
-
-async function loadChunkIndexState(rootDir: string): Promise<PersistedChunkIndexState> {
-  return loadIndexArtifact(rootDir, "chunk-search-index", () => ({ generatedAt: "", files: {} }));
-}
-
-async function saveChunkIndexState(rootDir: string, state: PersistedChunkIndexState): Promise<void> {
-  await saveIndexArtifact(rootDir, "chunk-search-index", state);
 }
 
 async function loadStructureIndexState(rootDir: string): Promise<PersistedStructureIndexState> {
@@ -353,123 +248,6 @@ function extractCalls(lines: string[], language: string): CallInfo[] {
   return calls.slice(0, 100);
 }
 
-async function buildChunkArtifactsForFile(rootDir: string, relativePath: string): Promise<ChunkArtifact[] | null> {
-  const normalized = normalizeRelativePath(relativePath);
-  const fullPath = resolve(rootDir, normalized);
-  if (!isSupportedFile(fullPath)) return null;
-
-  try {
-    const raw = await readFile(fullPath, "utf8");
-    const lines = raw.split("\n");
-    const analysis = await analyzeFile(fullPath);
-    const flatSymbols = flattenSymbols(analysis.symbols);
-    const chunks = buildSymbolChunks(normalized, analysis.header, flatSymbols, lines);
-    if (chunks.length > 0) return chunks;
-    return buildFallbackChunk(normalized, analysis.header, raw, analysis.lineCount);
-  } catch {
-    return null;
-  }
-}
-
-async function refreshChunkIndexState(
-  rootDir: string,
-  onProgress?: (progress: FullIndexProgress) => Promise<void> | void,
-): Promise<{ state: PersistedChunkIndexState; stats: Omit<ChunkArtifactStats, "embeddedChunks" | "reusedChunks"> }> {
-  const previous = await loadChunkIndexState(rootDir);
-  const entries = await walkDirectory({ rootDir, depthLimit: 0 });
-  const files = entries.filter((entry) => !entry.isDirectory && isSupportedFile(entry.path));
-  const nextFiles: Record<string, PersistedChunkFileEntry> = {};
-  const seen = new Set<string>();
-  let processedFiles = 0;
-  let changedFiles = 0;
-
-  for (const file of files) {
-    const relativePath = normalizeRelativePath(file.relativePath);
-    const fileStat = await stat(file.path);
-    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
-    const previousEntry = previous.files[relativePath];
-
-    if (previousEntry && previousEntry.fingerprint === fingerprint) {
-      nextFiles[relativePath] = previousEntry;
-    } else {
-      const chunks = await buildChunkArtifactsForFile(rootDir, relativePath);
-      changedFiles++;
-      if (chunks && chunks.length > 0) nextFiles[relativePath] = { fingerprint, chunks };
-    }
-
-    seen.add(relativePath);
-    processedFiles++;
-    if (onProgress && shouldReportProgress(processedFiles, files.length)) {
-      await onProgress({
-        phase: "chunk-scan",
-        totalFiles: files.length,
-        processedFiles,
-        changedFiles,
-        removedFiles: 0,
-        indexedChunks: Object.values(nextFiles).reduce((sum, entry) => sum + entry.chunks.length, 0),
-        indexedStructures: 0,
-      });
-    }
-  }
-
-  const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
-  const state: PersistedChunkIndexState = {
-    generatedAt: new Date().toISOString(),
-    files: nextFiles,
-  };
-  await saveChunkIndexState(rootDir, state);
-  return {
-    state,
-    stats: {
-      totalFiles: files.length,
-      processedFiles,
-      changedFiles,
-      removedFiles,
-      indexedChunks: Object.values(nextFiles).reduce((sum, entry) => sum + entry.chunks.length, 0),
-    },
-  };
-}
-
-async function warmChunkEmbeddings(
-  rootDir: string,
-  docs: ChunkArtifact[],
-  onProgress?: (progress: FullIndexProgress) => Promise<void> | void,
-): Promise<{ embeddedChunks: number; reusedChunks: number }> {
-  const cache = await loadEmbeddingCache(rootDir, CHUNK_CACHE_FILE);
-  const pending: { key: string; hash: string; text: string }[] = [];
-  let reusedChunks = 0;
-
-  for (const doc of docs) {
-    const text = `${doc.header} ${doc.symbolName ?? ""} ${doc.signature ?? ""} ${doc.path} ${doc.content}`;
-    const hash = `${text.length}:${hashText(text)}`;
-    if (cache[doc.id]?.hash === hash) reusedChunks++;
-    else pending.push({ key: doc.id, hash, text });
-  }
-
-  const batchSize = getEmbeddingBatchSize();
-  for (let i = 0; i < pending.length; i += batchSize) {
-    const batch = pending.slice(i, i + batchSize);
-    const vectors = await fetchEmbedding(batch.map((entry) => entry.text));
-    for (let j = 0; j < batch.length; j++) {
-      cache[batch[j].key] = { hash: batch[j].hash, vector: vectors[j] };
-    }
-    if (onProgress) {
-      await onProgress({
-        phase: "chunk-embeddings",
-        totalFiles: docs.length,
-        processedFiles: Math.min(i + batch.length, docs.length),
-        changedFiles: pending.length,
-        removedFiles: 0,
-        indexedChunks: docs.length,
-        indexedStructures: 0,
-      });
-    }
-  }
-
-  await saveEmbeddingCache(rootDir, cache, CHUNK_CACHE_FILE);
-  return { embeddedChunks: pending.length, reusedChunks };
-}
-
 async function buildStructureArtifactForFile(rootDir: string, relativePath: string): Promise<StructureArtifact | null> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
@@ -569,9 +347,19 @@ export async function ensureFullIndexArtifacts(
   const rootDir = resolve(options.rootDir);
   await ensureContextplusLayout(rootDir);
 
-  const chunkResult = await refreshChunkIndexState(rootDir, onProgress);
+  const chunkResult = await refreshChunkIndexState(rootDir, async (progress: ChunkIndexProgress) => {
+    await onProgress?.({
+      ...progress,
+      indexedStructures: 0,
+    });
+  });
   const allChunks = Object.values(chunkResult.state.files).flatMap((entry) => entry.chunks);
-  const embeddingStats = await warmChunkEmbeddings(rootDir, allChunks, onProgress);
+  const embeddingStats = await warmChunkEmbeddings(rootDir, allChunks, async (progress: ChunkIndexProgress) => {
+    await onProgress?.({
+      ...progress,
+      indexedStructures: 0,
+    });
+  });
   const structureResult = await refreshStructureIndexState(rootDir, onProgress);
 
   const stats: FullIndexArtifactStats = {

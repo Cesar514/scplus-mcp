@@ -122,7 +122,16 @@ describe("index", () => {
       assert.equal(indexStatus.fullIndex?.structureIndex?.indexedStructures >= 1, true);
       assert.ok(fileIndex.files["src/app.ts"]);
       assert.equal(identifierIndex.files["src/app.ts"].docs.some((doc) => doc.name === "run"), true);
-      assert.ok(chunkIndex.files["src/app.ts"].chunks.some((chunk) => chunk.symbolName === "run"));
+      assert.equal(chunkIndex.artifactVersion, 5);
+      assert.equal(chunkIndex.contractVersion, 3);
+      assert.equal(chunkIndex.mode, "full");
+      const runChunk = chunkIndex.files["src/app.ts"].chunks.find((chunk) => chunk.symbolName === "run");
+      assert.ok(runChunk);
+      assert.equal(runChunk.chunkType, "symbol");
+      assert.equal(runChunk.symbolKind, "function");
+      assert.deepEqual(runChunk.symbolPath, ["run"]);
+      assert.equal(runChunk.lineCount >= 1, true);
+      assert.match(runChunk.contentHash, /^\d+:-?\d+$/);
       assert.equal(structureIndex.files["src/app.ts"].artifact.symbols.some((symbol) => symbol.name === "run"), true);
       assert.equal(fullManifest.mode, "full");
       assert.equal(fullManifest.artifactVersion, 5);

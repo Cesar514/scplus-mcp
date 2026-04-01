@@ -24,6 +24,10 @@
 
 ## maintenance
 
+- [x] finish roadmap step 03 by promoting chunk-level AST indexing into a first-class sqlite-backed artifact contract
+- [x] verify roadmap step 03 directly with build, the full test suite, a real full index run, and direct sqlite inspection of persisted chunk artifacts
+- [x] run a fresh Context+ full index for this repository through the MCP tool
+- [x] verify the refreshed `.contextplus/state/index.sqlite` and durable artifacts directly on disk
 - [x] complete the sqlite-only follow-up migration so `.contextplus/state/index.sqlite` becomes the single authoritative machine-state store
 - [x] migrate the remaining file-backed machine state into sqlite, including the memory graph, restore-point manifest, restore-point backups, context-tree export, and embedding caches
 - [x] delete legacy json and cache artifacts during bootstrap and verify they stay absent after a real full index run and an MCP `index` run
