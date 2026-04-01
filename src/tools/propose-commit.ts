@@ -5,6 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";
 import { createRestorePoint } from "../git/shadow.js";
 import { isSupportedFile } from "../core/parser.js";
+import { refreshPreparedIndexAfterWrite } from "./write-freshness.js";
 
 export interface ProposeCommitOptions {
   rootDir: string;
@@ -92,12 +93,18 @@ export async function proposeCommit(options: ProposeCommitOptions): Promise<stri
   await createRestorePoint(options.rootDir, [options.filePath], `Pre-commit: ${options.filePath}`);
   await mkdir(dirname(fullPath), { recursive: true });
   await writeFile(fullPath, options.newContent, "utf-8");
+  const refresh = await refreshPreparedIndexAfterWrite({
+    rootDir: options.rootDir,
+    relativePaths: [options.filePath],
+    cause: "checkpoint",
+  });
 
   const result = [`✅ File saved: ${options.filePath}`];
   if (warnings.length > 0) {
     result.push(`\n⚠ ${warnings.length} warning(s):`);
     for (const w of warnings) result.push(`  ⚠ [${w.rule}] ${w.message}`);
   }
+  result.push(`\nIndex refresh completed in ${refresh.mode} mode.`);
   result.push(`\nRestore point created. Use undo tools if needed.`);
 
   return result.join("\n");

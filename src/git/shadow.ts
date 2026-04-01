@@ -6,6 +6,7 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, join } from "path";
 import { loadIndexArtifact, loadRestorePointBackup, pruneRestorePointBackups, saveIndexArtifact, saveRestorePointBackup } from "../core/index-database.js";
 import { ensureContextplusLayout } from "../core/project-layout.js";
+import { refreshPreparedIndexAfterWrite } from "../tools/write-freshness.js";
 
 const SHADOW_BRANCH = "mcp-shadow-history";
 export interface RestorePoint {
@@ -33,7 +34,10 @@ export async function createRestorePoint(rootDir: string, files: string[], messa
     try {
       const content = await readFile(fullPath, "utf-8");
       await saveRestorePointBackup(rootDir, id, file, content);
-    } catch {
+    } catch (error) {
+      const readError = error as NodeJS.ErrnoException;
+      if (readError?.code === "ENOENT") continue;
+      throw error;
     }
   }
 
@@ -54,15 +58,20 @@ export async function restorePoint(rootDir: string, pointId: string): Promise<st
   const restoredFiles: string[] = [];
 
   for (const file of point.files) {
-    try {
-      const content = await loadRestorePointBackup(rootDir, pointId, file);
-      if (content === null) continue;
-      const targetPath = join(rootDir, file);
-      await mkdir(dirname(targetPath), { recursive: true });
-      await writeFile(targetPath, content);
-      restoredFiles.push(file);
-    } catch {
-    }
+    const content = await loadRestorePointBackup(rootDir, pointId, file);
+    if (content === null) continue;
+    const targetPath = join(rootDir, file);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, content);
+    restoredFiles.push(file);
+  }
+
+  if (restoredFiles.length > 0) {
+    await refreshPreparedIndexAfterWrite({
+      rootDir,
+      relativePaths: restoredFiles,
+      cause: "restore",
+    });
   }
 
   return restoredFiles;

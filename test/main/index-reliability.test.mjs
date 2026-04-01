@@ -168,4 +168,109 @@ describe("index-reliability", () => {
       await rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it("refreshes the prepared index after checkpoint and restore so exact and related queries see post-write filesystem truth", async () => {
+    const { indexCodebase } = await import("../../build/tools/index-codebase.js");
+    const { proposeCommit } = await import("../../build/tools/propose-commit.js");
+    const { listRestorePoints, restorePoint } = await import("../../build/git/shadow.js");
+    const { lookupExactSymbol, lookupWord } = await import("../../build/tools/exact-query.js");
+    const { runSearchByIntent } = await import("../../build/tools/query-intent.js");
+    const { runResearch } = await import("../../build/tools/research.js");
+    const { loadIndexServingState } = await import("../../build/core/index-database.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-write-refresh-"));
+    try {
+      await createFixtureRepo(rootDir);
+      await indexCodebase({ rootDir, mode: "full" });
+
+      const checkpointOutput = await proposeCommit({
+        rootDir,
+        filePath: "src/auth/jwt.ts",
+        newContent: [
+          "// JWT auth helpers for index reliability fixtures",
+          "// FEATURE: reliability validation and repair coverage",
+          "export function normalizeToken(token: string): string {",
+          "  return token.trim().toLowerCase();",
+          "}",
+          "",
+        ].join("\n"),
+      });
+      assert.match(checkpointOutput, /Index refresh completed in full mode\./);
+
+      const afterCheckpoint = await loadIndexServingState(rootDir);
+      assert.equal(afterCheckpoint.activeGenerationFreshness, "fresh");
+      assert.ok(afterCheckpoint.activeGeneration >= 2);
+
+      const symbolHits = await lookupExactSymbol(rootDir, "normalizeToken");
+      assert.equal(symbolHits.length, 1);
+      assert.equal(symbolHits[0].path, "src/auth/jwt.ts");
+
+      const wordHits = await lookupWord(rootDir, "normalize", 10);
+      assert.equal(wordHits.some((hit) => hit.path === "src/auth/jwt.ts"), true);
+
+      const relatedResult = await runSearchByIntent({
+        rootDir,
+        intent: "related",
+        searchType: "mixed",
+        query: "normalize token auth",
+        topK: 5,
+      });
+      assert.match(relatedResult, /normalizeToken|src\/auth\/jwt\.ts/);
+
+      const researchResult = await runResearch({
+        rootDir,
+        query: "How does normalize token auth work across this repository?",
+        topK: 5,
+      });
+      assert.match(researchResult, /normalizeToken|src\/auth\/jwt\.ts/);
+
+      const [restorePointEntry] = (await listRestorePoints(rootDir)).slice(-1);
+      assert.ok(restorePointEntry);
+      const restoredFiles = await restorePoint(rootDir, restorePointEntry.id);
+      assert.deepEqual(restoredFiles, ["src/auth/jwt.ts"]);
+
+      const afterRestore = await loadIndexServingState(rootDir);
+      assert.equal(afterRestore.activeGenerationFreshness, "fresh");
+      assert.ok(afterRestore.activeGeneration > afterCheckpoint.activeGeneration);
+
+      const restoredSymbolHits = await lookupExactSymbol(rootDir, "verifyToken");
+      assert.equal(restoredSymbolHits.length, 1);
+      assert.equal(restoredSymbolHits[0].path, "src/auth/jwt.ts");
+      const removedSymbolHits = await lookupExactSymbol(rootDir, "normalizeToken");
+      assert.equal(removedSymbolHits.length, 0);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects prepared-index queries when the active generation is marked dirty or blocked", async () => {
+    const { indexCodebase } = await import("../../build/tools/index-codebase.js");
+    const { validatePreparedIndex } = await import("../../build/tools/index-reliability.js");
+    const { lookupExactSymbol } = await import("../../build/tools/exact-query.js");
+    const { updateIndexServingFreshness } = await import("../../build/core/index-database.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-dirty-serving-"));
+    try {
+      await createFixtureRepo(rootDir);
+      await indexCodebase({ rootDir, mode: "full" });
+
+      await updateIndexServingFreshness(rootDir, "dirty");
+      const dirtyReport = await validatePreparedIndex({ rootDir, mode: "full" });
+      assert.equal(dirtyReport.ok, false);
+      assert.equal(dirtyReport.issues.some((issue) => issue.code === "serving-generation-not-fresh"), true);
+      await assert.rejects(
+        () => lookupExactSymbol(rootDir, "verifyToken"),
+        /serving generation 1 is dirty/i,
+      );
+
+      await updateIndexServingFreshness(rootDir, "blocked", "manual blocked test");
+      const blockedReport = await validatePreparedIndex({ rootDir, mode: "full" });
+      assert.equal(blockedReport.ok, false);
+      assert.equal(blockedReport.issues.some((issue) => issue.code === "serving-generation-not-fresh"), true);
+      await assert.rejects(
+        () => lookupExactSymbol(rootDir, "verifyToken"),
+        /manual blocked test/i,
+      );
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });

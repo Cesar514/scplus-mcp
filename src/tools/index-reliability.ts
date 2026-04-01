@@ -148,6 +148,14 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
     );
   }
 
+  if (generation === serving.activeGeneration && serving.activeGenerationFreshness !== "fresh") {
+    addIssue(
+      issues,
+      "serving-generation-not-fresh",
+      `Active serving generation ${serving.activeGeneration} is ${serving.activeGenerationFreshness}${serving.activeGenerationBlockedReason ? `: ${serving.activeGenerationBlockedReason}` : ""}.`,
+    );
+  }
+
   for (const artifactKey of required.artifactKeys) {
     if (!inspection.artifactKeys.includes(artifactKey)) {
       addIssue(issues, "missing-artifact", `Missing required artifact "${artifactKey}" for ${options.mode} mode.`);

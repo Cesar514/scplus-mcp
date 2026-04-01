@@ -104,6 +104,7 @@ describe("query-intent", () => {
           query: "verifyToken",
         },
       }));
+      assert.match(exactResult, /Index freshness: fresh \| Active generation: 1/);
       assert.match(exactResult, /Exact symbol matches for "verifyToken" \(1\)/);
       assert.doesNotMatch(exactResult, /\[file\]|\[symbol\]/);
 

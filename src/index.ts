@@ -12,8 +12,6 @@ import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeErro
 import { getContextTree } from "./tools/context-tree.js";
 import { getFileSkeleton } from "./tools/file-skeleton.js";
 import { cancelAllEmbeddings } from "./core/embeddings.js";
-import { invalidateSearchCache } from "./tools/semantic-search.js";
-import { invalidateIdentifierSearchCache } from "./tools/semantic-identifiers.js";
 import { getBlastRadius } from "./tools/blast-radius.js";
 import { runStaticAnalysis } from "./tools/static-analysis.js";
 import { proposeCommit } from "./tools/propose-commit.js";
@@ -36,11 +34,11 @@ import {
   getOutline,
   getRepoChanges,
   getRepoStatus,
-  invalidateFastQueryCache,
   lookupExactSymbol,
   lookupWord,
 } from "./tools/exact-query.js";
 import { runSearchByIntent } from "./tools/query-intent.js";
+import { formatPreparedIndexFreshnessHeader } from "./tools/write-freshness.js";
 const passthroughArgs = process.argv.slice(2);
 const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
@@ -50,6 +48,10 @@ const INSTRUCTIONS_RESOURCE_URI = "contextplus://instructions";
 
 let noteServerActivity = () => { };
 let ensureTrackerRunning = () => { };
+
+async function formatPreparedQueryResponse(text: string): Promise<string> {
+  return `${await formatPreparedIndexFreshnessHeader(ROOT_DIR)}\n\n${text}`;
+}
 
 function withRequestActivity<TArgs, TResult>(
   handler: (args: TArgs) => Promise<TResult>,
@@ -168,7 +170,9 @@ server.tool(
   withRequestActivity(async ({ query, top_k }) => ({
     content: [{
       type: "text" as const,
-      text: formatExactSymbolResults(query, await lookupExactSymbol(ROOT_DIR, query, top_k)),
+      text: await formatPreparedQueryResponse(
+        formatExactSymbolResults(query, await lookupExactSymbol(ROOT_DIR, query, top_k)),
+      ),
     }],
   })),
 );
@@ -183,7 +187,9 @@ server.tool(
   withRequestActivity(async ({ query, top_k }) => ({
     content: [{
       type: "text" as const,
-      text: formatWordMatches(query, await lookupWord(ROOT_DIR, query, top_k)),
+      text: await formatPreparedQueryResponse(
+        formatWordMatches(query, await lookupWord(ROOT_DIR, query, top_k)),
+      ),
     }],
   })),
 );
@@ -197,7 +203,9 @@ server.tool(
   withRequestActivity(async ({ file_path }) => ({
     content: [{
       type: "text" as const,
-      text: formatOutline(await getOutline(ROOT_DIR, file_path)),
+      text: await formatPreparedQueryResponse(
+        formatOutline(await getOutline(ROOT_DIR, file_path)),
+      ),
     }],
   })),
 );
@@ -211,7 +219,9 @@ server.tool(
   withRequestActivity(async ({ target }) => ({
     content: [{
       type: "text" as const,
-      text: formatDependencyInfo(await getDependencyInfo(ROOT_DIR, target)),
+      text: await formatPreparedQueryResponse(
+        formatDependencyInfo(await getDependencyInfo(ROOT_DIR, target)),
+      ),
     }],
   })),
 );
@@ -254,10 +264,12 @@ server.tool(
   withRequestActivity(async ({ query }) => ({
     content: [{
       type: "text" as const,
-      text: await runResearch({
-        rootDir: ROOT_DIR,
-        query,
-      }),
+      text: await formatPreparedQueryResponse(
+        await runResearch({
+          rootDir: ROOT_DIR,
+          query,
+        }),
+      ),
     }],
   }), { useEmbeddingTracker: true }),
 );
@@ -296,15 +308,17 @@ server.tool(
   }) => ({
     content: [{
       type: "text" as const,
-      text: await runSearchByIntent({
-        rootDir: ROOT_DIR,
-        intent,
-        searchType: search_type,
-        query,
-        retrievalMode: retrieval_mode,
-        topK: top_k,
-        includeKinds: include_kinds,
-      }),
+      text: await formatPreparedQueryResponse(
+        await runSearchByIntent({
+          rootDir: ROOT_DIR,
+          intent,
+          searchType: search_type,
+          query,
+          retrievalMode: retrieval_mode,
+          topK: top_k,
+          includeKinds: include_kinds,
+        }),
+      ),
     }],
   }), { useEmbeddingTracker: true }),
 );
@@ -364,17 +378,12 @@ server.tool(
     file_path: z.string().describe("Where to save the file (relative to project root)."),
     new_content: z.string().describe("The complete file content to save."),
   },
-  withRequestActivity(async ({ file_path, new_content }) => {
-    invalidateSearchCache();
-    invalidateIdentifierSearchCache();
-    invalidateFastQueryCache(ROOT_DIR);
-    return {
-      content: [{
-        type: "text" as const,
-        text: await proposeCommit({ rootDir: ROOT_DIR, filePath: file_path, newContent: new_content }),
-      }],
-    };
-  }),
+  withRequestActivity(async ({ file_path, new_content }) => ({
+    content: [{
+      type: "text" as const,
+      text: await proposeCommit({ rootDir: ROOT_DIR, filePath: file_path, newContent: new_content }),
+    }],
+  })),
 );
 
 server.tool(
@@ -402,9 +411,6 @@ server.tool(
   },
   withRequestActivity(async ({ point_id }) => {
     const restored = await restorePoint(ROOT_DIR, point_id);
-    invalidateSearchCache();
-    invalidateIdentifierSearchCache();
-    invalidateFastQueryCache(ROOT_DIR);
     return {
       content: [{
         type: "text" as const,

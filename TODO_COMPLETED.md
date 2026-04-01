@@ -11,6 +11,12 @@
 - [x] add explicit serving-status output to `doctor` and overview surfaces so operators can see active generation, pending generation, last validation time, and freshness immediately
 - [x] define failure behavior for generation validation so the previous generation keeps serving, the failed generation is recorded, and freshness is not falsely advanced
 - [x] make prepared-index repair rebuild and validate a new generation before switching serving state, instead of mutating the live generation in place
+- [x] audit the write paths in `src/index.ts`, the checkpoint flow, and the restore flow so every code mutation records which files must be refreshed
+- [x] after `checkpoint`, synchronously refresh the prepared index so file records, identifier records, chunk artifacts, code-structure artifacts, exact-query state, and embeddings are all regenerated before the write returns
+- [x] after `restore`, perform the same synchronous refresh for all restored files so restored filesystem truth becomes query-visible without a manual reindex
+- [x] mark the active serving generation dirty immediately after a write, switch it back to fresh only after the new generation validates, and mark it blocked with a loud error if automatic refresh fails
+- [x] make prepared-index validation reject dirty or blocked active generations so stale exact and related queries fail loudly instead of answering from mismatched filesystem truth
+- [x] expose explicit freshness state on prepared MCP query responses and verify that `symbol`, `word`, `search`, and `research` all see post-write truth without a manual reindex
 
 ## maintenance
 

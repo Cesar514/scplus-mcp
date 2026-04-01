@@ -110,6 +110,7 @@ describe("exact-tools", () => {
         name: "symbol",
         arguments: { query: "verifyToken" },
       }));
+      assert.match(symbolResult, /Index freshness: fresh \| Active generation: 1/);
       assert.match(symbolResult, /Exact symbol matches for "verifyToken" \(1\)/);
       assert.match(symbolResult, /src\/auth\/jwt\.ts:3-5/);
 

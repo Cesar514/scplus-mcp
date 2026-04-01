@@ -18,15 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 2: Freshness After Writes
-
-- [ ] Audit the write paths in [src/index.ts](/home/cesar514/Documents/agent_programming/contextplus/src/index.ts), the checkpoint flow, and the restore flow so every code mutation records which files must be refreshed.
-- [ ] After `checkpoint`, delta-refresh the exact-query substrate, file records, symbol records, chunk artifacts, code-structure artifacts, and embedding state for the affected files instead of relying on later incidental refresh.
-- [ ] After `restore`, perform the same delta refresh for all restored files and invalidate any dependent downstream structure artifacts that rely on changed imports or symbol graphs.
-- [ ] If immediate delta refresh cannot complete, mark the active generation as dirty and refuse related search loudly instead of silently serving stale semantic state.
-- [ ] Add explicit “fresh”, “dirty”, and “blocked” states to query responses so agents can tell whether the index reflects post-write filesystem truth.
-- [ ] Verify that a write followed by `symbol`, `word`, `search`, and `research` sees the updated code without a manual full reindex.
-
 ## Phase 3: Persistent Backend Unification
 
 - [ ] Replace the repeated shell-out backend model in [cli/internal/backend/client.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/backend/client.go) with a persistent service connection that survives across UI actions.
