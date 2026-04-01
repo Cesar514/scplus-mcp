@@ -2,7 +2,14 @@
 // FEATURE: Explicit schemas for core and full indexing pipeline state
 
 import { join } from "path";
-import { CONTEXTPLUS_CHECKPOINTS_DIR, CONTEXTPLUS_CONFIG_DIR, CONTEXTPLUS_DERIVED_DIR, CONTEXTPLUS_EMBEDDINGS_DIR, CONTEXTPLUS_MEMORIES_DIR } from "../core/project-layout.js";
+import {
+  CONTEXTPLUS_CHECKPOINTS_DIR,
+  CONTEXTPLUS_CONFIG_DIR,
+  CONTEXTPLUS_DERIVED_DIR,
+  CONTEXTPLUS_EMBEDDINGS_DIR,
+  CONTEXTPLUS_INDEX_DB_FILE,
+  CONTEXTPLUS_MEMORIES_DIR,
+} from "../core/project-layout.js";
 
 export type IndexMode = "core" | "full";
 export type IndexStageName = "bootstrap" | "file-search" | "identifier-search" | "full-artifacts";
@@ -35,6 +42,12 @@ export interface IndexFailureSemantics {
   recovery: "rerun-from-persisted-artifacts";
 }
 
+export interface IndexStorageContract {
+  substrate: "sqlite";
+  databasePath: string;
+  mirrorPolicy: "sqlite-authoritative-json-mirrors";
+}
+
 export interface IndexContractMetadata {
   contractVersion: number;
   artifactVersion: number;
@@ -42,6 +55,7 @@ export interface IndexContractMetadata {
   supportedModes: IndexMode[];
   stageOrder: IndexPhase[];
   stageNames: IndexStageName[];
+  storage: IndexStorageContract;
   invalidation: IndexInvalidationContract;
   failureSemantics: IndexFailureSemantics;
 }
@@ -125,8 +139,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 1;
-export const INDEX_ARTIFACT_VERSION = 3;
+export const INDEX_CONTRACT_VERSION = 2;
+export const INDEX_ARTIFACT_VERSION = 4;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -165,6 +179,12 @@ export const INDEX_FAILURE_SEMANTICS: IndexFailureSemantics = {
   recovery: "rerun-from-persisted-artifacts",
 };
 
+export const INDEX_STORAGE_CONTRACT: IndexStorageContract = {
+  substrate: "sqlite",
+  databasePath: CONTEXTPLUS_INDEX_DB_FILE,
+  mirrorPolicy: "sqlite-authoritative-json-mirrors",
+};
+
 export function buildIndexContract(): IndexContractMetadata {
   return {
     contractVersion: INDEX_CONTRACT_VERSION,
@@ -173,6 +193,7 @@ export function buildIndexContract(): IndexContractMetadata {
     supportedModes: ["core", "full"],
     stageOrder: INDEX_STAGE_ORDER,
     stageNames: INDEX_STAGE_NAMES,
+    storage: INDEX_STORAGE_CONTRACT,
     invalidation: INDEX_INVALIDATION_CONTRACT,
     failureSemantics: INDEX_FAILURE_SEMANTICS,
   };
@@ -186,6 +207,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       dependencies: [],
       modes: ["core", "full"],
       outputs: [
+        CONTEXTPLUS_INDEX_DB_FILE,
         join(CONTEXTPLUS_CONFIG_DIR, "project.json"),
         join(CONTEXTPLUS_CONFIG_DIR, "context-tree.txt"),
         join(CONTEXTPLUS_CONFIG_DIR, "file-manifest.json"),

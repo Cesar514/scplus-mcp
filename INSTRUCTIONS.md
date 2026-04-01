@@ -53,7 +53,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 | `CONTEXTPLUS_EMBED_TRACKER_MAX_FILES`   | `8`                | Max changed files per tracker tick (hard-capped to 5-10)      |
 | `CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS` | `700`              | Debounce before applying tracker refresh                      |
 
-Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, memory graph store, restore-point manifest, and persisted file/identifier search state. `index` defaults to `full` mode, which also persists chunk and code-structure artifacts under `.contextplus/derived/`. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, invalidation rules, and crash-only failure semantics. Later `search` calls refresh only changed files before querying the prepared indexes, while the realtime tracker keeps ignoring `.contextplus/`.
+Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, memory graph store, restore-point manifest, and persisted file/identifier search state. The durable full-engine index substrate now lives in `.contextplus/state/index.sqlite`, while inspectable JSON mirrors remain under `.contextplus/config/`, `.contextplus/embeddings/`, and `.contextplus/derived/`. `index` defaults to `full` mode, which also persists chunk and code-structure artifacts under `.contextplus/derived/`. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, sqlite-backed storage, invalidation rules, and crash-only failure semantics. Later `search` calls refresh only changed files before querying the prepared indexes, while the realtime tracker keeps ignoring `.contextplus/`.
 
 ## Fast Execute Mode (Mandatory)
 
@@ -129,7 +129,7 @@ Strict order within every file:
 
 | Tool                         | When to Use                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists file, identifier, chunk, and code-structure indexes plus indexing status, stage state, and versioned contract metadata. |
+| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists the authoritative sqlite index substrate at `.contextplus/state/index.sqlite`, plus mirrored file, identifier, chunk, and code-structure artifacts, indexing status, stage state, and versioned contract metadata. |
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse codebase by meaning, not directory structure.                               |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |

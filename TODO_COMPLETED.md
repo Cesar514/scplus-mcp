@@ -24,6 +24,8 @@
 
 ## maintenance
 
+- [x] finish roadmap step 02.5 by moving the durable full-engine index substrate onto sqlite-backed local storage under `.contextplus/state/index.sqlite`
+- [x] verify roadmap step 02.5 directly with build, tests, a real full index run, and direct sqlite artifact inspection
 - [x] finish roadmap step 02 by splitting the indexing pipeline into durable rerunnable stages with persisted dependencies and strict core prerequisites for `full`
 - [x] verify roadmap step 02 directly with build, tests, a real full index run, and on-disk inspection of `.contextplus/config/index-stages.json`
 - [x] create an ExecPlan for the 17-step full-engine roadmap and keep it updated as implementation proceeds

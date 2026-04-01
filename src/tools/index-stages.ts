@@ -3,6 +3,7 @@
 
 import { access, readFile, writeFile } from "fs/promises";
 import { basename, join, resolve } from "path";
+import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { getContextTree } from "./context-tree.js";
 import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
@@ -255,7 +256,8 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
 
   await writeFile(runtime.paths.configPath, JSON.stringify(runtime.config, null, 2) + "\n", "utf8");
   await writeFile(runtime.paths.treePath, tree + "\n", "utf8");
-  await writeFile(runtime.paths.manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config, runtime.paths.configPath);
+  await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest, runtime.paths.manifestPath);
   await writeJsonIfMissing(runtime.paths.graphPath, { nodes: {}, edges: {} });
   await writeJsonIfMissing(runtime.paths.restorePath, []);
 
@@ -281,28 +283,25 @@ export async function createIndexRuntime(options: { rootDir: string; mode?: Inde
 export async function saveIndexStatus(runtime: IndexStageRuntime, status: IndexStatus, startedAtMs: number): Promise<void> {
   status.lastUpdatedAt = new Date().toISOString();
   status.elapsedMs = Date.now() - startedAtMs;
-  await writeFile(runtime.paths.indexStatusPath, JSON.stringify(status, null, 2) + "\n", "utf8");
+  await saveIndexArtifact(runtime.rootDir, "index-status", status, runtime.paths.indexStatusPath);
 }
 
 export async function saveIndexStageState(runtime: IndexStageRuntime, stageState: PersistedIndexStageState): Promise<void> {
   stageState.generatedAt = new Date().toISOString();
-  await writeFile(runtime.paths.indexStageStatePath, JSON.stringify(stageState, null, 2) + "\n", "utf8");
+  await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState, runtime.paths.indexStageStatePath);
 }
 
 export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<PersistedIndexStageState> {
-  try {
-    return JSON.parse(await readFile(runtime.paths.indexStageStatePath, "utf8"));
-  } catch {
-    return buildStageState(runtime.mode);
-  }
+  return loadIndexArtifact(runtime.rootDir, "index-stage-state", runtime.paths.indexStageStatePath, () => buildStageState(runtime.mode));
 }
 
 export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: string): Promise<IndexStatus> {
-  try {
-    return JSON.parse(await readFile(runtime.paths.indexStatusPath, "utf8"));
-  } catch {
-    return buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode));
-  }
+  return loadIndexArtifact(
+    runtime.rootDir,
+    "index-status",
+    runtime.paths.indexStatusPath,
+    () => buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode)),
+  );
 }
 
 export async function executeIndexStage(options: ExecuteIndexStageOptions): Promise<void> {

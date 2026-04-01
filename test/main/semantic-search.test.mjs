@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,17 @@ import {
   invalidateSearchCache,
   semanticCodeSearch,
 } from "../../build/tools/semantic-search.js";
+
+function readArtifactFromDb(dbPath, artifactKey) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    if (!row) return null;
+    return JSON.parse(row.artifact_json);
+  } finally {
+    db.close();
+  }
+}
 
 describe("semantic-search", () => {
   describe("invalidateSearchCache", () => {
@@ -167,10 +179,15 @@ describe("semantic-search", () => {
             "utf8",
           ),
         );
+        const dbState = readArtifactFromDb(
+          join(rootDir, ".contextplus", "state", "index.sqlite"),
+          "file-search-index",
+        );
 
         assert.match(secondResult, /Index refresh: 1 changed, 0 removed/);
         assert.match(secondResult, /alpha\.ts/);
         assert.match(refreshedState.files["alpha.ts"].doc.content, /saluteAlpha/);
+        assert.match(dbState.files["alpha.ts"].doc.content, /saluteAlpha/);
       } finally {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });

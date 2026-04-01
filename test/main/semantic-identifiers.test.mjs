@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,17 @@ import {
   invalidateIdentifierSearchCache,
   semanticIdentifierSearch,
 } from "../../build/tools/semantic-identifiers.js";
+
+function readArtifactFromDb(dbPath, artifactKey) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT artifact_json FROM index_artifacts WHERE artifact_key = ?").get(artifactKey);
+    if (!row) return null;
+    return JSON.parse(row.artifact_json);
+  } finally {
+    db.close();
+  }
+}
 
 describe("semantic-identifiers", () => {
   it("exports semanticIdentifierSearch as a function", async () => {
@@ -95,10 +107,15 @@ describe("semantic-identifiers", () => {
           "utf8",
         ),
       );
+      const dbState = readArtifactFromDb(
+        join(rootDir, ".contextplus", "state", "index.sqlite"),
+        "identifier-search-index",
+      );
 
       assert.match(secondResult, /Index refresh: 1 changed, 0 removed/);
       assert.match(secondResult, /function welcomeUser/);
       assert.equal(refreshedState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
+      assert.equal(dbState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
     } finally {
       Ollama.prototype.embed = originalEmbed;
       await rm(rootDir, { recursive: true, force: true });

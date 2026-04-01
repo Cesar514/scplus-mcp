@@ -13,6 +13,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-03-31 19:19Z) Created the ExecPlan and aligned it with the existing 17-step roadmap in `TODO.md`.
 - [x] (2026-03-31 19:34Z) Completed Step 01. Added a shared indexing contract module, versioned persisted schema metadata, explicit invalidation semantics, explicit failure semantics, and direct test coverage for those fields.
 - [x] (2026-03-31 19:35Z) Completed Step 02. Split the indexing pipeline into durable rerunnable stages, persisted stage state in `.contextplus/config/index-stages.json`, and added direct rerun coverage that enforces `core` prerequisites before `full-artifacts`.
+- [x] (2026-04-01 10:39Z) Completed Step 02.5. Moved the durable index substrate into `.contextplus/state/index.sqlite`, made SQLite the authoritative storage contract, and kept inspectable JSON mirrors for direct artifact inspection.
 - [ ] Step 03. Add chunk-level AST indexing as a first-class artifact.
 - [ ] Step 04. Add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring.
 - [ ] Step 05. Add stronger incremental refresh with file hashes, chunk hashes, and dependency-aware invalidation.
@@ -43,6 +44,9 @@ The work is large enough that it must be delivered in validated increments. Each
 - Observation: The staged pipeline benefits from explicit stage-state persistence rather than inferring progress from individual artifact files.
   Evidence: Step 02 added `.contextplus/config/index-stages.json`, and direct verification showed durable stage dependencies, stage-local run counts, and completed-state gating for `full-artifacts`.
 
+- Observation: The current indexing surfaces can move to SQLite with relatively small behavioral changes when JSON mirrors remain as projections.
+  Evidence: Step 02.5 replaced the JSON files as the source of truth for config, status, stage, file-search, identifier-search, chunk, structure, and full-manifest state while keeping the mirror files intact for direct inspection and test compatibility.
+
 ## Decision Log
 
 - Decision: Put the long-running program into `plans/full-engine-roadmap.md` under version control before making further large edits.
@@ -61,9 +65,13 @@ The work is large enough that it must be delivered in validated increments. Each
   Rationale: Step 02 needs durable rerunnable stages and dependency gating; a dedicated stage-state file is the simplest explicit representation and can be validated independently of transient status fields.
   Date/Author: 2026-03-31 / Codex
 
+- Decision: Make SQLite authoritative for durable index state, but keep JSON mirrors as exported projections during the transition.
+  Rationale: Step 02.5 needs one explicit repo-local database substrate for future retrieval and ranking work, but preserving inspectable mirrors avoids breaking current workflows and strengthens direct verification.
+  Date/Author: 2026-04-01 / Codex
+
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01 and 02 are complete and verified. Step 03 is next and will focus on promoting chunk-level AST indexing from a derived helper to a first-class artifact with explicit durable semantics.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, and 02.5 are complete and verified. Step 03 is next and will focus on promoting chunk-level AST indexing from a mirrored artifact into a clearer first-class contract.
 
 ## Context and Orientation
 
@@ -88,7 +96,9 @@ Step 01 introduced an explicit indexing contract module and schema definitions r
 
 Step 02 refactored the pipeline into separately rerunnable stages without changing the durable meaning of the Step 01 artifacts. The pipeline now persists stage records and can rerun individual stages with explicit dependency checks.
 
-Step 03 will strengthen chunk indexing itself so chunk artifacts have a clearer first-class contract and more explicit AST-oriented semantics than the current helper-oriented full-artifact path.
+Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage so later retrieval, refresh, and ranking work can build on one explicit transactional store instead of only scattered JSON artifacts.
+
+Step 03 will now strengthen chunk indexing itself so chunk artifacts have a clearer first-class contract and more explicit AST-oriented semantics than the current helper-oriented full-artifact path.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -97,9 +107,9 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 03, formalize chunk-level AST indexing as its own durable artifact surface rather than only a byproduct of the current full-artifact builder.
+2. For Step 03, formalize chunk-level AST indexing as a clearer first-class contract on top of the sqlite-backed substrate rather than only a helper-oriented mirrored artifact.
 3. Update the tests to assert the chunk-artifact contract directly.
-4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated `.contextplus` chunk artifacts.
+4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated chunk artifacts in both SQLite and the exported mirrors.
 5. Commit Step 03 with a message that names the chunk-indexing milestone.
 
 Verification transcript used for Step 01:
@@ -117,6 +127,14 @@ Verification transcript used for Step 02:
     node build/index.js index --mode=full
 
 The observed outcome for Step 02 was a passing build, a passing test suite including direct rerun coverage for individual stages, and a durable `.contextplus/config/index-stages.json` file whose `full-artifacts` record depends on completed `bootstrap`, `file-search`, and `identifier-search` stages.
+
+Verification transcript used for Step 02.5:
+
+    npm run build
+    npm test
+    node build/index.js index --mode=full
+
+The observed outcome for Step 02.5 was a passing build, a passing test suite with direct SQLite assertions, a durable `.contextplus/state/index.sqlite` database populated with the authoritative index artifacts, and exported JSON mirrors that matched the database-backed contract.
 
 ## Validation and Acceptance
 
@@ -143,6 +161,14 @@ For Step 02 specifically, acceptance means:
 - rerunning `full-artifacts` without completed core prerequisites fails loudly
 - direct rerun tests cover stage dependency enforcement and successful independent stage execution
 - `node build/index.js index --mode=full` writes completed stage records on disk
+
+For Step 02.5 specifically, acceptance means:
+
+- the authoritative durable index substrate lives at `.contextplus/state/index.sqlite`
+- config, status, stage, file-search, identifier, chunk, structure, and full-manifest state are persisted through SQLite as the source of truth
+- inspectable JSON mirrors are still exported under `.contextplus/config/`, `.contextplus/embeddings/`, and `.contextplus/derived/`
+- direct tests assert SQLite-backed storage behavior instead of JSON-only persistence
+- `node build/index.js index --mode=full` produces a populated SQLite database and matching exported mirrors
 
 ## Idempotence and Recovery
 

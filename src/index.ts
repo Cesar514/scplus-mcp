@@ -202,8 +202,9 @@ server.resource(
 server.tool(
   "index",
   "Create or refresh the .contextplus project state for this repo. Builds the repo-local Context+ layout, " +
-  "writes project config plus a context-tree snapshot, eagerly prepares persisted file and identifier search indexes, " +
-  "and in full mode also persists chunk and code-structure artifacts under .contextplus/derived with explicit contract metadata and indexing status under .contextplus/config.",
+  "writes project config plus a context-tree snapshot, persists the durable index substrate in .contextplus/state/index.sqlite, " +
+  "mirrors inspectable JSON artifacts under .contextplus/config, .contextplus/embeddings, and .contextplus/derived, " +
+  "and in full mode also persists chunk and code-structure artifacts with explicit contract metadata and indexing status.",
   {
     mode: z.enum(["core", "full"]).optional().describe("Indexing mode. Defaults to full and persists derived chunk and code-structure artifacts."),
   },

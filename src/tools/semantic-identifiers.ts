@@ -1,7 +1,7 @@
 // Identifier-level semantic retrieval with persisted incremental symbol indexing
 // FEATURE: Symbol intelligence via semantic search over definitions and usages
 
-import { readFile, stat, writeFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
@@ -12,7 +12,8 @@ import {
   type EmbeddingCache,
 } from "../core/embeddings.js";
 import { join, resolve } from "path";
-import { CONTEXTPLUS_EMBEDDINGS_DIR, ensureContextplusLayout } from "../core/project-layout.js";
+import { CONTEXTPLUS_EMBEDDINGS_DIR } from "../core/project-layout.js";
+import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 
 export interface SemanticIdentifierSearchOptions {
   rootDir: string;
@@ -191,19 +192,20 @@ function removeFileScopedCacheEntries(cache: EmbeddingCache, relativePath: strin
 }
 
 async function loadPersistedIdentifierIndexState(rootDir: string): Promise<PersistedIdentifierIndexState> {
-  try {
-    return JSON.parse(await readFile(join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE), "utf-8"));
-  } catch {
-    return { generatedAt: "", files: {} };
-  }
+  return loadIndexArtifact(
+    rootDir,
+    "identifier-search-index",
+    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE),
+    () => ({ generatedAt: "", files: {} }),
+  );
 }
 
 async function savePersistedIdentifierIndexState(rootDir: string, state: PersistedIdentifierIndexState): Promise<void> {
-  await ensureContextplusLayout(rootDir);
-  await writeFile(
+  await saveIndexArtifact(
+    rootDir,
+    "identifier-search-index",
+    state,
     join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE),
-    JSON.stringify(state, null, 2) + "\n",
-    "utf-8",
   );
 }
 
