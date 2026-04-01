@@ -20,7 +20,7 @@ interface PersistedIdentifierDoc {
 }
 
 interface PersistedIdentifierFileEntry {
-  fingerprint: string;
+  contentHash: string;
   docs: PersistedIdentifierDoc[];
   lines: string[];
 }

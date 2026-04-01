@@ -61,7 +61,7 @@ describe("chunk-index", () => {
       assert.deepEqual(runChunk.symbolPath, ["run"]);
       assert.equal(runChunk.lineCount >= 1, true);
       assert.match(runChunk.content, /export function run/);
-      assert.match(runChunk.contentHash, /^\d+:-?\d+$/);
+      assert.match(runChunk.contentHash, /^[a-f0-9]{64}$/);
 
       assert.equal(Array.isArray(fallbackChunks), true);
       assert.equal(fallbackChunks.length, 1);
@@ -70,7 +70,7 @@ describe("chunk-index", () => {
       assert.equal(fallbackChunks[0].symbolName, "file");
       assert.deepEqual(fallbackChunks[0].symbolPath, []);
       assert.match(fallbackChunks[0].content, /console\.log/);
-      assert.match(fallbackChunks[0].contentHash, /^\d+:-?\d+$/);
+      assert.match(fallbackChunks[0].contentHash, /^[a-f0-9]{64}$/);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
@@ -102,8 +102,8 @@ describe("chunk-index", () => {
       const chunkState = readArtifactFromDb(dbPath, "chunk-search-index");
       const chunkCache = readArtifactFromDb(dbPath, "embedding-cache:chunk-embeddings-cache.json");
 
-      assert.equal(firstRefresh.state.artifactVersion, 6);
-      assert.equal(firstRefresh.state.contractVersion, 4);
+      assert.equal(firstRefresh.state.artifactVersion, 7);
+      assert.equal(firstRefresh.state.contractVersion, 5);
       assert.equal(firstRefresh.state.mode, "full");
       assert.equal(firstRefresh.stats.totalFiles, 1);
       assert.equal(firstRefresh.stats.changedFiles, 1);

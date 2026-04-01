@@ -1,7 +1,7 @@
 // Full-index artifact builder for chunk and structural repo intelligence
 // FEATURE: Persisted full indexing mode state under .contextplus/derived
 
-import { readFile, stat } from "fs/promises";
+import { readFile } from "fs/promises";
 import { extname, resolve } from "path";
 import { flattenSymbols, analyzeFile, isSupportedFile } from "../core/parser.js";
 import { ensureContextplusLayout } from "../core/project-layout.js";
@@ -10,6 +10,12 @@ import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest }
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { refreshChunkIndexState, warmChunkEmbeddings, type ChunkArtifactStats, type ChunkIndexProgress } from "./chunk-index.js";
 import { refreshHybridChunkIndex, refreshHybridIdentifierIndex, type HybridRetrievalStats } from "./hybrid-retrieval.js";
+import {
+  buildDependencyHash,
+  computeFileContentHash,
+  normalizeRelativePath,
+  resolveLocalDependencyPath,
+} from "./invalidation.js";
 
 export interface FullIndexArtifactOptions {
   rootDir: string;
@@ -65,6 +71,7 @@ interface StructureArtifact {
   header: string;
   language: string;
   lineCount: number;
+  dependencyPaths: string[];
   imports: ImportInfo[];
   exports: ExportInfo[];
   calls: CallInfo[];
@@ -79,7 +86,8 @@ interface StructureArtifact {
 }
 
 interface PersistedStructureFileEntry {
-  fingerprint: string;
+  contentHash: string;
+  dependencyHash: string;
   artifact: StructureArtifact;
 }
 
@@ -91,14 +99,6 @@ interface PersistedStructureIndexState {
 export interface FullIndexArtifactResult {
   manifest: FullArtifactManifest;
   stats: FullIndexArtifactStats;
-}
-
-function normalizeRelativePath(path: string): string {
-  return path.replace(/\\/g, "/");
-}
-
-function buildFingerprint(size: number, mtimeMs: number): string {
-  return `${size}:${Math.floor(mtimeMs)}`;
 }
 
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
@@ -253,7 +253,11 @@ function extractCalls(lines: string[], language: string): CallInfo[] {
   return calls.slice(0, 100);
 }
 
-async function buildStructureArtifactForFile(rootDir: string, relativePath: string): Promise<StructureArtifact | null> {
+async function buildStructureArtifactForFile(
+  rootDir: string,
+  relativePath: string,
+  availablePaths: Set<string>,
+): Promise<StructureArtifact | null> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
   if (!isSupportedFile(fullPath)) return null;
@@ -263,6 +267,10 @@ async function buildStructureArtifactForFile(rootDir: string, relativePath: stri
     const lines = raw.split("\n");
     const analysis = await analyzeFile(fullPath);
     const language = detectLanguage(fullPath);
+    const imports = extractImports(lines, language);
+    const dependencyPaths = imports
+      .map((entry) => resolveLocalDependencyPath(normalized, entry.source, availablePaths))
+      .filter((entry): entry is string => Boolean(entry));
     const symbols = flattenSymbols(analysis.symbols).map((symbol) => ({
       name: symbol.name,
       kind: symbol.kind,
@@ -276,7 +284,8 @@ async function buildStructureArtifactForFile(rootDir: string, relativePath: stri
       header: analysis.header,
       language,
       lineCount: analysis.lineCount,
-      imports: extractImports(lines, language),
+      dependencyPaths: Array.from(new Set(dependencyPaths)).sort(),
+      imports,
       exports: extractExports(lines, language),
       calls: extractCalls(lines, language),
       symbols,
@@ -286,13 +295,15 @@ async function buildStructureArtifactForFile(rootDir: string, relativePath: stri
   }
 }
 
-async function refreshStructureIndexState(
+export async function refreshStructureIndexState(
   rootDir: string,
   onProgress?: (progress: FullIndexProgress) => Promise<void> | void,
 ): Promise<{ state: PersistedStructureIndexState; stats: StructureArtifactStats }> {
   const previous = await loadStructureIndexState(rootDir);
   const entries = await walkDirectory({ rootDir, depthLimit: 0 });
   const files = entries.filter((entry) => !entry.isDirectory && isSupportedFile(entry.path));
+  const availablePaths = new Set(files.map((entry) => normalizeRelativePath(entry.relativePath)));
+  const contentHashes: Record<string, string> = {};
   const nextFiles: Record<string, PersistedStructureFileEntry> = {};
   const seen = new Set<string>();
   let processedFiles = 0;
@@ -300,16 +311,33 @@ async function refreshStructureIndexState(
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
-    const fileStat = await stat(file.path);
-    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
-    const previousEntry = previous.files[relativePath];
+    contentHashes[relativePath] = await computeFileContentHash(file.path);
+  }
 
-    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+  for (const file of files) {
+    const relativePath = normalizeRelativePath(file.relativePath);
+    const contentHash = contentHashes[relativePath];
+    const previousEntry = previous.files[relativePath];
+    const dependencyHash = previousEntry
+      ? buildDependencyHash(previousEntry.artifact.dependencyPaths ?? [], contentHashes)
+      : "";
+
+    if (
+      previousEntry
+      && previousEntry.contentHash === contentHash
+      && previousEntry.dependencyHash === dependencyHash
+    ) {
       nextFiles[relativePath] = previousEntry;
     } else {
-      const artifact = await buildStructureArtifactForFile(rootDir, relativePath);
+      const artifact = await buildStructureArtifactForFile(rootDir, relativePath, availablePaths);
       changedFiles++;
-      if (artifact) nextFiles[relativePath] = { fingerprint, artifact };
+      if (artifact) {
+        nextFiles[relativePath] = {
+          contentHash,
+          dependencyHash: buildDependencyHash(artifact.dependencyPaths, contentHashes),
+          artifact,
+        };
+      }
     }
 
     seen.add(relativePath);

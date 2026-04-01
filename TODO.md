@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 05 and verify it directly
-- [ ] commit the verified step 05 work
+- [ ] finish roadmap step 06 and verify it directly
+- [ ] commit the verified step 06 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 05. add a stronger incremental refresh engine with file hashes, chunk hashes, and dependency-aware invalidation so reindexing recomputes only the necessary artifacts
 - [ ] 06. persist richer code-structure artifacts per file and module, including imports, exports, call graphs, ownership edges, and file-to-symbol mappings
 - [ ] 07. build a unified ranking engine that can combine chunk, file, identifier, lexical, semantic, structural, and memory evidence in one search surface
 - [ ] 08. make `search` the canonical query entrypoint over those precomputed artifacts and remove overlapping or weaker search surfaces after callers are migrated

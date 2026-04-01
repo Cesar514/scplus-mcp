@@ -1,7 +1,7 @@
 // Identifier-level semantic retrieval with persisted incremental symbol indexing
 // FEATURE: Symbol intelligence via semantic search over definitions and usages
 
-import { readFile, stat } from "fs/promises";
+import { readFile } from "fs/promises";
 import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../core/embeddings.js";
 import { resolve } from "path";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { computeFileContentHash, normalizeRelativePath } from "./invalidation.js";
 
 export interface SemanticIdentifierSearchOptions {
   rootDir: string;
@@ -79,7 +80,7 @@ export interface IdentifierIndexStats {
 }
 
 interface PersistedIdentifierFileEntry {
-  fingerprint: string;
+  contentHash: string;
   docs: IdentifierDoc[];
   lines: string[];
 }
@@ -168,14 +169,6 @@ function normalizeKinds(kinds?: string[]): Set<string> | null {
   return normalized.length > 0 ? new Set(normalized) : null;
 }
 
-function normalizeRelativePath(path: string): string {
-  return path.replace(/\\/g, "/");
-}
-
-function buildFingerprint(size: number, mtimeMs: number): string {
-  return `${size}:${Math.floor(mtimeMs)}`;
-}
-
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
@@ -208,7 +201,7 @@ async function buildIdentifierDocsForFile(rootDir: string, relativePath: string)
     const analysis = await analyzeFile(fullPath);
     const flat = flattenSymbols(analysis.symbols);
     return {
-      fingerprint: "",
+      contentHash: "",
       docs: flat.map((symbol) => ({
         id: `${normalized}:${symbol.name}:${symbol.line}`,
         path: normalized,
@@ -242,11 +235,10 @@ async function refreshPersistedIdentifierIndexState(
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
-    const fileStat = await stat(file.path);
-    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
+    const contentHash = await computeFileContentHash(file.path);
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+    if (previousEntry && previousEntry.contentHash === contentHash) {
       nextFiles[relativePath] = previousEntry;
     } else {
       const nextEntry = await buildIdentifierDocsForFile(rootDir, relativePath);
@@ -254,7 +246,7 @@ async function refreshPersistedIdentifierIndexState(
       if (nextEntry) {
         nextFiles[relativePath] = {
           ...nextEntry,
-          fingerprint,
+          contentHash,
         };
       }
     }

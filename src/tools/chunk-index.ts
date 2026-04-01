@@ -1,13 +1,14 @@
 // Chunk-level AST indexing for durable sqlite-backed retrieval artifacts
 // FEATURE: First-class chunk index contract for full-engine code retrieval
 
-import { readFile, stat } from "fs/promises";
+import { readFile } from "fs/promises";
 import { resolve } from "path";
 import { fetchEmbedding, getEmbeddingBatchSize, loadEmbeddingCache, saveEmbeddingCache } from "../core/embeddings.js";
 import { analyzeFile, flattenSymbols, isSupportedFile, type SymbolKind, type SymbolLocation } from "../core/parser.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
+import { computeFileContentHash, hashTextContent, normalizeRelativePath } from "./invalidation.js";
 
 export interface ChunkArtifact {
   id: string;
@@ -26,7 +27,7 @@ export interface ChunkArtifact {
 }
 
 export interface PersistedChunkFileEntry {
-  fingerprint: string;
+  contentHash: string;
   chunks: ChunkArtifact[];
 }
 
@@ -66,22 +67,6 @@ const CHUNK_CACHE_FILE = "chunk-embeddings-cache.json";
 const MAX_CHUNK_CHARS = 6000;
 const MAX_FALLBACK_FILE_CHARS = 6000;
 
-function normalizeRelativePath(path: string): string {
-  return path.replace(/\\/g, "/");
-}
-
-function buildFingerprint(size: number, mtimeMs: number): string {
-  return `${size}:${Math.floor(mtimeMs)}`;
-}
-
-function hashText(text: string): string {
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-  }
-  return String(hash);
-}
-
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
@@ -96,7 +81,7 @@ function isCurrentChunkArtifact(chunk: Partial<ChunkArtifact> | undefined): bool
 
 function canReuseChunkEntry(entry: PersistedChunkFileEntry | undefined): boolean {
   if (!entry) return false;
-  return entry.chunks.every((chunk) => isCurrentChunkArtifact(chunk));
+  return typeof entry.contentHash === "string" && entry.chunks.every((chunk) => isCurrentChunkArtifact(chunk));
 }
 
 function getChunkId(relativePath: string, symbol: Pick<ChunkArtifact, "line" | "endLine" | "symbolName" | "signature">): string {
@@ -136,7 +121,7 @@ function buildSymbolChunks(relativePath: string, header: string, symbols: Symbol
       endLine: symbol.endLine,
       lineCount: Math.max(1, symbol.endLine - symbol.line + 1),
       content,
-      contentHash: `${content.length}:${hashText(content)}`,
+      contentHash: hashTextContent(content),
     });
   }
   return chunks;
@@ -158,7 +143,7 @@ function buildFallbackChunk(relativePath: string, header: string, content: strin
     endLine: Math.max(1, lineCount),
     lineCount: Math.max(1, lineCount),
     content: trimmed,
-    contentHash: `${trimmed.length}:${hashText(trimmed)}`,
+    contentHash: hashTextContent(trimmed),
   }];
 }
 
@@ -208,16 +193,15 @@ export async function refreshChunkIndexState(
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
-    const fileStat = await stat(file.path);
-    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
+    const contentHash = await computeFileContentHash(file.path);
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.fingerprint === fingerprint && canReuseChunkEntry(previousEntry)) {
+    if (previousEntry && previousEntry.contentHash === contentHash && canReuseChunkEntry(previousEntry)) {
       nextFiles[relativePath] = previousEntry;
     } else {
       const chunks = await buildChunkArtifactsForFile(rootDir, relativePath);
       changedFiles++;
-      if (chunks && chunks.length > 0) nextFiles[relativePath] = { fingerprint, chunks };
+      if (chunks && chunks.length > 0) nextFiles[relativePath] = { contentHash, chunks };
     }
 
     seen.add(relativePath);
@@ -266,7 +250,7 @@ export async function warmChunkEmbeddings(
 
   for (const doc of docs) {
     const text = `${doc.header} ${doc.symbolName ?? ""} ${doc.signature ?? ""} ${doc.path} ${doc.content}`;
-    const hash = `${text.length}:${hashText(text)}`;
+    const hash = hashTextContent(text);
     if (cache[doc.id]?.hash === hash) reusedChunks++;
     else pending.push({ key: doc.id, hash, text });
   }

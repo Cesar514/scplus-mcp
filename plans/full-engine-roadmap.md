@@ -17,7 +17,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 12:55Z) Completed the sqlite-only follow-up migration. Removed JSON mirror persistence, migrated memory graph, restore-point state, restore-point backups, embedding caches, and context-tree storage into SQLite, and made bootstrap delete legacy artifact files before rebuilding.
 - [x] (2026-04-01 14:20Z) Completed Step 03. Extracted chunk indexing into its own first-class module with explicit artifact/state/progress contracts, added direct chunk-index tests for symbol chunks, fallback chunks, and embedding-cache reuse, and verified the persisted chunk contract in SQLite after a real full index run.
 - [x] (2026-04-01 15:15Z) Completed Step 04. Added sqlite-backed hybrid chunk and identifier retrieval indexes with lexical term maps plus dense embedding-cache references, surfaced their progress/status in full indexing, and verified the persisted hybrid artifacts and ranking behavior directly.
-- [ ] Step 05. Add stronger incremental refresh with file hashes, chunk hashes, and dependency-aware invalidation.
+- [x] (2026-04-01 18:11Z) Completed Step 05. Replaced size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation driven by local import hashes, then verified both same-size content changes and dependent-file refresh behavior directly.
 - [ ] Step 06. Persist richer code-structure artifacts per file and module.
 - [ ] Step 07. Build a unified ranking engine across chunk, file, identifier, lexical, semantic, structural, and memory evidence.
 - [ ] Step 08. Make `search` the canonical query entrypoint over the precomputed artifacts.
@@ -76,7 +76,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, and Step 04 are complete and verified. Step 05 is next and will focus on stronger invalidation and refresh fidelity.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, and Step 05 are complete and verified. Step 06 is next and will deepen the persisted code-structure model beyond the current imports/exports/calls baseline.
 
 ## Context and Orientation
 
@@ -105,7 +105,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 now needs to make refresh and invalidation smarter than the current size-plus-mtime fingerprints.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -114,10 +114,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 05, upgrade refresh and invalidation to use file hashes, chunk hashes, and dependency-aware recomputation instead of only size-plus-mtime fingerprints.
-3. Update the tests to assert selective recomputation and dependency-aware invalidation directly.
+2. For Step 06, expand the persisted structure artifacts so they capture richer module relationships, ownership edges, and file-to-symbol mappings without relying on transient recomputation.
+3. Update the tests to assert the richer structure contracts directly.
 4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the refreshed artifacts in SQLite.
-5. Commit Step 05 with a message that names the invalidation milestone.
+5. Commit Step 06 with a message that names the richer structure milestone.
 
 Verification transcript used for Step 01:
 
@@ -187,13 +187,16 @@ Because the user requested a commit after each step, the rollback path is a norm
 
 Important current artifacts and commands:
 
-    .contextplus/config/project.json
-    .contextplus/config/index-status.json
-    .contextplus/embeddings/file-search-index.json
-    .contextplus/embeddings/identifier-search-index.json
-    .contextplus/derived/chunk-search-index.json
-    .contextplus/derived/code-structure-index.json
-    .contextplus/derived/full-index-manifest.json
+    .contextplus/state/index.sqlite
+    sqlite:index_artifacts/project-config
+    sqlite:index_artifacts/index-status
+    sqlite:index_artifacts/file-search-index
+    sqlite:index_artifacts/identifier-search-index
+    sqlite:index_artifacts/chunk-search-index
+    sqlite:index_artifacts/hybrid-chunk-index
+    sqlite:index_artifacts/hybrid-identifier-index
+    sqlite:index_artifacts/code-structure-index
+    sqlite:index_artifacts/full-index-manifest
 
 Current verification commands:
 
@@ -213,6 +216,6 @@ Step 01 must end with explicit shared interfaces for:
 
 These interfaces should live in the indexing domain alongside `src/tools/index-codebase.ts` and `src/tools/full-index-artifacts.ts`, and they should be imported by the callers rather than redefined in place.
 
-The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 05.
+The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 06.
 
 Plan revision note: Created the initial ExecPlan to govern the 17-step full-engine implementation program and to require one verified commit per roadmap step.

@@ -24,10 +24,10 @@ export type IndexPhase =
   | "failed";
 
 export interface IndexInvalidationContract {
-  fileArtifacts: "size-mtime-fingerprint";
-  identifierArtifacts: "size-mtime-fingerprint";
-  structureArtifacts: "size-mtime-fingerprint";
-  chunkArtifacts: "size-mtime-fingerprint";
+  fileArtifacts: "content-hash";
+  identifierArtifacts: "content-hash";
+  structureArtifacts: "content-hash-plus-dependency-hash";
+  chunkArtifacts: "content-hash-plus-chunk-content-hash";
   embeddingReuse: "content-hash";
   removedPaths: "drop-missing-entries-on-refresh";
 }
@@ -152,8 +152,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 4;
-export const INDEX_ARTIFACT_VERSION = 6;
+export const INDEX_CONTRACT_VERSION = 5;
+export const INDEX_ARTIFACT_VERSION = 7;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -179,10 +179,10 @@ export const INDEX_STAGE_NAMES: IndexStageName[] = [
 ];
 
 export const INDEX_INVALIDATION_CONTRACT: IndexInvalidationContract = {
-  fileArtifacts: "size-mtime-fingerprint",
-  identifierArtifacts: "size-mtime-fingerprint",
-  structureArtifacts: "size-mtime-fingerprint",
-  chunkArtifacts: "size-mtime-fingerprint",
+  fileArtifacts: "content-hash",
+  identifierArtifacts: "content-hash",
+  structureArtifacts: "content-hash-plus-dependency-hash",
+  chunkArtifacts: "content-hash-plus-chunk-content-hash",
   embeddingReuse: "content-hash",
   removedPaths: "drop-missing-entries-on-refresh",
 };

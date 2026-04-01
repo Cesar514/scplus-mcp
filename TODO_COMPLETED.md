@@ -24,6 +24,8 @@
 
 ## maintenance
 
+- [x] finish roadmap step 05 by replacing size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation
+- [x] verify roadmap step 05 directly with targeted invalidation tests, the full test suite, a real full index run, and direct sqlite inspection of the updated invalidation contract
 - [x] finish roadmap step 04 by persisting hybrid chunk and identifier retrieval indexes with lexical term maps plus dense embedding references in sqlite
 - [x] verify roadmap step 04 directly with build, the full test suite, a real full index run, and direct sqlite inspection of hybrid retrieval artifacts
 - [x] finish roadmap step 03 by promoting chunk-level AST indexing into a first-class sqlite-backed artifact contract

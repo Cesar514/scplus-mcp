@@ -13,6 +13,7 @@ import {
   type SearchQueryOptions,
 } from "../core/embeddings.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { computeFileContentHash, normalizeRelativePath } from "./invalidation.js";
 
 export interface SemanticSearchOptions {
   rootDir: string;
@@ -47,7 +48,7 @@ export interface FileSearchIndexStats {
 }
 
 interface PersistedFileSearchEntry {
-  fingerprint: string;
+  contentHash: string;
   doc: SearchDocument;
 }
 
@@ -102,14 +103,6 @@ function extractPlainTextHeader(content: string): string {
     if (headerLines.length >= 2) break;
   }
   return headerLines.join(" | ");
-}
-
-function normalizeRelativePath(path: string): string {
-  return path.replace(/\\/g, "/");
-}
-
-function buildFingerprint(size: number, mtimeMs: number): string {
-  return `${size}:${Math.floor(mtimeMs)}`;
 }
 
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
@@ -182,17 +175,16 @@ async function refreshPersistedFileSearchState(
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
     const fullPath = resolve(rootDir, relativePath);
-    const fileStat = await stat(fullPath);
-    const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
+    const contentHash = await computeFileContentHash(fullPath);
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+    if (previousEntry && previousEntry.contentHash === contentHash) {
       nextFiles[relativePath] = previousEntry;
     } else {
       const doc = await buildSearchDocumentForFile(rootDir, relativePath);
       changedFiles++;
       if (doc) {
-        nextFiles[relativePath] = { fingerprint, doc };
+        nextFiles[relativePath] = { contentHash, doc };
       }
     }
 
