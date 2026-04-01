@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 19 by routing `search` by explicit intent so exact questions use the fast substrate, related-item discovery stays on ranked search, and `research` is documented as the broad-context tool
+- [x] verify roadmap step 19 directly with a built-server MCP routing test, build, the full main test suite, Context+ blast-radius/lint checks, and the landing production build
+- [x] commit the verified step 19 work
 - [x] finish roadmap step 18 by exposing the fast exact-query substrate through tiny public MCP tools for exact symbol lookup, word lookup, file outlines, dependency tracing, git status, and git changes
 - [x] verify roadmap step 18 directly with a built-server MCP integration test, build, the full main test suite, and the landing production build
 - [x] commit the verified step 18 work

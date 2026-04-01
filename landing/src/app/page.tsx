@@ -89,15 +89,15 @@ const toolRefRows = [
   },
   {
     name: "search",
-    desc: "Canonical full-engine search over the persisted ranking substrate. Use search_type 'file', 'symbol', or 'mixed' to query ranked file and symbol evidence.",
+    desc: "Route repository search by intent. Use intent 'exact' for deterministic fast-substrate answers, and intent 'related' for ranked related-item and pattern discovery.",
     input:
-      "{ search_type: 'file' | 'symbol' | 'mixed', query: string, top_k?: number, include_kinds?: string[] }",
+      "{ intent: 'exact' | 'related', search_type: 'file' | 'symbol' | 'mixed', query: string, top_k?: number, include_kinds?: string[] }",
     output:
       '"1. [file] src/auth/jwt.ts (94.0% total)\n   Evidence: file 0.43 | chunk 0.28 | identifier 0.17 | structure 0.12\n2. [symbol] src/auth/session.ts#createSession (87.4% total)\n   Signature: createSession(token: string): string"',
   },
   {
     name: "research",
-    desc: "Aggregate ranked code hits, related files, subsystem summaries, and relevant hubs into one bounded research report.",
+    desc: "Broad repository research report for subsystem understanding after exact lookup and related-item search are no longer enough.",
     input: "{ query: string }",
     output:
       '"Research: \\"auth token session verification\\"\n\nCode hits:\n1. [file] src/auth/jwt.ts\n2. [file] src/auth/session.ts\n\nRelated context:\n- src/middleware/guard.ts | cluster | auth workflow\n\nSubsystem context:\n- Authentication | auth token/session pipeline\n\nHub context:\n- [manual] docs/auth.md | Auth Hub"',

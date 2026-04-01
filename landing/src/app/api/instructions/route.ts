@@ -140,8 +140,8 @@ Strict order within every file:
 | \`deps\`                       | Use for direct and reverse dependency tracing of a known indexed file. |
 | \`status\`                     | Use for tiny git worktree summaries instead of broader repository inspection. |
 | \`changes\`                    | Use for changed-file summaries and line-range hunks, optionally scoped to one file. |
-| \`search\`                     | Canonical full-engine search over persisted artifacts. Use \`search_type\` = \`file\`, \`symbol\`, or \`mixed\`. |
-| \`research\`                   | Unified research report that combines ranked code hits, related files, subsystem summaries, and hubs from prepared artifacts. |
+| \`search\`                     | Route repository search by explicit intent. Use \`intent\` = \`exact\` for deterministic fast-substrate answers and \`intent\` = \`related\` for ranked discovery. \`search_type\` stays \`file\`, \`symbol\`, or \`mixed\`. |
+| \`research\`                   | Use only for broad subsystem understanding after exact lookup and related-item search are no longer enough. |
 | \`evaluate\`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |
 | \`blast_radius\`               | Before deleting or modifying any symbol.                                           |
 | \`lint\`                       | After writing code. Catch dead code deterministically.                             |

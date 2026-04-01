@@ -31,7 +31,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 17:05Z) Expanded the roadmap before the former Step 17 after comparing Context+ against `codedb`. The next phase now adds a fast exact-query layer and low-token primitives before the CLI/UX milestone so Context+ can reduce agent token cost without sacrificing higher-order codebase understanding.
 - [x] (2026-04-01 17:37Z) Completed Step 17. Added a fast exact-query substrate over the prepared full index with hot in-memory caches for exact symbol lookup, word lookup, file outlines, reverse dependencies, and git-backed change/status tracking, then verified it with focused coverage, build, and the full suite.
 - [x] (2026-04-01 18:02Z) Completed Step 18. Exposed the fast substrate through tiny public MCP tools for exact symbol lookup, word lookup, file outlines, dependency tracing, git status, and git changes, then verified the real built server with MCP integration coverage, the full suite, and the landing production build.
-- [ ] Step 19. Refactor `search` and `research` around explicit query intent so exact questions use the fast substrate, related-item and pattern discovery uses ranked `search`, and broad subsystem understanding uses `research`.
+- [x] (2026-04-01 18:18Z) Completed Step 19. Routed `search` by explicit intent so exact questions use the fast substrate while related discovery stays on the ranked engine, tightened `research` docs around broad subsystem understanding, and verified the built server routing behavior plus the full suite and landing build.
 - [ ] Step 20. Extend evaluation to benchmark hot-query latency, estimated token cost, and end-to-end task efficiency for the hybrid fast-path plus intelligence stack.
 - [ ] Step 21. Expose the full engine cleanly through the CLI and UX layers.
 
@@ -92,7 +92,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, Step 13, Step 14, Step 15, Step 16, Step 17, and Step 18 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 19 is now next and will route exact questions, related discovery, and broad research through the right layer before the later evaluation and CLI/UX milestones.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, Step 13, Step 14, Step 15, Step 16, Step 17, Step 18, and Step 19 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 20 is now next and will measure whether the new hybrid exact-plus-intelligence stack actually improves latency and token efficiency without regressing understanding quality.
 
 ## Context and Orientation
 

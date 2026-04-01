@@ -771,6 +771,18 @@ export function formatExactSymbolResults(query: string, hits: ExactSymbolHit[]):
   return lines.join("\n");
 }
 
+export function formatPathCandidates(query: string, paths: string[]): string {
+  const lines = [`Exact file path matches for "${query}" (${paths.length})`];
+  if (paths.length === 0) {
+    lines.push("No exact file path matches.");
+    return lines.join("\n");
+  }
+  for (const path of paths) {
+    lines.push(`- ${path}`);
+  }
+  return lines.join("\n");
+}
+
 export function formatWordMatches(query: string, hits: WordMatchHit[]): string {
   const lines = [`Word hits for "${query}" (${hits.length})`];
   if (hits.length === 0) {

@@ -25,7 +25,6 @@ import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "./tools/index-reliability.js";
 import { runResearch } from "./tools/research.js";
-import { runCanonicalSearch } from "./tools/unified-ranking.js";
 import {
   formatDependencyInfo,
   formatExactSymbolResults,
@@ -41,6 +40,7 @@ import {
   lookupExactSymbol,
   lookupWord,
 } from "./tools/exact-query.js";
+import { runSearchByIntent } from "./tools/query-intent.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -380,7 +380,7 @@ server.tool(
 
 server.tool(
   "research",
-  "Aggregate code retrieval, structure-backed related files, subsystem summaries, and relevant hubs into one bounded report.",
+  "Aggregate ranked code retrieval, structure-backed related files, subsystem summaries, and relevant hubs into one bounded report. Use this for broad subsystem understanding after exact lookup or related-item search is no longer enough.",
   {
     query: z.string().describe("Natural language repository question to investigate."),
   },
@@ -409,15 +409,17 @@ server.tool(
 
 server.tool(
   "search",
-  "Search the prepared full-engine artifacts with unified ranking. Use search_type='file' for file results, " +
-  "search_type='symbol' for symbol-level results, or search_type='mixed' to rank both together.",
+  "Route repository search by explicit intent. Use intent='exact' for deterministic fast-substrate answers when you know the exact symbol or file target, " +
+  "and intent='related' for ranked related-item and pattern discovery over the prepared full-engine artifacts.",
   {
+    intent: z.enum(["exact", "related"]).describe("Query intent. exact = deterministic fast lookup, related = ranked discovery."),
     search_type: z.enum(["file", "symbol", "mixed"]).describe("Select file results, symbol results, or both together."),
     query: z.string().describe("Natural language intent to rank against the prepared full-engine artifacts."),
     top_k: z.number().optional().describe("How many ranked hits to return. Default: 5."),
     include_kinds: z.array(z.string()).optional().describe("Optional symbol-kind filter, e.g. [\"function\", \"method\", \"variable\"]."),
   },
   withRequestActivity(async ({
+    intent,
     search_type,
     query,
     top_k,
@@ -425,11 +427,12 @@ server.tool(
   }) => ({
     content: [{
       type: "text" as const,
-      text: await runCanonicalSearch({
+      text: await runSearchByIntent({
         rootDir: ROOT_DIR,
+        intent,
+        searchType: search_type,
         query,
         topK: top_k,
-        entityTypes: search_type === "mixed" ? ["file", "symbol"] : [search_type],
         includeKinds: include_kinds,
       }),
     }],
