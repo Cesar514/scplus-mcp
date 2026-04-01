@@ -24,6 +24,8 @@
 
 ## maintenance
 
+- [x] finish roadmap step 06 by expanding the persisted structure artifact into a richer per-file and per-module graph with symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges
+- [x] verify roadmap step 06 directly with targeted structure-index tests, the index integration suite, the full test suite, a real full index run, and direct sqlite inspection of the richer structure state
 - [x] finish roadmap step 05 by replacing size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation
 - [x] verify roadmap step 05 directly with targeted invalidation tests, the full test suite, a real full index run, and direct sqlite inspection of the updated invalidation contract
 - [x] finish roadmap step 04 by persisting hybrid chunk and identifier retrieval indexes with lexical term maps plus dense embedding references in sqlite

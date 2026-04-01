@@ -2,7 +2,7 @@
 // FEATURE: Persisted full indexing mode state under .contextplus/derived
 
 import { readFile } from "fs/promises";
-import { extname, resolve } from "path";
+import { dirname, extname, resolve } from "path";
 import { flattenSymbols, analyzeFile, isSupportedFile } from "../core/parser.js";
 import { ensureContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
@@ -69,6 +69,7 @@ interface CallInfo {
 interface StructureArtifact {
   path: string;
   header: string;
+  modulePath: string;
   language: string;
   lineCount: number;
   dependencyPaths: string[];
@@ -85,6 +86,43 @@ interface StructureArtifact {
   }[];
 }
 
+interface StructureSymbolRecord {
+  id: string;
+  filePath: string;
+  modulePath: string;
+  name: string;
+  kind: string;
+  line: number;
+  endLine: number;
+  signature: string;
+  parentName?: string;
+}
+
+interface OwnershipEdge {
+  sourceType: "file" | "module";
+  sourcePath: string;
+  targetType: "file" | "symbol";
+  targetId: string;
+  relation: "owns";
+}
+
+interface ModuleImportEdge {
+  fromModule: string;
+  toModule: string;
+  filePath: string;
+  dependencyPath: string;
+}
+
+interface ModuleStructureArtifact {
+  modulePath: string;
+  filePaths: string[];
+  symbolIds: string[];
+  exportedSymbolIds: string[];
+  localDependencyPaths: string[];
+  externalDependencySources: string[];
+  ownedFilePaths: string[];
+}
+
 interface PersistedStructureFileEntry {
   contentHash: string;
   dependencyHash: string;
@@ -93,7 +131,15 @@ interface PersistedStructureFileEntry {
 
 interface PersistedStructureIndexState {
   generatedAt: string;
+  artifactVersion: number;
+  contractVersion: number;
+  mode: "full";
   files: Record<string, PersistedStructureFileEntry>;
+  symbols: Record<string, StructureSymbolRecord>;
+  fileToSymbolIds: Record<string, string[]>;
+  ownershipEdges: OwnershipEdge[];
+  moduleSummaries: Record<string, ModuleStructureArtifact>;
+  moduleImportEdges: ModuleImportEdge[];
 }
 
 export interface FullIndexArtifactResult {
@@ -117,8 +163,36 @@ function detectLanguage(filePath: string): string {
   return ext.replace(/^\./, "") || "unknown";
 }
 
+function getModulePath(filePath: string): string {
+  const normalized = normalizeRelativePath(dirname(filePath));
+  return normalized === "." ? "." : normalized;
+}
+
+function getStructureSymbolId(filePath: string, symbol: { name: string; line: number; parentName?: string }): string {
+  return `${filePath}:${symbol.parentName ?? "root"}:${symbol.name}:${symbol.line}`;
+}
+
+function canReuseStructureEntry(entry: PersistedStructureFileEntry | undefined): boolean {
+  if (!entry) return false;
+  return typeof entry.contentHash === "string"
+    && typeof entry.dependencyHash === "string"
+    && typeof entry.artifact?.modulePath === "string"
+    && Array.isArray(entry.artifact?.dependencyPaths);
+}
+
 async function loadStructureIndexState(rootDir: string): Promise<PersistedStructureIndexState> {
-  return loadIndexArtifact(rootDir, "code-structure-index", () => ({ generatedAt: "", files: {} }));
+  return loadIndexArtifact(rootDir, "code-structure-index", () => ({
+    generatedAt: "",
+    artifactVersion: INDEX_ARTIFACT_VERSION,
+    contractVersion: buildIndexContract().contractVersion,
+    mode: "full",
+    files: {},
+    symbols: {},
+    fileToSymbolIds: {},
+    ownershipEdges: [],
+    moduleSummaries: {},
+    moduleImportEdges: [],
+  }));
 }
 
 async function saveStructureIndexState(rootDir: string, state: PersistedStructureIndexState): Promise<void> {
@@ -282,6 +356,7 @@ async function buildStructureArtifactForFile(
     return {
       path: normalized,
       header: analysis.header,
+      modulePath: getModulePath(normalized),
       language,
       lineCount: analysis.lineCount,
       dependencyPaths: Array.from(new Set(dependencyPaths)).sort(),
@@ -305,6 +380,11 @@ export async function refreshStructureIndexState(
   const availablePaths = new Set(files.map((entry) => normalizeRelativePath(entry.relativePath)));
   const contentHashes: Record<string, string> = {};
   const nextFiles: Record<string, PersistedStructureFileEntry> = {};
+  const symbols: Record<string, StructureSymbolRecord> = {};
+  const fileToSymbolIds: Record<string, string[]> = {};
+  const ownershipEdges: OwnershipEdge[] = [];
+  const moduleSummaries: Record<string, ModuleStructureArtifact> = {};
+  const moduleImportEdges: ModuleImportEdge[] = [];
   const seen = new Set<string>();
   let processedFiles = 0;
   let changedFiles = 0;
@@ -323,7 +403,7 @@ export async function refreshStructureIndexState(
       : "";
 
     if (
-      previousEntry
+      canReuseStructureEntry(previousEntry)
       && previousEntry.contentHash === contentHash
       && previousEntry.dependencyHash === dependencyHash
     ) {
@@ -338,6 +418,62 @@ export async function refreshStructureIndexState(
           artifact,
         };
       }
+    }
+
+    const fileEntry = nextFiles[relativePath];
+    if (fileEntry) {
+      const modulePath = fileEntry.artifact.modulePath;
+      const symbolIds: string[] = [];
+
+      for (const symbol of fileEntry.artifact.symbols) {
+        const symbolId = getStructureSymbolId(relativePath, symbol);
+        symbols[symbolId] = {
+          id: symbolId,
+          filePath: relativePath,
+          modulePath,
+          name: symbol.name,
+          kind: symbol.kind,
+          line: symbol.line,
+          endLine: symbol.endLine,
+          signature: symbol.signature,
+          parentName: symbol.parentName,
+        };
+        symbolIds.push(symbolId);
+        ownershipEdges.push({
+          sourceType: "file",
+          sourcePath: relativePath,
+          targetType: "symbol",
+          targetId: symbolId,
+          relation: "owns",
+        });
+      }
+
+      fileToSymbolIds[relativePath] = symbolIds;
+      const moduleSummary = moduleSummaries[modulePath] ?? {
+        modulePath,
+        filePaths: [],
+        symbolIds: [],
+        exportedSymbolIds: [],
+        localDependencyPaths: [],
+        externalDependencySources: [],
+        ownedFilePaths: [],
+      };
+      moduleSummary.filePaths.push(relativePath);
+      moduleSummary.ownedFilePaths.push(relativePath);
+      moduleSummary.symbolIds.push(...symbolIds);
+      moduleSummary.localDependencyPaths.push(...fileEntry.artifact.dependencyPaths);
+      moduleSummary.externalDependencySources.push(
+        ...fileEntry.artifact.imports
+          .map((entry) => entry.source)
+          .filter((source) => !source.startsWith(".")),
+      );
+      moduleSummary.exportedSymbolIds.push(
+        ...symbolIds.filter((symbolId) => {
+          const symbol = symbols[symbolId];
+          return fileEntry.artifact.exports.some((entry) => entry.name === symbol.name);
+        }),
+      );
+      moduleSummaries[modulePath] = moduleSummary;
     }
 
     seen.add(relativePath);
@@ -358,9 +494,46 @@ export async function refreshStructureIndexState(
   }
 
   const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
+  for (const [modulePath, moduleSummary] of Object.entries(moduleSummaries)) {
+    moduleSummary.filePaths = Array.from(new Set(moduleSummary.filePaths)).sort();
+    moduleSummary.ownedFilePaths = Array.from(new Set(moduleSummary.ownedFilePaths)).sort();
+    moduleSummary.symbolIds = Array.from(new Set(moduleSummary.symbolIds)).sort();
+    moduleSummary.exportedSymbolIds = Array.from(new Set(moduleSummary.exportedSymbolIds)).sort();
+    moduleSummary.localDependencyPaths = Array.from(new Set(moduleSummary.localDependencyPaths)).sort();
+    moduleSummary.externalDependencySources = Array.from(new Set(moduleSummary.externalDependencySources)).sort();
+    for (const dependencyPath of moduleSummary.localDependencyPaths) {
+      const dependencyModulePath = getModulePath(dependencyPath);
+      if (dependencyModulePath !== modulePath) {
+        moduleImportEdges.push({
+          fromModule: modulePath,
+          toModule: dependencyModulePath,
+          filePath: moduleSummary.filePaths[0],
+          dependencyPath,
+        });
+      }
+    }
+    for (const filePath of moduleSummary.filePaths) {
+      ownershipEdges.push({
+        sourceType: "module",
+        sourcePath: modulePath,
+        targetType: "file",
+        targetId: filePath,
+        relation: "owns",
+      });
+    }
+  }
   const state: PersistedStructureIndexState = {
     generatedAt: new Date().toISOString(),
+    artifactVersion: INDEX_ARTIFACT_VERSION,
+    contractVersion: buildIndexContract().contractVersion,
+    mode: "full",
     files: nextFiles,
+    symbols,
+    fileToSymbolIds,
+    ownershipEdges,
+    moduleSummaries,
+    moduleImportEdges: moduleImportEdges
+      .sort((a, b) => `${a.fromModule}:${a.toModule}:${a.filePath}`.localeCompare(`${b.fromModule}:${b.toModule}:${b.filePath}`)),
   };
   await saveStructureIndexState(rootDir, state);
   return {
