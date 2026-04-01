@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   analyzeFile,
@@ -6,6 +6,11 @@ import {
   isSupportedFile,
   SymbolKind,
 } from "../../build/core/parser.js";
+import {
+  TreeSitterParseError,
+  resetTreeSitterRuntimeStateForTests,
+  setTreeSitterParserFactoryForTests,
+} from "../../build/core/tree-sitter.js";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { join } from "path";
 
@@ -15,6 +20,10 @@ describe("parser", () => {
   before(async () => {
     await rm(FIXTURE_DIR, { recursive: true, force: true });
     await mkdir(FIXTURE_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    resetTreeSitterRuntimeStateForTests();
   });
 
   describe("isSupportedFile", () => {
@@ -118,6 +127,29 @@ describe("parser", () => {
       await writeFile(tsFile, "// H1\n// H2\nline3\nline4\nline5\n");
       const result = await analyzeFile(tsFile);
       assert.equal(result.lineCount, 6);
+    });
+
+    it("fails loudly when tree-sitter parsing fails for a supported file", async () => {
+      await writeFile(
+        tsFile,
+        "// Header line 1\n// Header line 2\n\nfunction greet(name: string): string {\n  return name;\n}\n",
+      );
+      setTreeSitterParserFactoryForTests(() => ({
+        setLanguage() {},
+        parse() {
+          throw new Error("synthetic parser failure");
+        },
+        delete() {},
+      }));
+
+      await assert.rejects(
+        () => analyzeFile(tsFile),
+        (error) => {
+          assert.ok(error instanceof TreeSitterParseError);
+          assert.match(error.message, /synthetic parser failure/);
+          return true;
+        },
+      );
     });
   });
 

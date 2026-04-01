@@ -7,6 +7,7 @@ import { loadHubSuggestionState } from "../tools/hub-suggestions.js";
 import { getRepoStatus, type RepoStatusSummary } from "../tools/exact-query.js";
 import { validatePreparedIndex, type IndexValidationReport } from "../tools/index-reliability.js";
 import { listRestorePoints } from "../git/shadow.js";
+import { getTreeSitterRuntimeStats, type TreeSitterRuntimeStats } from "../core/tree-sitter.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -43,6 +44,7 @@ export interface BridgeDoctorReport {
     suggestions: string[];
     featureGroups: string[];
   };
+  treeSitter: TreeSitterRuntimeStats;
   restorePointCount: number;
   ollama: OllamaRuntimeStatus;
 }
@@ -71,12 +73,13 @@ async function getOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
 }
 
 export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorReport> {
-  const [repoStatus, indexValidation, hubState, restorePoints, ollama] = await Promise.all([
+  const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter] = await Promise.all([
     getRepoStatus(rootDir),
     validatePreparedIndex({ rootDir, mode: "full" }),
     loadHubSuggestionState(rootDir),
     listRestorePoints(rootDir),
     getOllamaRuntimeStatus(),
+    Promise.resolve(getTreeSitterRuntimeStats()),
   ]);
   return {
     generatedAt: new Date().toISOString(),
@@ -97,6 +100,7 @@ export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorRe
       suggestions: Object.values(hubState.suggestions).map((entry) => entry.label).sort(),
       featureGroups: Object.values(hubState.featureGroups).map((entry) => entry.label).sort(),
     },
+    treeSitter,
     restorePointCount: restorePoints.length,
     ollama,
   };

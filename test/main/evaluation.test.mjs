@@ -25,11 +25,14 @@ describe("evaluation", () => {
     assert.equal(Number.isFinite(report.timings.hotExactSearchMs), true);
     assert.equal(Number.isFinite(report.timings.relatedSearchMs), true);
     assert.equal(Number.isFinite(report.timings.broadResearchMs), true);
+    assert.equal(report.treeSitter.totalParseCalls > 0, true);
+    assert.equal(report.treeSitter.totalParseFailures, 0);
     assert.equal(report.tokenCost.exactSearchEstimatedTokens < report.tokenCost.relatedSearchEstimatedTokens, true);
     assert.match(rendered, /^Evaluation suite: default/m);
     assert.match(rendered, /Retrieval quality: 3\/3/);
     assert.match(rendered, /Hybrid efficiency: 4\/4/);
     assert.match(rendered, /Artifact freshness: 3\/3/);
     assert.match(rendered, /Token cost: exact=/);
+    assert.match(rendered, /Tree-sitter stats: parses=/);
   });
 });

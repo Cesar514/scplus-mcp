@@ -1,12 +1,24 @@
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
+  TreeSitterGrammarLoadError,
+  TreeSitterParseError,
+  getTreeSitterRuntimeStats,
   parseWithTreeSitter,
   getSupportedExtensions,
   getGrammarName,
+  resetTreeSitterRuntimeStateForTests,
+  setTreeSitterGrammarDirForTests,
+  setTreeSitterParserFactoryForTests,
 } from "../../build/core/tree-sitter.js";
 
 describe("tree-sitter", () => {
+  afterEach(() => {
+    resetTreeSitterRuntimeStateForTests();
+  });
+
   describe("getGrammarName", () => {
     it("returns typescript for .ts", () => {
       assert.equal(getGrammarName(".ts"), "typescript");
@@ -129,6 +141,19 @@ describe("tree-sitter", () => {
       assert.ok(syms);
       assert.ok(syms[0].signature.includes("greet"));
     });
+
+    it("reuses pooled parser instances across repeated parses", async () => {
+      resetTreeSitterRuntimeStateForTests();
+      await parseWithTreeSitter("function alpha() { return 1; }", ".ts");
+      await parseWithTreeSitter("function beta() { return 2; }", ".ts");
+
+      const stats = getTreeSitterRuntimeStats();
+      assert.equal(stats.totalParsersCreated, 1);
+      assert.equal(stats.totalParserReuses, 1);
+      assert.equal(stats.languages.typescript.parseCalls, 2);
+      assert.equal(stats.languages.typescript.parsersCreated, 1);
+      assert.equal(stats.languages.typescript.parserReuses, 1);
+    });
   });
 
   describe("parseWithTreeSitter - Python", () => {
@@ -171,6 +196,52 @@ describe("tree-sitter", () => {
     it("returns null for unknown extensions", async () => {
       const syms = await parseWithTreeSitter("some content", ".xyz");
       assert.equal(syms, null);
+    });
+  });
+
+  describe("parseWithTreeSitter - failure reporting", () => {
+    it("throws explicit grammar-load errors and tracks them by language", async () => {
+      resetTreeSitterRuntimeStateForTests();
+      setTreeSitterGrammarDirForTests(join(tmpdir(), `contextplus-missing-grammar-${Date.now()}`));
+
+      await assert.rejects(
+        () => parseWithTreeSitter("function hello() { return 1; }", ".ts"),
+        (error) => {
+          assert.ok(error instanceof TreeSitterGrammarLoadError);
+          assert.match(error.message, /Failed to load tree-sitter grammar "typescript"/);
+          return true;
+        },
+      );
+
+      const stats = getTreeSitterRuntimeStats();
+      assert.equal(stats.totalGrammarLoadFailures, 1);
+      assert.equal(stats.languages.typescript.grammarLoadFailures, 1);
+      assert.equal(stats.recentFailures[0].stage, "grammar-load");
+    });
+
+    it("throws explicit parse errors and tracks them by language", async () => {
+      resetTreeSitterRuntimeStateForTests();
+      setTreeSitterParserFactoryForTests(() => ({
+        setLanguage() {},
+        parse() {
+          throw new Error("synthetic parse failure");
+        },
+        delete() {},
+      }));
+
+      await assert.rejects(
+        () => parseWithTreeSitter("function hello() { return 1; }", ".ts"),
+        (error) => {
+          assert.ok(error instanceof TreeSitterParseError);
+          assert.match(error.message, /synthetic parse failure/);
+          return true;
+        },
+      );
+
+      const stats = getTreeSitterRuntimeStats();
+      assert.equal(stats.totalParseFailures, 1);
+      assert.equal(stats.languages.typescript.parseFailures, 1);
+      assert.equal(stats.recentFailures[0].stage, "parse");
     });
   });
 

@@ -306,6 +306,7 @@ function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>
     `Hub suggestions: ${report.hubSummary.suggestionCount}`,
     `Feature groups: ${report.hubSummary.featureGroupCount}`,
     `Restore points: ${report.restorePointCount}`,
+    `Tree-sitter: parses=${report.treeSitter.totalParseCalls} | parse failures=${report.treeSitter.totalParseFailures} | grammar load failures=${report.treeSitter.totalGrammarLoadFailures} | parser reuses=${report.treeSitter.totalParserReuses}`,
     report.ollama.ok
       ? `Ollama: ok | running models ${report.ollama.models.length}`
       : `Ollama: error | ${report.ollama.error}`,

@@ -1,9 +1,9 @@
-// Multi-language symbol extraction with tree-sitter AST + regex fallback
-// Supports 36 languages via WASM grammars, regex fallback for unsupported
+// Multi-language symbol extraction with tree-sitter AST parsing
+// Supports 36 languages via WASM grammars with explicit parser failures
 
 import { readFile } from "fs/promises";
 import { extname } from "path";
-import { parseWithTreeSitter, getSupportedExtensions } from "./tree-sitter.js";
+import { parseWithTreeSitter, getAnalyzableExtensions } from "./tree-sitter.js";
 
 export enum SymbolKind {
   Function = "function",
@@ -329,27 +329,9 @@ export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
   const content = await readFile(filePath, "utf-8");
   const lines = content.split("\n");
   const ext = extname(filePath).toLowerCase();
-
-  let symbols: CodeSymbol[] | null = null;
-  try {
-    symbols = await parseWithTreeSitter(content, ext);
-  } catch {
-    symbols = null;
-  }
-
-  if (!symbols) {
-    const lang = detectLanguage(filePath);
-    const parsers: Record<string, (l: string[]) => CodeSymbol[]> = {
-      typescript: parseTypeScript,
-      javascript: parseTypeScript,
-      python: parsePython,
-      rust: parseRust,
-      go: parseGo,
-      java: parseJava,
-      csharp: parseJava,
-      kotlin: parseJava,
-    };
-    symbols = (parsers[lang ?? ""] ?? parseGeneric)(lines);
+  const symbols = await parseWithTreeSitter(content, ext);
+  if (symbols === null) {
+    throw new Error(`Unsupported source extension for analyzeFile: ${ext || "<none>"} (${filePath})`);
   }
 
   return {
@@ -378,8 +360,7 @@ export function formatSymbol(sym: CodeSymbol, indent: number = 0): string {
 
 export function isSupportedFile(filePath: string): boolean {
   const ext = extname(filePath).toLowerCase();
-  if (detectLanguage(filePath) !== null) return true;
-  return getSupportedExtensions().includes(ext);
+  return getAnalyzableExtensions().includes(ext);
 }
 
 export function flattenSymbols(symbols: CodeSymbol[], parentName?: string): SymbolLocation[] {

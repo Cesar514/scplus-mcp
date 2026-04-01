@@ -1,7 +1,6 @@
-// Web-tree-sitter based multi-language parser using WASM grammars
+// Web-tree-sitter based multi-language parser using pooled WASM grammars
 // Supports 36 languages via tree-sitter-wasms, extracts symbols from AST
 
-import { readFile } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { CodeSymbol, SymbolKind } from "./parser.js";
@@ -110,6 +109,169 @@ const DEFINITION_TYPES: Record<string, Record<string, string>> = {
 
 let ParserClass: any = null;
 const grammarCache = new Map<string, TSLanguage>();
+const parserCache = new Map<string, TSParser>();
+const MAX_RECENT_FAILURES = 10;
+let grammarDirOverride: string | null = null;
+let parserFactoryOverride: ((ParserCtor: any, language: TSLanguage, grammarName: string) => TSParser) | null = null;
+
+export interface TreeSitterLanguageRuntimeStats {
+  parseCalls: number;
+  parsersCreated: number;
+  parserReuses: number;
+  grammarLoads: number;
+  grammarLoadFailures: number;
+  parseFailures: number;
+}
+
+export interface TreeSitterFailureRecord {
+  grammarName: string;
+  stage: "grammar-load" | "parse";
+  message: string;
+  at: string;
+}
+
+export interface TreeSitterRuntimeStats {
+  totalParseCalls: number;
+  totalParsersCreated: number;
+  totalParserReuses: number;
+  totalGrammarLoads: number;
+  totalGrammarLoadFailures: number;
+  totalParseFailures: number;
+  languages: Record<string, TreeSitterLanguageRuntimeStats>;
+  recentFailures: TreeSitterFailureRecord[];
+}
+
+export class TreeSitterGrammarLoadError extends Error {
+  readonly grammarName: string;
+  readonly wasmPath: string;
+  readonly cause: unknown;
+
+  constructor(grammarName: string, wasmPath: string, cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`Failed to load tree-sitter grammar "${grammarName}" from ${wasmPath}: ${causeMessage}`);
+    this.name = "TreeSitterGrammarLoadError";
+    this.grammarName = grammarName;
+    this.wasmPath = wasmPath;
+    this.cause = cause;
+  }
+}
+
+export class TreeSitterParseError extends Error {
+  readonly grammarName: string;
+  readonly cause: unknown;
+
+  constructor(grammarName: string, cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`Failed to parse content with tree-sitter grammar "${grammarName}": ${causeMessage}`);
+    this.name = "TreeSitterParseError";
+    this.grammarName = grammarName;
+    this.cause = cause;
+  }
+}
+
+function createEmptyRuntimeStats(): TreeSitterRuntimeStats {
+  return {
+    totalParseCalls: 0,
+    totalParsersCreated: 0,
+    totalParserReuses: 0,
+    totalGrammarLoads: 0,
+    totalGrammarLoadFailures: 0,
+    totalParseFailures: 0,
+    languages: {},
+    recentFailures: [],
+  };
+}
+
+let runtimeStats: TreeSitterRuntimeStats = createEmptyRuntimeStats();
+
+function getGrammarDir(): string {
+  return grammarDirOverride ?? GRAMMAR_DIR;
+}
+
+function ensureLanguageStats(grammarName: string): TreeSitterLanguageRuntimeStats {
+  const existing = runtimeStats.languages[grammarName];
+  if (existing) return existing;
+  const created: TreeSitterLanguageRuntimeStats = {
+    parseCalls: 0,
+    parsersCreated: 0,
+    parserReuses: 0,
+    grammarLoads: 0,
+    grammarLoadFailures: 0,
+    parseFailures: 0,
+  };
+  runtimeStats.languages[grammarName] = created;
+  return created;
+}
+
+function recordFailure(grammarName: string, stage: "grammar-load" | "parse", error: unknown): void {
+  const languageStats = ensureLanguageStats(grammarName);
+  const message = error instanceof Error ? error.message : String(error);
+  runtimeStats.recentFailures.push({
+    grammarName,
+    stage,
+    message,
+    at: new Date().toISOString(),
+  });
+  if (runtimeStats.recentFailures.length > MAX_RECENT_FAILURES) runtimeStats.recentFailures.shift();
+  if (stage === "grammar-load") {
+    runtimeStats.totalGrammarLoadFailures++;
+    languageStats.grammarLoadFailures++;
+    return;
+  }
+  runtimeStats.totalParseFailures++;
+  languageStats.parseFailures++;
+}
+
+function cloneRuntimeStats(): TreeSitterRuntimeStats {
+  return {
+    totalParseCalls: runtimeStats.totalParseCalls,
+    totalParsersCreated: runtimeStats.totalParsersCreated,
+    totalParserReuses: runtimeStats.totalParserReuses,
+    totalGrammarLoads: runtimeStats.totalGrammarLoads,
+    totalGrammarLoadFailures: runtimeStats.totalGrammarLoadFailures,
+    totalParseFailures: runtimeStats.totalParseFailures,
+    languages: Object.fromEntries(
+      Object.entries(runtimeStats.languages).map(([grammarName, stats]) => [grammarName, { ...stats }]),
+    ),
+    recentFailures: runtimeStats.recentFailures.map((failure) => ({ ...failure })),
+  };
+}
+
+function resetParserCache(): void {
+  for (const parser of parserCache.values()) {
+    parser?.delete?.();
+  }
+  parserCache.clear();
+}
+
+export function getTreeSitterRuntimeStats(): TreeSitterRuntimeStats {
+  return cloneRuntimeStats();
+}
+
+export function resetTreeSitterRuntimeStats(): void {
+  resetParserCache();
+  grammarCache.clear();
+  runtimeStats = createEmptyRuntimeStats();
+}
+
+export function resetTreeSitterRuntimeStateForTests(): void {
+  resetTreeSitterRuntimeStats();
+  grammarDirOverride = null;
+  parserFactoryOverride = null;
+}
+
+export function setTreeSitterGrammarDirForTests(directory: string | null): void {
+  grammarDirOverride = directory;
+  grammarCache.clear();
+  resetParserCache();
+}
+
+export function setTreeSitterParserFactoryForTests(
+  factory: ((ParserCtor: any, language: TSLanguage, grammarName: string) => TSParser) | null,
+): void {
+  parserFactoryOverride = factory;
+  resetParserCache();
+}
 
 async function initParser(): Promise<typeof ParserClass> {
   if (ParserClass) return ParserClass;
@@ -121,19 +283,44 @@ async function initParser(): Promise<typeof ParserClass> {
   return Parser;
 }
 
-async function loadGrammar(grammarName: string): Promise<TSLanguage | null> {
+async function loadGrammar(grammarName: string): Promise<TSLanguage> {
   if (grammarCache.has(grammarName)) return grammarCache.get(grammarName)!;
 
+  const wasmPath = join(getGrammarDir(), `tree-sitter-${grammarName}.wasm`);
   try {
     const Parser = await initParser();
-    const wasmPath = join(GRAMMAR_DIR, `tree-sitter-${grammarName}.wasm`);
-    await readFile(wasmPath);
     const lang = await Parser.Language.load(wasmPath);
+    runtimeStats.totalGrammarLoads++;
+    ensureLanguageStats(grammarName).grammarLoads++;
     grammarCache.set(grammarName, lang);
     return lang;
-  } catch {
-    return null;
+  } catch (error) {
+    recordFailure(grammarName, "grammar-load", error);
+    throw new TreeSitterGrammarLoadError(grammarName, wasmPath, error);
   }
+}
+
+async function getOrCreateParser(grammarName: string, lang: TSLanguage): Promise<TSParser> {
+  const cachedParser = parserCache.get(grammarName);
+  if (cachedParser) {
+    runtimeStats.totalParserReuses++;
+    ensureLanguageStats(grammarName).parserReuses++;
+    return cachedParser;
+  }
+
+  const Parser = await initParser();
+  const parser = parserFactoryOverride ? parserFactoryOverride(Parser, lang, grammarName) : new Parser();
+  try {
+    parser.setLanguage(lang);
+  } catch (error) {
+    parser?.delete?.();
+    recordFailure(grammarName, "parse", error);
+    throw new TreeSitterParseError(grammarName, error);
+  }
+  parserCache.set(grammarName, parser);
+  runtimeStats.totalParsersCreated++;
+  ensureLanguageStats(grammarName).parsersCreated++;
+  return parser;
 }
 
 function extractName(node: TSNode, _kind: string): string {
@@ -225,27 +412,37 @@ export async function parseWithTreeSitter(content: string, ext: string): Promise
   if (!grammarName) return null;
 
   const defTypes = DEFINITION_TYPES[grammarName];
-  if (!defTypes) return null;
+  if (!defTypes) {
+    const error = new Error(`No tree-sitter definition mapping configured for grammar "${grammarName}".`);
+    recordFailure(grammarName, "parse", error);
+    throw new TreeSitterParseError(grammarName, error);
+  }
 
   const lang = await loadGrammar(grammarName);
-  if (!lang) return null;
+  runtimeStats.totalParseCalls++;
+  ensureLanguageStats(grammarName).parseCalls++;
 
-  let parser: TSParser | null = null;
   let tree: any = null;
   try {
-    const Parser = await initParser();
-    parser = new Parser();
-    parser.setLanguage(lang);
+    const parser = await getOrCreateParser(grammarName, lang);
     tree = parser.parse(content);
     return walkTree(tree.rootNode, defTypes);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof TreeSitterGrammarLoadError || error instanceof TreeSitterParseError) throw error;
+    recordFailure(grammarName, "parse", error);
+    throw new TreeSitterParseError(grammarName, error);
   } finally {
     tree?.delete?.();
-    parser?.delete?.();
   }
 }
 
 export function getSupportedExtensions(): string[] {
   return Object.keys(EXT_TO_GRAMMAR);
+}
+
+export function getAnalyzableExtensions(): string[] {
+  const analyzableGrammars = new Set(Object.keys(DEFINITION_TYPES));
+  return Object.entries(EXT_TO_GRAMMAR)
+    .filter(([, grammarName]) => analyzableGrammars.has(grammarName))
+    .map(([ext]) => ext);
 }

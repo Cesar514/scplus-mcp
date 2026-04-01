@@ -2,6 +2,12 @@
 
 ## v1.5
 
+- [x] remove the redundant `await readFile(wasmPath)` work from `loadGrammar()` in `src/core/tree-sitter.ts` and load WASM grammars directly through `Parser.Language.load(wasmPath)`
+- [x] stop creating a fresh parser instance per file in `parseWithTreeSitter()` by pooling parser instances per grammar within the backend session
+- [x] keep tree-sitter parser reuse deterministic and observable, including explicit pooled-parser reuse counters
+- [x] expose tree-sitter grammar-load failures and parse failures as explicit errors instead of returning silent `null` failures for supported grammars
+- [x] track parse-failure counts by language and surface tree-sitter runtime stats through `doctor` and the evaluation benchmark report
+- [x] remove the silent fallback from `analyzeFile()` in `src/core/parser.ts` so supported parser failures stop degrading into regex parsing
 - [x] rewrite `refreshPersistedFileSearchState()` in `src/tools/semantic-search.ts` to use `(mtimeMs, size)` as the first invalidation gate instead of computing content hashes for every file on every refresh
 - [x] compute a content hash only when metadata changed, so no-op file-search refreshes stop paying a full-file hashing pass across the repo
 - [x] persist file metadata in the file-search index state so the stat-based prefilter is deterministic and reusable across refreshes

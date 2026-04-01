@@ -12,6 +12,7 @@ import { runSearchByIntent } from "./query-intent.js";
 import { runResearch } from "./research.js";
 import { semanticNavigate } from "./semantic-navigate.js";
 import { rankUnifiedSearch, type UnifiedRankedHit } from "./unified-ranking.js";
+import { getTreeSitterRuntimeStats, resetTreeSitterRuntimeStats, type TreeSitterRuntimeStats } from "../core/tree-sitter.js";
 
 interface EvaluationCheck {
   name: string;
@@ -57,6 +58,7 @@ export interface EvaluationReport {
   hybridEfficiency: EvaluationCategory;
   artifactFreshness: EvaluationCategory;
   tokenCost: EvaluationTokenCost;
+  treeSitter: TreeSitterRuntimeStats;
 }
 
 async function writeFixtureRepo(rootDir: string): Promise<void> {
@@ -172,6 +174,7 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
   const fixtureRoot = await mkdtemp(join(tmpdir(), "contextplus-evaluation-"));
 
   try {
+    resetTreeSitterRuntimeStats();
     await writeFixtureRepo(fixtureRoot);
 
     const initialIndex = await timeOperation(() => indexCodebase({ rootDir: fixtureRoot, mode: "full" }));
@@ -390,6 +393,7 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
       hybridEfficiency: hybridChecks,
       artifactFreshness: freshnessChecks,
       tokenCost,
+      treeSitter: getTreeSitterRuntimeStats(),
     };
 
     return report;
@@ -414,6 +418,7 @@ export function formatEvaluationReport(report: EvaluationReport): string {
     `Validation: initial=${report.validation.initialOk ? "ok" : "failed"} | refresh=${report.validation.refreshOk ? "ok" : "failed"}`,
     `Timings: initialIndexMs=${report.timings.initialIndexMs.toFixed(2)} | refreshIndexMs=${report.timings.refreshIndexMs.toFixed(2)} | hotExactSearchMs=${report.timings.hotExactSearchMs.toFixed(2)} | relatedSearchMs=${report.timings.relatedSearchMs.toFixed(2)} | broadResearchMs=${report.timings.broadResearchMs.toFixed(2)}`,
     `Token cost: exact=${report.tokenCost.exactSearchEstimatedTokens} (${report.tokenCost.exactSearchChars} chars) | related=${report.tokenCost.relatedSearchEstimatedTokens} (${report.tokenCost.relatedSearchChars} chars) | research=${report.tokenCost.broadResearchEstimatedTokens} (${report.tokenCost.broadResearchChars} chars)`,
+    `Tree-sitter stats: parses=${report.treeSitter.totalParseCalls} | parseFailures=${report.treeSitter.totalParseFailures} | grammarLoadFailures=${report.treeSitter.totalGrammarLoadFailures} | parserReuses=${report.treeSitter.totalParserReuses}`,
     "",
   ];
 

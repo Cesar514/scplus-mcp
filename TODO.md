@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 9: Tree-Sitter Performance And Strictness
-
-- [ ] Remove the redundant `await readFile(wasmPath)` in `loadGrammar()` inside [src/core/tree-sitter.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/tree-sitter.ts) before `Parser.Language.load(wasmPath)`.
-- [ ] Stop creating a fresh parser instance per file in `parseWithTreeSitter()` and instead pool parser instances per grammar, per worker, or per backend session.
-- [ ] Keep parser lifecycle deterministic so parser reuse does not leak language state across files.
-- [ ] Expose grammar-load failures and parse failures as explicit operator-visible errors rather than returning `null`.
-- [ ] Track parse-failure counts by language for observability and benchmark reporting.
-
 ## Phase 10: Query Embedding Duplication
 
 - [ ] Audit unified search flow so the query embedding is computed exactly once per top-level query, not once in file search and again in hybrid search.
@@ -54,8 +46,7 @@
 
 ## Phase 14: No-Fallback Parser And Index Correctness
 
-- [ ] Remove the silent fallback from `analyzeFile()` in [src/core/parser.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/parser.ts), where tree-sitter failures currently fall through to regex parsing without surfacing an explicit error.
-- [ ] Remove the `null`-return fallback contract from `loadGrammar()` and `parseWithTreeSitter()` in [src/core/tree-sitter.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/tree-sitter.ts); failures must propagate as explicit failures or blocked states.
+- [ ] Finish removing the remaining `null`-return contract from `parseWithTreeSitter()` in [src/core/tree-sitter.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/tree-sitter.ts) so unsupported-language handling becomes an explicit blocked or unsupported state instead of a silent `null` path.
 - [ ] Decide the strict unsupported-language behavior explicitly: either unsupported files are excluded by contract before parsing begins, or they fail loudly as unsupported, but they must not silently degrade into approximate parsing.
 - [ ] If regex parsing remains anywhere for framework-required reasons, mark it explicitly as a fallback path and surface it in diagnostics.
 

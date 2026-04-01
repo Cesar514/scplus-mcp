@@ -68,6 +68,8 @@ describe("cli bridge", () => {
       assert.equal(doctor.restorePointCount, 0);
       assert.equal(typeof doctor.ollama.ok, "boolean");
       assert.equal(doctor.hubSummary.suggestionCount >= 1, true);
+      assert.equal(typeof doctor.treeSitter.totalParseCalls, "number");
+      assert.equal(typeof doctor.treeSitter.totalParseFailures, "number");
 
       const treePayload = await execBridge(cwd, "tree");
       assert.equal(treePayload.root, cwd);

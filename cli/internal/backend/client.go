@@ -90,6 +90,14 @@ type DoctorReport struct {
 		Suggestions       []string `json:"suggestions"`
 		FeatureGroups     []string `json:"featureGroups"`
 	} `json:"hubSummary"`
+	TreeSitter struct {
+		TotalParseCalls          int `json:"totalParseCalls"`
+		TotalParsersCreated      int `json:"totalParsersCreated"`
+		TotalParserReuses        int `json:"totalParserReuses"`
+		TotalGrammarLoads        int `json:"totalGrammarLoads"`
+		TotalGrammarLoadFailures int `json:"totalGrammarLoadFailures"`
+		TotalParseFailures       int `json:"totalParseFailures"`
+	} `json:"treeSitter"`
 	RestorePointCount int                 `json:"restorePointCount"`
 	Ollama            OllamaRuntimeStatus `json:"ollama"`
 }

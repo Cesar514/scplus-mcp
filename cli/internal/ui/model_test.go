@@ -21,6 +21,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report.HubSummary.SuggestionCount = 4
 	report.Ollama.OK = true
 	report.Ollama.Models = []backend.OllamaRuntimeModel{{Name: "qwen3-embedding:0.6b-32k"}}
+	report.TreeSitter.TotalParseFailures = 2
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
@@ -30,6 +31,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 		"Ollama: 1 running models",
 		"Hub suggestions: 4",
 		"Restore points: 3",
+		"Tree-sitter parse failures: 2",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in rendered doctor output: %s", needle, rendered)
