@@ -5,11 +5,14 @@
 import {
   deleteVectorEntries,
   getIndexGenerationContext,
+  loadIndexServingState,
   loadVectorCollection,
+  loadVectorEntriesById,
   loadVectorCollectionMap,
   upsertVectorEntries,
   type VectorStoreEntry,
 } from "./index-database.js";
+import { resolve } from "node:path";
 
 const EMBED_TIMEOUT_MS = 60_000;
 let embedAbortController = new AbortController();
@@ -86,6 +89,16 @@ export interface EmbeddingCache {
   [path: string]: { hash: string; vector: number[] };
 }
 
+interface EmbeddingCacheValue {
+  hash: string;
+  vector: number[];
+}
+
+interface NamespaceProcessCacheEntry {
+  entries: Map<string, EmbeddingCacheValue>;
+  fullyLoaded: boolean;
+}
+
 const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
 const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k";
 const OPENAI_EMBED_MODEL = process.env.CONTEXTPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
@@ -106,6 +119,8 @@ const FILE_SEARCH_VECTOR_NAMESPACE = "file-search";
 const IDENTIFIER_VECTOR_NAMESPACE = "identifier-search";
 const IDENTIFIER_CALLSITE_VECTOR_NAMESPACE = "identifier-callsite-search";
 const CHUNK_VECTOR_NAMESPACE = "chunk-search";
+const embeddingProcessCache = new Map<string, NamespaceProcessCacheEntry>();
+const activeGenerationByRoot = new Map<string, number>();
 
 type OllamaEmbedClient = { embed: (params: Record<string, unknown>) => Promise<{ embeddings: number[][] }> };
 let ollamaClient: OllamaEmbedClient | null = null;
@@ -449,6 +464,127 @@ function shouldMaterializeCurrentGenerationWrite(): boolean {
     && generationContext.writeGeneration !== generationContext.readGeneration;
 }
 
+function cloneEmbeddingCacheValue(value: EmbeddingCacheValue): EmbeddingCacheValue {
+  return {
+    hash: value.hash,
+    vector: [...value.vector],
+  };
+}
+
+function buildProcessCacheKey(rootDir: string, generation: number, namespace: string): string {
+  return `${resolve(rootDir)}::${generation}::${namespace}`;
+}
+
+function invalidateRootGenerationCache(rootDir: string, activeGeneration: number): void {
+  const normalizedRootDir = resolve(rootDir);
+  const previousGeneration = activeGenerationByRoot.get(normalizedRootDir);
+  if (previousGeneration === activeGeneration) return;
+  activeGenerationByRoot.set(normalizedRootDir, activeGeneration);
+  for (const cacheKey of embeddingProcessCache.keys()) {
+    if (cacheKey.startsWith(`${normalizedRootDir}::`) && !cacheKey.startsWith(`${normalizedRootDir}::${activeGeneration}::`)) {
+      embeddingProcessCache.delete(cacheKey);
+    }
+  }
+}
+
+async function resolveReadGeneration(rootDir: string): Promise<number> {
+  const generationContext = getIndexGenerationContext();
+  if (generationContext?.readGeneration !== undefined) return generationContext.readGeneration;
+  const serving = await loadIndexServingState(rootDir);
+  invalidateRootGenerationCache(rootDir, serving.activeGeneration);
+  return serving.activeGeneration;
+}
+
+async function resolveWriteGeneration(rootDir: string): Promise<number> {
+  const generationContext = getIndexGenerationContext();
+  if (generationContext?.writeGeneration !== undefined) return generationContext.writeGeneration;
+  const serving = await loadIndexServingState(rootDir);
+  invalidateRootGenerationCache(rootDir, serving.activeGeneration);
+  return serving.activeGeneration;
+}
+
+async function loadEmbeddingNamespaceEntries(
+  rootDir: string,
+  namespace: string,
+  entryIds?: string[],
+): Promise<Map<string, EmbeddingCacheValue>> {
+  const generation = await resolveReadGeneration(rootDir);
+  const cacheKey = buildProcessCacheKey(rootDir, generation, namespace);
+  let namespaceCache = embeddingProcessCache.get(cacheKey);
+  if (!namespaceCache) {
+    namespaceCache = {
+      entries: new Map<string, EmbeddingCacheValue>(),
+      fullyLoaded: false,
+    };
+    embeddingProcessCache.set(cacheKey, namespaceCache);
+  }
+
+  if (!entryIds) {
+    if (!namespaceCache.fullyLoaded) {
+      const entries = await loadVectorCollection(rootDir, namespace, { generation });
+      namespaceCache.entries = new Map(entries.map((entry) => [
+        entry.id,
+        { hash: entry.contentHash, vector: [...entry.vector] },
+      ]));
+      namespaceCache.fullyLoaded = true;
+    }
+    return new Map(Array.from(namespaceCache.entries.entries(), ([id, value]) => [id, cloneEmbeddingCacheValue(value)]));
+  }
+
+  const uniqueEntryIds = Array.from(new Set(entryIds));
+  const missingIds = namespaceCache.fullyLoaded
+    ? []
+    : uniqueEntryIds.filter((entryId) => !namespaceCache.entries.has(entryId));
+  if (missingIds.length > 0) {
+    const fetchedEntries = await loadVectorEntriesById(rootDir, namespace, missingIds, { generation });
+    for (const entry of fetchedEntries) {
+      namespaceCache.entries.set(entry.id, {
+        hash: entry.contentHash,
+        vector: [...entry.vector],
+      });
+    }
+  }
+
+  const selectedEntries = new Map<string, EmbeddingCacheValue>();
+  for (const entryId of uniqueEntryIds) {
+    const value = namespaceCache.entries.get(entryId);
+    if (value) selectedEntries.set(entryId, cloneEmbeddingCacheValue(value));
+  }
+  return selectedEntries;
+}
+
+function mergeEntriesIntoProcessCache(
+  rootDir: string,
+  generation: number,
+  namespace: string,
+  entries: VectorStoreEntry<null>[],
+  mode: "replace" | "upsert",
+): void {
+  const cacheKey = buildProcessCacheKey(rootDir, generation, namespace);
+  const current = embeddingProcessCache.get(cacheKey);
+  const nextEntries = new Map(entries.map((entry) => [
+    entry.id,
+    { hash: entry.contentHash, vector: [...entry.vector] },
+  ]));
+  if (mode === "replace") {
+    embeddingProcessCache.set(cacheKey, {
+      entries: nextEntries,
+      fullyLoaded: true,
+    });
+    return;
+  }
+
+  if (!current) {
+    embeddingProcessCache.set(cacheKey, {
+      entries: nextEntries,
+      fullyLoaded: false,
+    });
+    return;
+  }
+
+  for (const [entryId, entry] of nextEntries) current.entries.set(entryId, entry);
+}
+
 export async function ensureEmbeddingCacheDir(rootDir: string): Promise<void> {
   await loadEmbeddingCache(rootDir, CACHE_FILE);
 }
@@ -468,55 +604,112 @@ function resolveEmbeddingNamespaces(fileName: string): { primary: string; second
 export async function loadEmbeddingCache(rootDir: string, fileName: string): Promise<EmbeddingCache> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
   const cache: EmbeddingCache = {};
-  const primaryEntries = await loadVectorCollection(rootDir, namespaces.primary);
-  for (const entry of primaryEntries) {
-    cache[entry.id] = {
-      hash: entry.contentHash,
-      vector: entry.vector,
-    };
+  const primaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.primary);
+  for (const [entryId, entry] of primaryEntries) {
+    cache[entryId] = entry;
   }
   if (namespaces.secondary) {
-    const secondaryEntries = await loadVectorCollection(rootDir, namespaces.secondary);
-    for (const entry of secondaryEntries) {
-      cache[entry.id] = {
-        hash: entry.contentHash,
-        vector: entry.vector,
-      };
+    const secondaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.secondary);
+    for (const [entryId, entry] of secondaryEntries) {
+      cache[entryId] = entry;
     }
   }
   return cache;
 }
 
-export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
+export async function loadEmbeddingCacheEntries(
+  rootDir: string,
+  fileName: string,
+  entryIds: string[],
+): Promise<EmbeddingCache> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
-  await saveEmbeddingNamespace(
-    rootDir,
-    namespaces.primary,
-    Object.entries(cache)
-      .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
+  const cache: EmbeddingCache = {};
+  const primaryEntryIds = namespaces.secondary
+    ? entryIds.filter((entryId) => !entryId.startsWith("callsite:"))
+    : entryIds;
+  const primaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.primary, primaryEntryIds);
+  for (const [entryId, entry] of primaryEntries) cache[entryId] = entry;
+
+  if (namespaces.secondary) {
+    const secondaryEntryIds = entryIds.filter((entryId) => entryId.startsWith("callsite:"));
+    const secondaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.secondary, secondaryEntryIds);
+    for (const [entryId, entry] of secondaryEntries) cache[entryId] = entry;
+  }
+
+  return cache;
+}
+
+export async function upsertEmbeddingCacheEntries(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
+  const namespaces = resolveEmbeddingNamespaces(fileName);
+  const generation = await resolveWriteGeneration(rootDir);
+  const primaryEntries = Object.entries(cache)
+    .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
+    .map(([key, value]) => ({
+      id: key,
+      contentHash: value.hash,
+      searchText: key,
+      vector: value.vector,
+      metadata: null,
+    }));
+  if (primaryEntries.length > 0) {
+    await upsertVectorEntries(rootDir, namespaces.primary, primaryEntries, { generation });
+    mergeEntriesIntoProcessCache(rootDir, generation, namespaces.primary, primaryEntries, "upsert");
+  }
+
+  if (namespaces.secondary) {
+    const secondaryEntries = Object.entries(cache)
+      .filter(([key]) => key.startsWith("callsite:"))
       .map(([key, value]) => ({
         id: key,
         contentHash: value.hash,
         searchText: key,
         vector: value.vector,
         metadata: null,
-      })),
+      }));
+    if (secondaryEntries.length > 0) {
+      await upsertVectorEntries(rootDir, namespaces.secondary, secondaryEntries, { generation });
+      mergeEntriesIntoProcessCache(rootDir, generation, namespaces.secondary, secondaryEntries, "upsert");
+    }
+  }
+}
+
+export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
+  const namespaces = resolveEmbeddingNamespaces(fileName);
+  const generation = await resolveWriteGeneration(rootDir);
+  const primaryEntries = Object.entries(cache)
+    .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
+    .map(([key, value]) => ({
+      id: key,
+      contentHash: value.hash,
+      searchText: key,
+      vector: value.vector,
+      metadata: null,
+    }));
+  await saveEmbeddingNamespace(
+    rootDir,
+    namespaces.primary,
+    primaryEntries,
+    generation,
   );
+  mergeEntriesIntoProcessCache(rootDir, generation, namespaces.primary, primaryEntries, "replace");
 
   if (namespaces.secondary) {
+    const secondaryEntries = Object.entries(cache)
+      .filter(([key]) => key.startsWith("callsite:"))
+      .map(([key, value]) => ({
+        id: key,
+        contentHash: value.hash,
+        searchText: key,
+        vector: value.vector,
+        metadata: null,
+      }));
     await saveEmbeddingNamespace(
       rootDir,
       namespaces.secondary,
-      Object.entries(cache)
-        .filter(([key]) => key.startsWith("callsite:"))
-        .map(([key, value]) => ({
-          id: key,
-          contentHash: value.hash,
-          searchText: key,
-          vector: value.vector,
-          metadata: null,
-        })),
+      secondaryEntries,
+      generation,
     );
+    mergeEntriesIntoProcessCache(rootDir, generation, namespaces.secondary, secondaryEntries, "replace");
   }
 }
 
@@ -524,8 +717,9 @@ async function saveEmbeddingNamespace(
   rootDir: string,
   namespace: string,
   nextEntries: VectorStoreEntry<null>[],
+  generation: number,
 ): Promise<void> {
-  const currentEntries = await loadVectorCollectionMap<null>(rootDir, namespace);
+  const currentEntries = await loadVectorCollectionMap<null>(rootDir, namespace, { generation });
   const nextEntryMap = new Map(nextEntries.map((entry) => [entry.id, entry]));
   const entriesToUpsert: VectorStoreEntry<null>[] = [];
   const entryIdsToDelete: string[] = [];
@@ -548,8 +742,8 @@ async function saveEmbeddingNamespace(
     }
   }
 
-  await upsertVectorEntries(rootDir, namespace, entriesToUpsert);
-  await deleteVectorEntries(rootDir, namespace, entryIdsToDelete);
+  await upsertVectorEntries(rootDir, namespace, entriesToUpsert, { generation });
+  await deleteVectorEntries(rootDir, namespace, entryIdsToDelete, { generation });
 }
 
 function vectorsEqual(left: number[], right: number[]): boolean {

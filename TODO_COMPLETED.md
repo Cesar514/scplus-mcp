@@ -2,6 +2,12 @@
 
 ## v1.5
 
+- [x] rewrite `loadEmbeddingCache()` in `src/core/embeddings.ts` so query hot paths stop loading whole vector namespaces into a giant JS object on every search
+- [x] add a process-level cache keyed by namespace and generation so repeated vector reads can reuse already-loaded entries while the serving generation is unchanged
+- [x] add generation-aware invalidation so process-cache entries from the previous active generation are dropped as soon as serving switches
+- [x] introduce candidate-first vector fetches so lexical prefiltering or exact-query narrowing reduces the set of vectors loaded for ranking
+- [x] remove the full-cache query pattern from `src/tools/hybrid-retrieval.ts` by routing `searchHybridChunkIndex()` and `searchHybridIdentifierIndex()` through by-id vector loads
+- [x] replace the semantic identifier callsite query path’s full-cache load with by-id vector reads plus partial cache upserts for newly embedded callsites
 - [x] rewrite the embedding save path in `src/core/embeddings.ts` so `saveEmbeddingCache()` stops replacing full vector namespaces for every save
 - [x] switch the embedding save path to the sqlite delta-write APIs in `src/core/index-database.ts`, specifically `upsertVectorEntries()` and `deleteVectorEntries()`, instead of `replaceVectorCollection()`
 - [x] remove the full-namespace delete-and-reinsert behavior from the hot embedding persistence path so unchanged vectors keep their existing sqlite rows

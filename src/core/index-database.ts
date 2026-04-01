@@ -102,6 +102,26 @@ interface VectorEntryRow {
   metadata_json: string;
 }
 
+function mapVectorEntryRow<TMetadata>(row: VectorEntryRow): VectorStoreEntry<TMetadata> {
+  return {
+    id: row.entry_id,
+    contentHash: row.content_hash,
+    searchText: row.search_text,
+    vector: JSON.parse(row.vector_json) as number[],
+    metadata: JSON.parse(row.metadata_json) as TMetadata,
+  };
+}
+
+function resolveStoredVectorNamespace(
+  db: DatabaseSync,
+  namespace: string,
+  options?: IndexArtifactOptions,
+): string {
+  const serving = readServingStateFromDb(db);
+  const context = indexGenerationContext.getStore();
+  return qualifyVectorNamespace(namespace, options?.generation ?? context?.readGeneration ?? serving.activeGeneration);
+}
+
 function resolveArtifactGeneration(
   artifactKey: IndexArtifactKey,
   options: IndexArtifactOptions | undefined,
@@ -660,22 +680,39 @@ export async function loadVectorCollection<TMetadata = unknown>(
   await ensureContextplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
-    const serving = readServingStateFromDb(db);
-    const context = indexGenerationContext.getStore();
-    const storedNamespace = qualifyVectorNamespace(namespace, options?.generation ?? context?.readGeneration ?? serving.activeGeneration);
+    const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
     const rows = db.prepare(`
       SELECT entry_id, content_hash, search_text, vector_json, metadata_json
       FROM vector_entries
       WHERE namespace = ?
       ORDER BY entry_id
     `).all(storedNamespace) as unknown as VectorEntryRow[];
-    return rows.map((row) => ({
-      id: row.entry_id,
-      contentHash: row.content_hash,
-      searchText: row.search_text,
-      vector: JSON.parse(row.vector_json) as number[],
-      metadata: JSON.parse(row.metadata_json) as TMetadata,
-    }));
+    return rows.map((row) => mapVectorEntryRow<TMetadata>(row));
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadVectorEntriesById<TMetadata = unknown>(
+  rootDir: string,
+  namespace: string,
+  entryIds: string[],
+  options?: IndexArtifactOptions,
+): Promise<VectorStoreEntry<TMetadata>[]> {
+  await ensureContextplusLayout(resolve(rootDir));
+  if (entryIds.length === 0) return [];
+  const uniqueEntryIds = Array.from(new Set(entryIds));
+  const db = openIndexDatabase(rootDir);
+  try {
+    const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
+    const placeholders = uniqueEntryIds.map(() => "?").join(", ");
+    const rows = db.prepare(`
+      SELECT entry_id, content_hash, search_text, vector_json, metadata_json
+      FROM vector_entries
+      WHERE namespace = ? AND entry_id IN (${placeholders})
+      ORDER BY entry_id
+    `).all(storedNamespace, ...uniqueEntryIds) as unknown as VectorEntryRow[];
+    return rows.map((row) => mapVectorEntryRow<TMetadata>(row));
   } finally {
     db.close();
   }

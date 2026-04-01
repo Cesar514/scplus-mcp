@@ -1,7 +1,7 @@
 // Persisted hybrid retrieval indexes for chunk and identifier artifacts
 // FEATURE: SQLite-backed lexical plus dense retrieval state for full-engine search
 
-import { fetchEmbedding, loadEmbeddingCache, type EmbeddingCache } from "../core/embeddings.js";
+import { fetchEmbedding, loadEmbeddingCacheEntries } from "../core/embeddings.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
 import type { ChunkArtifact, PersistedChunkIndexState } from "./chunk-index.js";
@@ -323,7 +323,7 @@ export async function refreshHybridIdentifierIndex(rootDir: string): Promise<{ s
 async function searchHybridState(
   rootDir: string,
   state: PersistedHybridRetrievalState,
-  cache: EmbeddingCache,
+  fileName: "chunk-embeddings-cache.json" | "identifier-embeddings-cache.json",
   query: string,
   options?: HybridSearchOptions,
 ): Promise<HybridSearchMatch[]> {
@@ -332,17 +332,37 @@ async function searchHybridState(
 
   const [queryVector] = await fetchEmbedding(query);
   const queryTerms = splitTerms(query);
+  const topK = normalizeTopK(options?.topK, 5);
   const semanticWeight = normalizeWeight(options?.semanticWeight, 0.68);
   const lexicalWeight = normalizeWeight(options?.lexicalWeight, 0.32);
   const totalWeight = semanticWeight + lexicalWeight;
+  const lexicalRanked = documents
+    .map((document) => {
+      const lexical = computeLexicalScore(query, queryTerms, document);
+      return {
+        document,
+        lexicalScore: lexical.score,
+        matchedTerms: lexical.matchedTerms,
+      };
+    })
+    .sort((left, right) => right.lexicalScore - left.lexicalScore || left.document.path.localeCompare(right.document.path));
+  const lexicalCandidates = lexicalRanked.filter((candidate) => candidate.lexicalScore > 0);
+  const candidatePool = lexicalCandidates.length > 0 ? lexicalCandidates : lexicalRanked;
+  const candidateLimit = Math.min(candidatePool.length, Math.max(topK * 12, 64));
+  const selectedCandidates = candidatePool.slice(0, candidateLimit);
+  const candidateVectors = await loadEmbeddingCacheEntries(
+    rootDir,
+    fileName,
+    selectedCandidates.map((candidate) => candidate.document.embeddingCacheKey),
+  );
 
   const ranked: HybridSearchMatch[] = [];
-  for (const document of documents) {
-    const vector = cache[document.embeddingCacheKey]?.vector;
+  for (const candidate of selectedCandidates) {
+    const { document } = candidate;
+    const vector = candidateVectors[document.embeddingCacheKey]?.vector;
     const semanticScore = vector ? Math.max(cosine(queryVector, vector), 0) : 0;
-    const lexical = computeLexicalScore(query, queryTerms, document);
     const score = totalWeight > 0
-      ? clamp01((semanticWeight * semanticScore + lexicalWeight * lexical.score) / totalWeight)
+      ? clamp01((semanticWeight * semanticScore + lexicalWeight * candidate.lexicalScore) / totalWeight)
       : semanticScore;
     ranked.push({
       id: document.id,
@@ -354,24 +374,22 @@ async function searchHybridState(
       endLine: document.endLine,
       score,
       semanticScore,
-      lexicalScore: lexical.score,
-      matchedTerms: lexical.matchedTerms,
+      lexicalScore: candidate.lexicalScore,
+      matchedTerms: candidate.matchedTerms,
     });
   }
 
   return ranked
     .sort((a, b) => b.score - a.score || b.lexicalScore - a.lexicalScore || b.semanticScore - a.semanticScore)
-    .slice(0, normalizeTopK(options?.topK, 5));
+    .slice(0, topK);
 }
 
 export async function searchHybridChunkIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchMatch[]> {
   const state = await loadHybridChunkIndexState(rootDir);
-  const cache = await loadEmbeddingCache(rootDir, "chunk-embeddings-cache.json");
-  return searchHybridState(rootDir, state, cache, query, options);
+  return searchHybridState(rootDir, state, "chunk-embeddings-cache.json", query, options);
 }
 
 export async function searchHybridIdentifierIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchMatch[]> {
   const state = await loadHybridIdentifierIndexState(rootDir);
-  const cache = await loadEmbeddingCache(rootDir, "identifier-embeddings-cache.json");
-  return searchHybridState(rootDir, state, cache, query, options);
+  return searchHybridState(rootDir, state, "identifier-embeddings-cache.json", query, options);
 }

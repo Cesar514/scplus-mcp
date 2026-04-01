@@ -10,9 +10,16 @@ import {
   fetchEmbedding,
   getEmbeddingBatchSize,
   loadEmbeddingCache,
+  loadEmbeddingCacheEntries,
   saveEmbeddingCache,
+  upsertEmbeddingCacheEntries,
 } from "../../build/core/embeddings.js";
-import { getIndexDatabasePath } from "../../build/core/index-database.js";
+import {
+  activateIndexGeneration,
+  getIndexDatabasePath,
+  reservePendingIndexGeneration,
+  runWithIndexGenerationContext,
+} from "../../build/core/index-database.js";
 
 function getActiveGeneration(dbPath) {
   const db = new DatabaseSync(dbPath);
@@ -56,6 +63,31 @@ function readVectorCollectionEntryCount(dbPath, namespace) {
       WHERE namespace = ?
     `).get(storedNamespace);
     return row ? row.entry_count : null;
+  } finally {
+    db.close();
+  }
+}
+
+function deleteVectorEntry(dbPath, namespace, entryId) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const generation = getActiveGeneration(dbPath);
+    const storedNamespace = qualifyNamespace(namespace, generation);
+    db.exec("BEGIN");
+    db.prepare(`
+      DELETE FROM vector_entries
+      WHERE namespace = ? AND entry_id = ?
+    `).run(storedNamespace, entryId);
+    db.prepare(`
+      UPDATE vector_collections
+      SET entry_count = (
+        SELECT COUNT(*)
+        FROM vector_entries
+        WHERE namespace = ?
+      )
+      WHERE namespace = ?
+    `).run(storedNamespace, storedNamespace);
+    db.exec("COMMIT");
   } finally {
     db.close();
   }
@@ -347,6 +379,82 @@ describe("embeddings", () => {
         assert.equal(readVectorCollectionEntryCount(dbPath, "identifier-search"), 1);
         assert.equal(readVectorCollectionEntryCount(dbPath, "identifier-callsite-search"), 0);
         assert.deepEqual(readVectorEntries(dbPath, "identifier-callsite-search"), []);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("reuses process-cached namespace entries for repeated candidate loads", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-process-cache-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-a", vector: [1, 0, 0] },
+          "src/b.ts": { hash: "hash-b", vector: [0, 1, 0] },
+        }, "chunk-embeddings-cache.json");
+
+        const first = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        assert.equal(first["src/a.ts"].hash, "hash-a");
+
+        const dbPath = await getIndexDatabasePath(rootDir);
+        deleteVectorEntry(dbPath, "chunk-search", "src/a.ts");
+        assert.deepEqual(readVectorEntries(dbPath, "chunk-search").map((entry) => entry.entry_id), ["src/b.ts"]);
+
+        const second = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        assert.equal(second["src/a.ts"].hash, "hash-a");
+        assert.deepEqual(second["src/a.ts"].vector, [1, 0, 0]);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("invalidates process-cached namespace entries when the active generation changes", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-generation-cache-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-generation-0", vector: [1, 0, 0] },
+        }, "chunk-embeddings-cache.json");
+
+        const generationZero = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        assert.equal(generationZero["src/a.ts"].hash, "hash-generation-0");
+
+        const pendingGeneration = await reservePendingIndexGeneration(rootDir);
+        await runWithIndexGenerationContext({ readGeneration: 0, writeGeneration: pendingGeneration }, async () => {
+          await saveEmbeddingCache(rootDir, {
+            "src/a.ts": { hash: "hash-generation-1", vector: [0, 1, 0] },
+          }, "chunk-embeddings-cache.json");
+        });
+        await activateIndexGeneration(rootDir, pendingGeneration, new Date().toISOString());
+
+        const generationOne = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        assert.equal(generationOne["src/a.ts"].hash, "hash-generation-1");
+        assert.deepEqual(generationOne["src/a.ts"].vector, [0, 1, 0]);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("upserts only requested embedding cache entries without replacing the namespace", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-partial-upsert-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-a", vector: [1, 0, 0] },
+          "src/b.ts": { hash: "hash-b", vector: [0, 1, 0] },
+        }, "chunk-embeddings-cache.json");
+
+        const dbPath = await getIndexDatabasePath(rootDir);
+        const firstEntries = readVectorEntries(dbPath, "chunk-search");
+        const firstUpdatedAtById = new Map(firstEntries.map((entry) => [entry.entry_id, entry.updated_at]));
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await upsertEmbeddingCacheEntries(rootDir, {
+          "src/b.ts": { hash: "hash-b-v2", vector: [0, 1, 1] },
+        }, "chunk-embeddings-cache.json");
+
+        const nextEntries = readVectorEntries(dbPath, "chunk-search");
+        assert.deepEqual(nextEntries.map((entry) => entry.entry_id), ["src/a.ts", "src/b.ts"]);
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/a.ts").updated_at, firstUpdatedAtById.get("src/a.ts"));
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").content_hash, "hash-b-v2");
+        assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").updated_at !== firstUpdatedAtById.get("src/b.ts"), true);
       } finally {
         await rm(rootDir, { recursive: true, force: true });
       }

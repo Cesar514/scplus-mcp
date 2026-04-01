@@ -9,8 +9,10 @@ import {
   fetchEmbedding,
   getEmbeddingBatchSize,
   loadEmbeddingCache,
+  loadEmbeddingCacheEntries,
   saveEmbeddingCache,
   type EmbeddingCache,
+  upsertEmbeddingCacheEntries,
 } from "../core/embeddings.js";
 import { resolve } from "path";
 import { getIndexGenerationContext, loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
@@ -403,7 +405,6 @@ async function buildIdentifierIndex(
 
 async function rankCallSites(
   rootDir: string,
-  cache: EmbeddingCache,
   queryTerms: Set<string>,
   queryVec: number[],
   symbol: IdentifierDoc,
@@ -448,13 +449,20 @@ async function rankCallSites(
     .slice(0, Math.min(embedBudget, candidates.length));
 
   const uncached: { key: string; hash: string; text: string }[] = [];
-  const keyedCandidates: { candidate: (typeof sampled)[number]; key: string; hash: string }[] = [];
+  const keyedCandidates: { candidate: (typeof sampled)[number]; key: string; hash: string; text: string }[] = [];
 
   for (const candidate of sampled) {
     const key = `${CALLSITE_CACHE_PREFIX}${candidate.file}:${candidate.line}`;
     const text = `${candidate.file} ${candidate.context}`;
     const hash = buildEmbeddingCacheHash(text);
-    keyedCandidates.push({ candidate, key, hash });
+    keyedCandidates.push({ candidate, key, hash, text });
+  }
+  const cache = await loadEmbeddingCacheEntries(
+    rootDir,
+    IDENTIFIER_CACHE_FILE,
+    keyedCandidates.map((entry) => entry.key),
+  );
+  for (const { key, hash, text } of keyedCandidates) {
     if (cache[key]?.hash !== hash) {
       uncached.push({ key, hash, text });
     }
@@ -469,6 +477,9 @@ async function rankCallSites(
         cache[batch[j].key] = { hash: batch[j].hash, vector: embeddings[j] };
       }
     }
+    await upsertEmbeddingCacheEntries(rootDir, Object.fromEntries(
+      uncached.map((entry) => [entry.key, cache[entry.key]]),
+    ), IDENTIFIER_CACHE_FILE);
   }
 
   const ranked: CallSite[] = keyedCandidates.map(({ candidate, key }) => {
@@ -526,7 +537,6 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
   }
 
   const top = scored.sort((a, b) => b.score - a.score).slice(0, topK);
-  const cache = await loadEmbeddingCache(options.rootDir, IDENTIFIER_CACHE_FILE);
 
   const lines: string[] = [
     `Top ${top.length} identifier matches for: "${options.query}"`,
@@ -546,7 +556,6 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
 
     const calls = await rankCallSites(
       options.rootDir,
-      cache,
       queryTerms,
       queryVec,
       item.doc,
@@ -568,7 +577,6 @@ export async function semanticIdentifierSearch(options: SemanticIdentifierSearch
     lines.push("");
   }
 
-  await saveEmbeddingCache(options.rootDir, cache, IDENTIFIER_CACHE_FILE);
   return lines.join("\n");
 }
 

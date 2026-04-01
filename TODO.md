@@ -18,15 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 6: Embedding Cache Load Strategy
-
-- [ ] Rewrite `loadEmbeddingCache()` in [src/core/embeddings.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/embeddings.ts) so it no longer loads entire vector collections into a giant JS object on every search path.
-- [ ] Add a process-level cache keyed by namespace and generation so repeated searches can reuse already-loaded vectors when the generation is unchanged.
-- [ ] Add generation-aware invalidation so process cache entries are dropped immediately when the active generation changes.
-- [ ] Introduce candidate-first vector fetches so lexical prefiltering or exact-query narrowing reduces the set of vectors pulled into memory.
-- [ ] Remove the current pattern in [src/tools/hybrid-retrieval.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/hybrid-retrieval.ts) where `searchHybridChunkIndex()` and `searchHybridIdentifierIndex()` load the entire cache before ranking.
-- [ ] Evaluate longer-term ANN or sqlite-native vector support, but do not defer the immediate process-cache and candidate-first improvements behind that future work.
-
 ## Phase 7: Real Lexical Candidate Generation
 
 - [ ] Replace the current lexical scoring model that scans all documents with a real candidate-generation substrate such as FTS5 or an explicit inverted index.
