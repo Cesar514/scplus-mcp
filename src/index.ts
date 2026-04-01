@@ -20,6 +20,7 @@ import { proposeCommit } from "./tools/propose-commit.js";
 import { listRestorePoints, restorePoint } from "./git/shadow.js";
 import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
+import { runEvaluation } from "./tools/evaluation.js";
 import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "./tools/index-reliability.js";
@@ -298,6 +299,18 @@ server.tool(
         maxSubsystems: max_subsystems,
         maxHubs: max_hubs,
       }),
+    }],
+  }), { useEmbeddingTracker: true }),
+);
+
+server.tool(
+  "evaluate",
+  "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality.",
+  {},
+  withRequestActivity(async () => ({
+    content: [{
+      type: "text" as const,
+      text: await runEvaluation(),
     }],
   }), { useEmbeddingTracker: true }),
 );

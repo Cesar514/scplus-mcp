@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 15 by adding a deterministic evaluation suite and public `evaluate` benchmark tool for retrieval, navigation, freshness, speed, and research output quality
+- [x] verify roadmap step 15 directly with build, focused evaluation coverage, the full test suite, and a direct `evaluate` run against the built tool
+- [x] commit the verified step 15 work
 - [x] finish roadmap step 14 by hardening prepared-index validation, crash-only query behavior, and explicit repair commands
 - [x] verify roadmap step 14 directly with build, targeted reliability/query suites, the full test suite, and a real index validation plus repair cycle
 - [x] commit the verified step 14 work

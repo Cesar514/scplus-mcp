@@ -56,6 +56,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
 | `search`                    | Canonical full-engine search. Use `search_type: "file"` for file results, `search_type: "symbol"` for symbol results, or `search_type: "mixed"` to rank both together over the unified evidence model. |
 | `research`                  | Unified repository research report. Aggregates ranked code hits, related files from structure and cluster artifacts, subsystem summaries, and relevant hubs in one bounded response. |
+| `evaluate`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |
 | `cluster`                   | Browse persisted semantic clusters from the full index. Renders labeled subsystem groupings, related files, and cluster summaries from sqlite-backed artifacts. |
 
 ### Analysis

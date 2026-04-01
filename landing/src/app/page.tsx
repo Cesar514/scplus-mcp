@@ -61,6 +61,13 @@ const toolRefRows = [
       '"Research: \\"auth token session verification\\"\n\nCode hits:\n1. [file] src/auth/jwt.ts\n2. [file] src/auth/session.ts\n\nRelated context:\n- src/middleware/guard.ts | cluster | auth workflow\n\nSubsystem context:\n- Authentication | auth token/session pipeline\n\nHub context:\n- [manual] docs/auth.md | Auth Hub"',
   },
   {
+    name: "evaluate",
+    desc: "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality.",
+    input: "{}",
+    output:
+      '"Evaluation suite: default\nOverall: PASS\nValidation: initial=ok | refresh=ok\nTimings: initialIndexMs=210.35 | refreshIndexMs=98.44\n\nRetrieval quality: 3/3\nNavigation quality: 3/3\nAnswer quality: 4/4\nArtifact freshness: 3/3"',
+  },
+  {
     name: "blast_radius",
     desc: "Before modifying code, trace every file and line where a symbol is imported or used. Prevents orphaned references.",
     input: "{\n  symbol_name: string,\n  file_context?: string\n}",

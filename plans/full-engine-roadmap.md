@@ -26,7 +26,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 22:05Z) Dropped the former Step 11 and Step 12 product milestones. The product direction no longer treats memory and ACP features as core roadmap goals because TODO plus code comments are sufficient memory for this project direction.
 - [x] (2026-04-01 13:56Z) Completed Step 13. Added a unified `research` tool surface that aggregates ranked code hits, structure-backed related files, subsystem summaries, and hub context from the prepared full-engine artifacts, then verified it with focused coverage, the full suite, a real full index run, and a direct repository research query.
 - [x] (2026-04-01 14:55Z) Completed Step 14. Added prepared-index validation and repair tools, enforced crash-only prepared-index checks in query surfaces, preserved handwritten hub browsing when no prepared full index exists, and verified direct repair behavior plus the full suite.
-- [ ] Step 15. Add evaluation and benchmarking for retrieval, freshness, speed, and answer quality.
+- [x] (2026-04-01 15:40Z) Completed Step 15. Added a deterministic `evaluate` benchmark suite over a synthetic fixture repo, measured initial and refresh index timings, verified retrieval/navigation/research quality plus artifact freshness, and exposed it through the public tool surface.
 - [ ] Step 16. Simplify the public tool surface by deleting superseded interfaces.
 - [ ] Step 17. Expose the full engine cleanly through the CLI and UX layers.
 

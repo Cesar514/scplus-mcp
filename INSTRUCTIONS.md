@@ -134,6 +134,7 @@ Strict order within every file:
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |
 | `search`                     | Canonical full-engine search over persisted artifacts. Use `search_type` = `file`, `symbol`, or `mixed`. |
 | `research`                   | Unified research report that combines ranked code hits, related files, subsystem summaries, and hubs from prepared artifacts. |
+| `evaluate`                   | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |
 | `blast_radius`               | Before deleting or modifying any symbol.                                           |
 | `lint`                       | After writing code. Catch dead code deterministically.                             |
 | `checkpoint`                 | The ONLY way to save files. Validates before writing.                              |
