@@ -206,7 +206,7 @@ server.tool(
   "index",
   "Create or refresh the .contextplus project state for this repo. Builds the repo-local Context+ layout, " +
   "writes project config plus a context-tree snapshot into the durable sqlite substrate at .contextplus/state/index.sqlite, " +
-  "persists stage state, indexing status, embedding caches, memory state, restore points, and file/identifier indexes there, " +
+  "persists stage state, indexing status, embedding caches, restore points, and file/identifier indexes there, " +
   "and in full mode also persists chunk and code-structure artifacts with explicit contract metadata and no JSON mirrors.",
   {
     mode: z.enum(["core", "full"]).optional().describe("Indexing mode. Defaults to full and persists derived chunk and code-structure artifacts."),

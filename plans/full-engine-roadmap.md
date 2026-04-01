@@ -79,7 +79,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, and Step 13 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 14 is now next and will harden reliability with explicit repair and validation paths.
+This plan is now the controlling implementation document for the revised program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, Step 08, Step 09, Step 10, Step 13, Step 14, Step 15, and Step 16 are complete and verified. The former Step 11 and Step 12 were dropped as product goals, and the memory subsystem was removed from the codebase. Step 17 is now next and will expose the full engine cleanly through the planned CLI and UX layers.
 
 ## Context and Orientation
 

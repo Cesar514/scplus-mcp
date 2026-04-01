@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] audit the published docs, landing copies, and shared `contextplus-mcp` skill after steps 13-16 so they match the shipped tool surface and removed memory features
+- [x] remove stale memory references and stale roadmap text from the server description, ExecPlan, and shared skill, and verify the active public docs no longer mention deleted search/research knobs
+- [x] commit the verified repo-side documentation sync
 - [x] finish roadmap step 16 by removing public weight-tuning knobs from `search`, collapsing `research` to a query-only public interface, and aligning the landing tool examples with the shipped MCP surface
 - [x] verify roadmap step 16 directly with build, the full test suite, Context+ blast-radius/lint checks, and source sweeps that prove the removed public knobs are gone from the active tool boundary
 - [x] commit the verified step 16 work
