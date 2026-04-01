@@ -2,7 +2,7 @@
 // Builds reusable file search state under .contextplus for fast queries
 
 import { readFile, stat } from "fs/promises";
-import { join, extname, resolve } from "path";
+import { extname, resolve } from "path";
 import { walkDirectory } from "../core/walker.js";
 import { analyzeFile, flattenSymbols, isSupportedFile } from "../core/parser.js";
 import {
@@ -12,7 +12,6 @@ import {
   type SearchIndexBuildStats,
   type SearchQueryOptions,
 } from "../core/embeddings.js";
-import { CONTEXTPLUS_EMBEDDINGS_DIR } from "../core/project-layout.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 
 export interface SemanticSearchOptions {
@@ -118,21 +117,11 @@ function shouldReportProgress(processedFiles: number, totalFiles: number): boole
 }
 
 async function loadPersistedFileSearchState(rootDir: string): Promise<PersistedFileSearchState> {
-  return loadIndexArtifact(
-    rootDir,
-    "file-search-index",
-    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, SEARCH_INDEX_STATE_FILE),
-    () => ({ generatedAt: "", files: {} }),
-  );
+  return loadIndexArtifact(rootDir, "file-search-index", () => ({ generatedAt: "", files: {} }));
 }
 
 async function savePersistedFileSearchState(rootDir: string, state: PersistedFileSearchState): Promise<void> {
-  await saveIndexArtifact(
-    rootDir,
-    "file-search-index",
-    state,
-    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, SEARCH_INDEX_STATE_FILE),
-  );
+  await saveIndexArtifact(rootDir, "file-search-index", state);
 }
 
 async function buildSearchDocumentForFile(rootDir: string, relativePath: string): Promise<SearchDocument | null> {

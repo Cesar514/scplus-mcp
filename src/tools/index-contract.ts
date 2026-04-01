@@ -3,12 +3,7 @@
 
 import { join } from "path";
 import {
-  CONTEXTPLUS_CHECKPOINTS_DIR,
-  CONTEXTPLUS_CONFIG_DIR,
-  CONTEXTPLUS_DERIVED_DIR,
-  CONTEXTPLUS_EMBEDDINGS_DIR,
   CONTEXTPLUS_INDEX_DB_FILE,
-  CONTEXTPLUS_MEMORIES_DIR,
 } from "../core/project-layout.js";
 
 export type IndexMode = "core" | "full";
@@ -45,7 +40,7 @@ export interface IndexFailureSemantics {
 export interface IndexStorageContract {
   substrate: "sqlite";
   databasePath: string;
-  mirrorPolicy: "sqlite-authoritative-json-mirrors";
+  mirrorPolicy: "sqlite-only";
 }
 
 export interface IndexContractMetadata {
@@ -139,8 +134,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 2;
-export const INDEX_ARTIFACT_VERSION = 4;
+export const INDEX_CONTRACT_VERSION = 3;
+export const INDEX_ARTIFACT_VERSION = 5;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -182,7 +177,7 @@ export const INDEX_FAILURE_SEMANTICS: IndexFailureSemantics = {
 export const INDEX_STORAGE_CONTRACT: IndexStorageContract = {
   substrate: "sqlite",
   databasePath: CONTEXTPLUS_INDEX_DB_FILE,
-  mirrorPolicy: "sqlite-authoritative-json-mirrors",
+  mirrorPolicy: "sqlite-only",
 };
 
 export function buildIndexContract(): IndexContractMetadata {
@@ -208,13 +203,13 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       modes: ["core", "full"],
       outputs: [
         CONTEXTPLUS_INDEX_DB_FILE,
-        join(CONTEXTPLUS_CONFIG_DIR, "project.json"),
-        join(CONTEXTPLUS_CONFIG_DIR, "context-tree.txt"),
-        join(CONTEXTPLUS_CONFIG_DIR, "file-manifest.json"),
-        join(CONTEXTPLUS_CONFIG_DIR, INDEX_STATUS_FILE),
-        join(CONTEXTPLUS_CONFIG_DIR, INDEX_STAGE_STATE_FILE),
-        join(CONTEXTPLUS_MEMORIES_DIR, "memory-graph.json"),
-        join(CONTEXTPLUS_CHECKPOINTS_DIR, "restore-points.json"),
+        "sqlite:index_artifacts/project-config",
+        "sqlite:index_text_artifacts/context-tree",
+        "sqlite:index_artifacts/file-manifest",
+        "sqlite:index_artifacts/index-status",
+        "sqlite:index_artifacts/index-stage-state",
+        "sqlite:index_artifacts/memory-graph",
+        "sqlite:index_artifacts/restore-points",
       ],
     },
     "file-search": {
@@ -223,7 +218,8 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       dependencies: ["bootstrap"],
       modes: ["core", "full"],
       outputs: [
-        join(CONTEXTPLUS_EMBEDDINGS_DIR, "file-search-index.json"),
+        "sqlite:index_artifacts/file-search-index",
+        "sqlite:index_artifacts/embedding-cache:file-search",
       ],
     },
     "identifier-search": {
@@ -232,7 +228,8 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       dependencies: ["bootstrap"],
       modes: ["core", "full"],
       outputs: [
-        join(CONTEXTPLUS_EMBEDDINGS_DIR, "identifier-search-index.json"),
+        "sqlite:index_artifacts/identifier-search-index",
+        "sqlite:index_artifacts/embedding-cache:identifier-search",
       ],
     },
     "full-artifacts": {
@@ -241,9 +238,10 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       dependencies: ["bootstrap", "file-search", "identifier-search"],
       modes: ["full"],
       outputs: [
-        join(CONTEXTPLUS_DERIVED_DIR, "chunk-search-index.json"),
-        join(CONTEXTPLUS_DERIVED_DIR, "code-structure-index.json"),
-        join(CONTEXTPLUS_DERIVED_DIR, "full-index-manifest.json"),
+        "sqlite:index_artifacts/chunk-search-index",
+        "sqlite:index_artifacts/code-structure-index",
+        "sqlite:index_artifacts/full-index-manifest",
+        "sqlite:index_artifacts/embedding-cache:chunk-search",
       ],
     },
   };

@@ -2,10 +2,10 @@
 // FEATURE: Persisted full indexing mode state under .contextplus/derived
 
 import { readFile, stat } from "fs/promises";
-import { extname, join, resolve } from "path";
+import { extname, resolve } from "path";
 import { flattenSymbols, type SymbolLocation, analyzeFile, isSupportedFile } from "../core/parser.js";
 import { getEmbeddingBatchSize, fetchEmbedding, loadEmbeddingCache, saveEmbeddingCache } from "../core/embeddings.js";
-import { CONTEXTPLUS_DERIVED_DIR, ensureContextplusLayout } from "../core/project-layout.js";
+import { ensureContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest } from "./index-contract.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
@@ -121,9 +121,6 @@ export interface FullIndexArtifactResult {
   stats: FullIndexArtifactStats;
 }
 
-const CHUNK_INDEX_FILE = "chunk-search-index.json";
-const STRUCTURE_INDEX_FILE = "code-structure-index.json";
-const FULL_MANIFEST_FILE = "full-index-manifest.json";
 const CHUNK_CACHE_FILE = "chunk-embeddings-cache.json";
 const MAX_CHUNK_CHARS = 6000;
 const MAX_FALLBACK_FILE_CHARS = 6000;
@@ -213,39 +210,19 @@ function buildFallbackChunk(relativePath: string, header: string, content: strin
 }
 
 async function loadChunkIndexState(rootDir: string): Promise<PersistedChunkIndexState> {
-  return loadIndexArtifact(
-    rootDir,
-    "chunk-search-index",
-    join(rootDir, CONTEXTPLUS_DERIVED_DIR, CHUNK_INDEX_FILE),
-    () => ({ generatedAt: "", files: {} }),
-  );
+  return loadIndexArtifact(rootDir, "chunk-search-index", () => ({ generatedAt: "", files: {} }));
 }
 
 async function saveChunkIndexState(rootDir: string, state: PersistedChunkIndexState): Promise<void> {
-  await saveIndexArtifact(
-    rootDir,
-    "chunk-search-index",
-    state,
-    join(rootDir, CONTEXTPLUS_DERIVED_DIR, CHUNK_INDEX_FILE),
-  );
+  await saveIndexArtifact(rootDir, "chunk-search-index", state);
 }
 
 async function loadStructureIndexState(rootDir: string): Promise<PersistedStructureIndexState> {
-  return loadIndexArtifact(
-    rootDir,
-    "code-structure-index",
-    join(rootDir, CONTEXTPLUS_DERIVED_DIR, STRUCTURE_INDEX_FILE),
-    () => ({ generatedAt: "", files: {} }),
-  );
+  return loadIndexArtifact(rootDir, "code-structure-index", () => ({ generatedAt: "", files: {} }));
 }
 
 async function saveStructureIndexState(rootDir: string, state: PersistedStructureIndexState): Promise<void> {
-  await saveIndexArtifact(
-    rootDir,
-    "code-structure-index",
-    state,
-    join(rootDir, CONTEXTPLUS_DERIVED_DIR, STRUCTURE_INDEX_FILE),
-  );
+  await saveIndexArtifact(rootDir, "code-structure-index", state);
 }
 
 function extractImports(lines: string[], language: string): ImportInfo[] {
@@ -610,20 +587,15 @@ export async function ensureFullIndexArtifacts(
     mode: "full",
     artifactVersion: INDEX_ARTIFACT_VERSION,
     contractVersion: buildIndexContract().contractVersion,
-    chunkIndexPath: join(CONTEXTPLUS_DERIVED_DIR, CHUNK_INDEX_FILE),
-    structureIndexPath: join(CONTEXTPLUS_DERIVED_DIR, STRUCTURE_INDEX_FILE),
+    chunkIndexPath: "sqlite:index_artifacts/chunk-search-index",
+    structureIndexPath: "sqlite:index_artifacts/code-structure-index",
     chunkCount: stats.chunkIndex.indexedChunks,
     structureCount: stats.structureIndex.indexedStructures,
     contract: buildIndexContract(),
     stats,
   };
 
-  await saveIndexArtifact(
-    rootDir,
-    "full-index-manifest",
-    manifest,
-    join(rootDir, CONTEXTPLUS_DERIVED_DIR, FULL_MANIFEST_FILE),
-  );
+  await saveIndexArtifact(rootDir, "full-index-manifest", manifest);
 
   return { manifest, stats };
 }

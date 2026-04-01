@@ -1,10 +1,8 @@
 // Multi-provider vector embedding engine with cosine similarity search
 // Supports Ollama (local) and OpenAI-compatible APIs (Gemini, OpenAI, etc.)
-// Indexes file headers and symbols, caches embeddings to disk for speed
+// Indexes file headers and symbols, caches embeddings in sqlite for speed
 
-import { readFile, writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { CONTEXTPLUS_EMBEDDINGS_DIR, ensureContextplusLayout } from "./project-layout.js";
+import { loadIndexArtifact, saveIndexArtifact } from "./index-database.js";
 
 const EMBED_TIMEOUT_MS = 60_000;
 let embedAbortController = new AbortController();
@@ -86,7 +84,6 @@ const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k"
 const OPENAI_EMBED_MODEL = process.env.CONTEXTPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
 const OPENAI_API_KEY = process.env.CONTEXTPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 const OPENAI_BASE_URL = process.env.CONTEXTPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-const CACHE_DIR = CONTEXTPLUS_EMBEDDINGS_DIR;
 const ACTIVE_EMBED_MODEL = EMBED_PROVIDER === "openai" ? OPENAI_EMBED_MODEL : EMBED_MODEL;
 const CACHE_FILE = `embeddings-cache-${EMBED_PROVIDER}-${ACTIVE_EMBED_MODEL.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
 const MIN_EMBED_BATCH_SIZE = 5;
@@ -432,21 +429,15 @@ async function saveCache(rootDir: string, cache: EmbeddingCache): Promise<void> 
 }
 
 export async function ensureEmbeddingCacheDir(rootDir: string): Promise<void> {
-  await ensureContextplusLayout(rootDir);
-  await mkdir(join(rootDir, CACHE_DIR), { recursive: true });
+  await loadIndexArtifact(rootDir, `embedding-cache:${CACHE_FILE}`, () => ({}));
 }
 
 export async function loadEmbeddingCache(rootDir: string, fileName: string): Promise<EmbeddingCache> {
-  try {
-    return JSON.parse(await readFile(join(rootDir, CACHE_DIR, fileName), "utf-8"));
-  } catch {
-    return {};
-  }
+  return loadIndexArtifact(rootDir, `embedding-cache:${fileName}`, () => ({}));
 }
 
 export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
-  await ensureEmbeddingCacheDir(rootDir);
-  await writeFile(join(rootDir, CACHE_DIR, fileName), JSON.stringify(cache));
+  await saveIndexArtifact(rootDir, `embedding-cache:${fileName}`, cache);
 }
 
 function formatLineRange(line: number, endLine?: number): string {

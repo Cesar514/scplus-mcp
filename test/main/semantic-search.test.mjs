@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ollama } from "ollama";
@@ -146,12 +146,8 @@ describe("semantic-search", () => {
           query: "greet alpha",
           topK: 3,
         });
-        const initialState = JSON.parse(
-          await readFile(
-            join(rootDir, ".contextplus", "embeddings", "file-search-index.json"),
-            "utf8",
-          ),
-        );
+        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const initialState = readArtifactFromDb(dbPath, "file-search-index");
 
         assert.match(firstResult, /alpha\.ts/);
         assert.equal(Boolean(initialState.files["alpha.ts"]), true);
@@ -173,21 +169,14 @@ describe("semantic-search", () => {
           query: "salute alpha",
           topK: 3,
         });
-        const refreshedState = JSON.parse(
-          await readFile(
-            join(rootDir, ".contextplus", "embeddings", "file-search-index.json"),
-            "utf8",
-          ),
-        );
-        const dbState = readArtifactFromDb(
-          join(rootDir, ".contextplus", "state", "index.sqlite"),
-          "file-search-index",
-        );
+        const refreshedState = readArtifactFromDb(dbPath, "file-search-index");
+        const dbState = readArtifactFromDb(dbPath, "file-search-index");
 
         assert.match(secondResult, /Index refresh: 1 changed, 0 removed/);
         assert.match(secondResult, /alpha\.ts/);
         assert.match(refreshedState.files["alpha.ts"].doc.content, /saluteAlpha/);
         assert.match(dbState.files["alpha.ts"].doc.content, /saluteAlpha/);
+        await assert.rejects(access(join(rootDir, ".contextplus", "embeddings", "file-search-index.json")));
       } finally {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });

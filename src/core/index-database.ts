@@ -1,15 +1,16 @@
-// SQLite-backed durable storage for Context+ indexing and metadata state artifacts
-// FEATURE: Full-engine index substrate and repo-local durable artifact persistence
+// SQLite-backed durable storage for all authoritative Context+ machine state
+// FEATURE: Full-engine sqlite-only state substrate, artifacts, text exports, and restore backups
 
 import { DatabaseSync } from "node:sqlite";
-import { readFile, writeFile } from "fs/promises";
+import { rm } from "fs/promises";
 import { join, resolve } from "path";
 import { CONTEXTPLUS_INDEX_DB_FILE, ensureContextplusLayout } from "./project-layout.js";
 
-export const INDEX_DATABASE_SCHEMA_VERSION = 1;
+export const INDEX_DATABASE_SCHEMA_VERSION = 2;
 
 export type IndexArtifactKey =
   | "project-config"
+  | "context-tree"
   | "file-manifest"
   | "index-status"
   | "index-stage-state"
@@ -17,24 +18,21 @@ export type IndexArtifactKey =
   | "identifier-search-index"
   | "chunk-search-index"
   | "code-structure-index"
-  | "full-index-manifest";
+  | "full-index-manifest"
+  | "memory-graph"
+  | "restore-points"
+  | `embedding-cache:${string}`;
 
 interface IndexArtifactRow {
-  artifact_key: IndexArtifactKey;
   artifact_json: string;
-  updated_at: string;
 }
 
-async function readJsonMirror<T>(mirrorPath: string): Promise<T | null> {
-  try {
-    return JSON.parse(await readFile(mirrorPath, "utf8")) as T;
-  } catch {
-    return null;
-  }
+interface IndexTextRow {
+  artifact_text: string;
 }
 
-async function writeJsonMirror(mirrorPath: string, value: unknown): Promise<void> {
-  await writeFile(mirrorPath, JSON.stringify(value, null, 2) + "\n", "utf8");
+interface RestorePointBackupRow {
+  file_content: string;
 }
 
 function initializeIndexDatabase(db: DatabaseSync): void {
@@ -51,6 +49,20 @@ function initializeIndexDatabase(db: DatabaseSync): void {
       artifact_key TEXT PRIMARY KEY,
       artifact_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS index_text_artifacts (
+      artifact_key TEXT PRIMARY KEY,
+      artifact_text TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS restore_point_backups (
+      point_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      file_content TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (point_id, file_path)
     );
   `);
 
@@ -77,50 +89,145 @@ export async function saveIndexArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
   value: T,
-  mirrorPath: string,
 ): Promise<void> {
   await ensureContextplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
-    const json = JSON.stringify(value);
     db.prepare(`
       INSERT INTO index_artifacts (artifact_key, artifact_json, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(artifact_key) DO UPDATE SET
         artifact_json = excluded.artifact_json,
         updated_at = excluded.updated_at
-    `).run(artifactKey, json, new Date().toISOString());
+    `).run(artifactKey, JSON.stringify(value), new Date().toISOString());
   } finally {
     db.close();
   }
-  await writeJsonMirror(mirrorPath, value);
 }
 
 export async function loadIndexArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
-  mirrorPath: string,
   emptyValue: () => T,
 ): Promise<T> {
   await ensureContextplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const row = db.prepare(`
-      SELECT artifact_key, artifact_json, updated_at
+      SELECT artifact_json
       FROM index_artifacts
       WHERE artifact_key = ?
     `).get(artifactKey) as IndexArtifactRow | undefined;
-    if (row) {
-      return JSON.parse(row.artifact_json) as T;
-    }
+    if (!row) return emptyValue();
+    return JSON.parse(row.artifact_json) as T;
   } finally {
     db.close();
   }
+}
 
-  const mirrored = await readJsonMirror<T>(mirrorPath);
-  if (mirrored !== null) {
-    await saveIndexArtifact(rootDir, artifactKey, mirrored, mirrorPath);
-    return mirrored;
+export async function saveIndexTextArtifact(
+  rootDir: string,
+  artifactKey: IndexArtifactKey,
+  value: string,
+): Promise<void> {
+  await ensureContextplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    db.prepare(`
+      INSERT INTO index_text_artifacts (artifact_key, artifact_text, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(artifact_key) DO UPDATE SET
+        artifact_text = excluded.artifact_text,
+        updated_at = excluded.updated_at
+    `).run(artifactKey, value, new Date().toISOString());
+  } finally {
+    db.close();
   }
-  return emptyValue();
+}
+
+export async function loadIndexTextArtifact(
+  rootDir: string,
+  artifactKey: IndexArtifactKey,
+  emptyValue: () => string,
+): Promise<string> {
+  await ensureContextplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    const row = db.prepare(`
+      SELECT artifact_text
+      FROM index_text_artifacts
+      WHERE artifact_key = ?
+    `).get(artifactKey) as IndexTextRow | undefined;
+    return row?.artifact_text ?? emptyValue();
+  } finally {
+    db.close();
+  }
+}
+
+export async function saveRestorePointBackup(
+  rootDir: string,
+  pointId: string,
+  filePath: string,
+  fileContent: string,
+): Promise<void> {
+  await ensureContextplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    db.prepare(`
+      INSERT INTO restore_point_backups (point_id, file_path, file_content, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(point_id, file_path) DO UPDATE SET
+        file_content = excluded.file_content,
+        updated_at = excluded.updated_at
+    `).run(pointId, filePath, fileContent, new Date().toISOString());
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadRestorePointBackup(
+  rootDir: string,
+  pointId: string,
+  filePath: string,
+): Promise<string | null> {
+  await ensureContextplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    const row = db.prepare(`
+      SELECT file_content
+      FROM restore_point_backups
+      WHERE point_id = ? AND file_path = ?
+    `).get(pointId, filePath) as RestorePointBackupRow | undefined;
+    return row?.file_content ?? null;
+  } finally {
+    db.close();
+  }
+}
+
+export async function pruneRestorePointBackups(
+  rootDir: string,
+  keepPointIds: string[],
+): Promise<void> {
+  await ensureContextplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    if (keepPointIds.length === 0) {
+      db.prepare("DELETE FROM restore_point_backups").run();
+      return;
+    }
+
+    const placeholders = keepPointIds.map(() => "?").join(", ");
+    db.prepare(`
+      DELETE FROM restore_point_backups
+      WHERE point_id NOT IN (${placeholders})
+    `).run(...keepPointIds);
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
+  for (const path of paths) {
+    await rm(path, { recursive: true, force: true });
+  }
 }

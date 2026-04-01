@@ -1,9 +1,9 @@
 // Durable stage runners for the Context+ indexing pipeline
-// FEATURE: Rerunnable core and full indexing stages with persisted dependencies
+// FEATURE: Rerunnable sqlite-only indexing stages with legacy artifact cleanup
 
-import { access, readFile, writeFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { basename, join, resolve } from "path";
-import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
+import { deleteLegacyArtifacts, loadIndexArtifact, saveIndexArtifact, saveIndexTextArtifact } from "../core/index-database.js";
 import { getContextTree } from "./context-tree.js";
 import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
@@ -72,18 +72,7 @@ export interface IndexStatus {
 }
 
 export interface IndexRuntimePaths {
-  configPath: string;
-  treePath: string;
-  manifestPath: string;
-  indexStatusPath: string;
-  indexStageStatePath: string;
-  graphPath: string;
-  restorePath: string;
-  fileIndexPath: string;
-  identifierIndexPath: string;
-  chunkIndexPath: string;
-  structureIndexPath: string;
-  fullManifestPath: string;
+  databasePath: string;
 }
 
 export interface IndexStageRuntime {
@@ -131,18 +120,7 @@ function buildProjectConfig(rootDir: string, mode: IndexMode): ProjectIndexConfi
 
 function buildRuntimePaths(layout: ContextplusLayout): IndexRuntimePaths {
   return {
-    configPath: join(layout.config, "project.json"),
-    treePath: join(layout.config, "context-tree.txt"),
-    manifestPath: join(layout.config, "file-manifest.json"),
-    indexStatusPath: join(layout.config, INDEX_STATUS_FILE),
-    indexStageStatePath: join(layout.config, INDEX_STAGE_STATE_FILE),
-    graphPath: join(layout.memories, "memory-graph.json"),
-    restorePath: join(layout.checkpoints, "restore-points.json"),
-    fileIndexPath: join(layout.embeddings, "file-search-index.json"),
-    identifierIndexPath: join(layout.embeddings, "identifier-search-index.json"),
-    chunkIndexPath: join(layout.derived, "chunk-search-index.json"),
-    structureIndexPath: join(layout.derived, "code-structure-index.json"),
-    fullManifestPath: join(layout.derived, "full-index-manifest.json"),
+    databasePath: join(layout.state, "index.sqlite"),
   };
 }
 
@@ -188,11 +166,38 @@ function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageSt
   };
 }
 
-async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
+async function cleanupLegacyArtifacts(layout: ContextplusLayout): Promise<void> {
+  const embeddingEntries = await readdir(layout.embeddings, { withFileTypes: true }).catch(() => []);
+  const checkpointEntries = await readdir(layout.checkpoints, { withFileTypes: true }).catch(() => []);
+  const legacyEmbeddingArtifacts = embeddingEntries
+    .map((entry) => join(layout.embeddings, entry.name))
+    .filter((path) => path.endsWith(".json"));
+  const legacyCheckpointArtifacts = checkpointEntries
+    .map((entry) => join(layout.checkpoints, entry.name))
+    .filter((path) => path.endsWith(".json") || path.endsWith("/backups"));
+
+  await deleteLegacyArtifacts([
+    join(layout.config, "project.json"),
+    join(layout.config, "context-tree.txt"),
+    join(layout.config, "file-manifest.json"),
+    join(layout.config, INDEX_STATUS_FILE),
+    join(layout.config, INDEX_STAGE_STATE_FILE),
+    join(layout.memories, "memory-graph.json"),
+    join(layout.checkpoints, "restore-points.json"),
+    join(layout.checkpoints, "backups"),
+    join(layout.derived, "chunk-search-index.json"),
+    join(layout.derived, "code-structure-index.json"),
+    join(layout.derived, "full-index-manifest.json"),
+    ...legacyEmbeddingArtifacts,
+    ...legacyCheckpointArtifacts,
+  ]);
+}
+
+async function loadLegacyJsonIfPresent<T>(path: string): Promise<T | null> {
   try {
-    await access(path);
+    return JSON.parse(await readFile(path, "utf8")) as T;
   } catch {
-    await writeFile(path, JSON.stringify(value, null, 2) + "\n", "utf8");
+    return null;
   }
 }
 
@@ -236,6 +241,12 @@ function assertStageCanRun(stageState: PersistedIndexStageState, stage: IndexSta
 }
 
 async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: IndexStatus): Promise<void> {
+  const legacyGraph = await loadLegacyJsonIfPresent<{ nodes?: Record<string, unknown>; edges?: Record<string, unknown> }>(
+    join(runtime.layout.memories, "memory-graph.json"),
+  );
+  const legacyRestorePoints = await loadLegacyJsonIfPresent<unknown[]>(
+    join(runtime.layout.checkpoints, "restore-points.json"),
+  );
   const entries = await walkDirectory({ rootDir: runtime.rootDir, depthLimit: 0 });
   const files = entries.filter((entry) => !entry.isDirectory);
   const directories = entries.filter((entry) => entry.isDirectory);
@@ -254,12 +265,20 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
     rootDir: runtime.rootDir,
   };
 
-  await writeFile(runtime.paths.configPath, JSON.stringify(runtime.config, null, 2) + "\n", "utf8");
-  await writeFile(runtime.paths.treePath, tree + "\n", "utf8");
-  await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config, runtime.paths.configPath);
-  await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest, runtime.paths.manifestPath);
-  await writeJsonIfMissing(runtime.paths.graphPath, { nodes: {}, edges: {} });
-  await writeJsonIfMissing(runtime.paths.restorePath, []);
+  await saveIndexArtifact(runtime.rootDir, "project-config", runtime.config);
+  await saveIndexTextArtifact(runtime.rootDir, "context-tree", tree + "\n");
+  await saveIndexArtifact(runtime.rootDir, "file-manifest", manifest);
+  const graph = await loadIndexArtifact(runtime.rootDir, "memory-graph", () => ({ nodes: {}, edges: {} }));
+  await saveIndexArtifact(
+    runtime.rootDir,
+    "memory-graph",
+    Object.keys(graph.nodes).length === 0 && Object.keys(graph.edges).length === 0 && legacyGraph
+      ? { nodes: legacyGraph.nodes ?? {}, edges: legacyGraph.edges ?? {} }
+      : graph,
+  );
+  const restorePoints = await loadIndexArtifact(runtime.rootDir, "restore-points", () => []);
+  await saveIndexArtifact(runtime.rootDir, "restore-points", restorePoints.length === 0 && legacyRestorePoints ? legacyRestorePoints : restorePoints);
+  await cleanupLegacyArtifacts(runtime.layout);
 
   status.bootstrap = {
     files: files.length,
@@ -283,23 +302,22 @@ export async function createIndexRuntime(options: { rootDir: string; mode?: Inde
 export async function saveIndexStatus(runtime: IndexStageRuntime, status: IndexStatus, startedAtMs: number): Promise<void> {
   status.lastUpdatedAt = new Date().toISOString();
   status.elapsedMs = Date.now() - startedAtMs;
-  await saveIndexArtifact(runtime.rootDir, "index-status", status, runtime.paths.indexStatusPath);
+  await saveIndexArtifact(runtime.rootDir, "index-status", status);
 }
 
 export async function saveIndexStageState(runtime: IndexStageRuntime, stageState: PersistedIndexStageState): Promise<void> {
   stageState.generatedAt = new Date().toISOString();
-  await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState, runtime.paths.indexStageStatePath);
+  await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState);
 }
 
 export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<PersistedIndexStageState> {
-  return loadIndexArtifact(runtime.rootDir, "index-stage-state", runtime.paths.indexStageStatePath, () => buildStageState(runtime.mode));
+  return loadIndexArtifact(runtime.rootDir, "index-stage-state", () => buildStageState(runtime.mode));
 }
 
 export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: string): Promise<IndexStatus> {
   return loadIndexArtifact(
     runtime.rootDir,
     "index-status",
-    runtime.paths.indexStatusPath,
     () => buildIndexStatus(runtime, startedAt, buildStageState(runtime.mode)),
   );
 }

@@ -28,6 +28,16 @@ function readArtifactFromDb(dbPath, artifactKey) {
   }
 }
 
+function readTextArtifactFromDb(dbPath, artifactKey) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db.prepare("SELECT artifact_text FROM index_text_artifacts WHERE artifact_key = ?").get(artifactKey);
+    return row?.artifact_text ?? null;
+  } finally {
+    db.close();
+  }
+}
+
 describe("index", () => {
   it("creates the .contextplus project layout and snapshots", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
@@ -63,44 +73,45 @@ describe("index", () => {
       await expectExists(join(cwd, ".contextplus", "state"));
       await expectExists(join(cwd, ".contextplus", "state", "index.sqlite"));
 
-      const config = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "project.json"), "utf8"));
-      const manifest = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "file-manifest.json"), "utf8"));
-      const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
-      const stageState = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-stages.json"), "utf8"));
-      const fileIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "file-search-index.json"), "utf8"));
-      const identifierIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "embeddings", "identifier-search-index.json"), "utf8"));
-      const chunkIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "derived", "chunk-search-index.json"), "utf8"));
-      const structureIndex = JSON.parse(await readFile(join(cwd, ".contextplus", "derived", "code-structure-index.json"), "utf8"));
-      const fullManifest = JSON.parse(await readFile(join(cwd, ".contextplus", "derived", "full-index-manifest.json"), "utf8"));
-      const graph = JSON.parse(await readFile(join(cwd, ".contextplus", "memories", "memory-graph.json"), "utf8"));
-      const restorePoints = JSON.parse(await readFile(join(cwd, ".contextplus", "checkpoints", "restore-points.json"), "utf8"));
-      const tree = await readFile(join(cwd, ".contextplus", "config", "context-tree.txt"), "utf8");
-      const dbConfig = readArtifactFromDb(join(cwd, ".contextplus", "state", "index.sqlite"), "project-config");
-      const dbFullManifest = readArtifactFromDb(join(cwd, ".contextplus", "state", "index.sqlite"), "full-index-manifest");
+      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const config = readArtifactFromDb(dbPath, "project-config");
+      const manifest = readArtifactFromDb(dbPath, "file-manifest");
+      const indexStatus = readArtifactFromDb(dbPath, "index-status");
+      const stageState = readArtifactFromDb(dbPath, "index-stage-state");
+      const fileIndex = readArtifactFromDb(dbPath, "file-search-index");
+      const identifierIndex = readArtifactFromDb(dbPath, "identifier-search-index");
+      const chunkIndex = readArtifactFromDb(dbPath, "chunk-search-index");
+      const structureIndex = readArtifactFromDb(dbPath, "code-structure-index");
+      const fullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
+      const graph = readArtifactFromDb(dbPath, "memory-graph");
+      const restorePoints = readArtifactFromDb(dbPath, "restore-points");
+      const tree = readTextArtifactFromDb(dbPath, "context-tree");
+      const dbFullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
 
-      assert.equal(config.version, 4);
-      assert.equal(config.artifactVersion, 4);
+      assert.equal(config.version, 5);
+      assert.equal(config.artifactVersion, 5);
       assert.equal(config.indexMode, "full");
-      assert.equal(config.contract.contractVersion, 2);
+      assert.equal(config.contract.contractVersion, 3);
       assert.equal(config.contract.defaultMode, "full");
       assert.equal(config.contract.storage.substrate, "sqlite");
       assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
+      assert.equal(config.contract.storage.mirrorPolicy, "sqlite-only");
       assert.equal(config.contract.invalidation.fileArtifacts, "size-mtime-fingerprint");
       assert.equal(config.contract.failureSemantics.policy, "crash-only");
       assert.equal(config.projectName.startsWith("contextplus-index-"), true);
       assert.ok(Array.isArray(manifest.files));
       assert.ok(manifest.files.includes("src/app.ts"));
-      assert.equal(manifest.contractVersion, 2);
+      assert.equal(manifest.contractVersion, 3);
       assert.equal(manifest.indexMode, "full");
       assert.equal(indexStatus.state, "completed");
       assert.equal(indexStatus.phase, "completed");
       assert.equal(indexStatus.indexMode, "full");
-      assert.equal(indexStatus.contractVersion, 2);
-      assert.equal(indexStatus.artifactVersion, 4);
+      assert.equal(indexStatus.contractVersion, 3);
+      assert.equal(indexStatus.artifactVersion, 5);
       assert.ok(Array.isArray(indexStatus.stageOrder));
       assert.ok(indexStatus.stageOrder.includes("chunk-embeddings"));
       assert.equal(stageState.mode, "full");
-      assert.equal(stageState.contractVersion, 2);
+      assert.equal(stageState.contractVersion, 3);
       assert.equal(stageState.stages.bootstrap.state, "completed");
       assert.equal(stageState.stages["file-search"].state, "completed");
       assert.equal(stageState.stages["identifier-search"].state, "completed");
@@ -114,14 +125,14 @@ describe("index", () => {
       assert.ok(chunkIndex.files["src/app.ts"].chunks.some((chunk) => chunk.symbolName === "run"));
       assert.equal(structureIndex.files["src/app.ts"].artifact.symbols.some((symbol) => symbol.name === "run"), true);
       assert.equal(fullManifest.mode, "full");
-      assert.equal(fullManifest.artifactVersion, 4);
-      assert.equal(fullManifest.contractVersion, 2);
+      assert.equal(fullManifest.artifactVersion, 5);
+      assert.equal(fullManifest.contractVersion, 3);
       assert.equal(fullManifest.contract.defaultMode, "full");
       assert.equal(fullManifest.contract.storage.substrate, "sqlite");
+      assert.equal(fullManifest.contract.storage.mirrorPolicy, "sqlite-only");
       assert.equal(fullManifest.chunkCount >= 1, true);
       assert.equal(fullManifest.structureCount >= 1, true);
       assert.equal(fullManifest.stats.chunkIndex.indexedChunks >= 1, true);
-      assert.equal(dbConfig?.contract.storage.substrate, "sqlite");
       assert.equal(dbFullManifest?.contract.storage.databasePath, ".contextplus/state/index.sqlite");
       assert.deepEqual(graph, { nodes: {}, edges: {} });
       assert.deepEqual(restorePoints, []);
@@ -132,13 +143,19 @@ describe("index", () => {
       assert.ok(stdout.includes("file-ready"));
       assert.ok(stdout.includes("identifier-ready"));
       assert.ok(stdout.includes("full-ready"));
-      assert.ok(stdout.includes(".contextplus/config/project.json"));
+      assert.ok(stdout.includes("sqlite:index_artifacts/project-config"));
+      await assert.rejects(access(join(cwd, ".contextplus", "config", "project.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "config", "context-tree.txt")));
+      await assert.rejects(access(join(cwd, ".contextplus", "embeddings", "file-search-index.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "derived", "full-index-manifest.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "memories", "memory-graph.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "checkpoints", "restore-points.json")));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it("does not overwrite existing memory or checkpoint manifests on reindex", async () => {
+  it("migrates legacy memory and checkpoint manifests into sqlite and deletes old files on reindex", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
     try {
       await mkdir(join(cwd, ".contextplus", "memories"), { recursive: true });
@@ -161,18 +178,21 @@ describe("index", () => {
         },
       );
 
-      const graph = JSON.parse(await readFile(join(cwd, ".contextplus", "memories", "memory-graph.json"), "utf8"));
-      const restorePoints = JSON.parse(await readFile(join(cwd, ".contextplus", "checkpoints", "restore-points.json"), "utf8"));
-      const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
-      const fullManifest = JSON.parse(await readFile(join(cwd, ".contextplus", "derived", "full-index-manifest.json"), "utf8"));
+      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const graph = readArtifactFromDb(dbPath, "memory-graph");
+      const restorePoints = readArtifactFromDb(dbPath, "restore-points");
+      const indexStatus = readArtifactFromDb(dbPath, "index-status");
+      const fullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
 
       assert.deepEqual(graph, { nodes: { a: 1 }, edges: {} });
       assert.deepEqual(restorePoints, [{ id: "rp-1" }]);
       assert.equal(indexStatus.state, "completed");
-      assert.equal(indexStatus.contractVersion, 2);
+      assert.equal(indexStatus.contractVersion, 3);
       assert.equal(fullManifest.mode, "full");
       assert.equal(fullManifest.contract.failureSemantics.recovery, "rerun-from-persisted-artifacts");
       assert.equal(fullManifest.contract.storage.substrate, "sqlite");
+      await assert.rejects(access(join(cwd, ".contextplus", "memories", "memory-graph.json")));
+      await assert.rejects(access(join(cwd, ".contextplus", "checkpoints", "restore-points.json")));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -203,16 +223,17 @@ describe("index", () => {
         },
       );
 
-      const config = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "project.json"), "utf8"));
-      const indexStatus = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-status.json"), "utf8"));
+      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const config = readArtifactFromDb(dbPath, "project-config");
+      const indexStatus = readArtifactFromDb(dbPath, "index-status");
 
       assert.equal(config.indexMode, "core");
       assert.equal(config.contract.supportedModes.includes("core"), true);
       assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
       assert.equal(indexStatus.indexMode, "core");
-      assert.equal(indexStatus.contractVersion, 2);
+      assert.equal(indexStatus.contractVersion, 3);
       await expectExists(join(cwd, ".contextplus", "state", "index.sqlite"));
-      await assert.rejects(access(join(cwd, ".contextplus", "derived", "full-index-manifest.json")));
+      assert.equal(readArtifactFromDb(dbPath, "full-index-manifest"), null);
       assert.ok(stdout.includes("Mode: core"));
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -239,8 +260,9 @@ describe("index", () => {
       await rerunIndexStage({ rootDir: cwd, stage: "file-search", mode: "full" });
       await rerunIndexStage({ rootDir: cwd, stage: "identifier-search", mode: "full" });
       const result = await rerunIndexStage({ rootDir: cwd, stage: "full-artifacts", mode: "full" });
-      const stageState = JSON.parse(await readFile(join(cwd, ".contextplus", "config", "index-stages.json"), "utf8"));
-      const dbStageState = readArtifactFromDb(join(cwd, ".contextplus", "state", "index.sqlite"), "index-stage-state");
+      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const stageState = readArtifactFromDb(dbPath, "index-stage-state");
+      const dbStageState = readArtifactFromDb(dbPath, "index-stage-state");
 
       assert.equal(result.stageState.stages.bootstrap.state, "completed");
       assert.equal(result.stageState.stages["file-search"].state, "completed");
@@ -249,7 +271,7 @@ describe("index", () => {
       assert.equal(stageState.stages["full-artifacts"].dependencies.includes("file-search"), true);
       assert.equal(dbStageState.stages["full-artifacts"].dependencies.includes("identifier-search"), true);
       assert.equal(stageState.stages["full-artifacts"].runCount >= 1, true);
-      await expectExists(join(cwd, ".contextplus", "derived", "full-index-manifest.json"));
+      assert.ok(readArtifactFromDb(dbPath, "full-index-manifest"));
     } finally {
       if (originalProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
       else process.env.CONTEXTPLUS_EMBED_PROVIDER = originalProvider;

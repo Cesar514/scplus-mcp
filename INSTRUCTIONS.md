@@ -13,7 +13,7 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 - `parser.ts` - Multi-language symbol extraction via tree-sitter AST with regex fallback. Supports 14+ languages.
 - `tree-sitter.ts` - WASM grammar loader for 43 file extensions using web-tree-sitter 0.20.8.
 - `walker.ts` - Gitignore-aware recursive directory traversal with depth and target path control.
-- `embeddings.ts` - Ollama vector embedding engine with disk cache, cosine similarity search, and API key support.
+- `embeddings.ts` - Ollama vector embedding engine with sqlite-backed cache, cosine similarity search, and API key support.
 
 **Tools Layer** (`src/tools/`):
 
@@ -33,7 +33,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 **Core Layer** (continued):
 
 - `hub.ts` - Wikilink parser for `[[path]]` links, cross-link tags, hub discovery, orphan detection.
-- `memory-graph.ts` - In-memory property graph with JSON persistence, decay scoring, and auto-similarity edges.
+- `memory-graph.ts` - In-memory property graph with sqlite persistence, decay scoring, and auto-similarity edges.
 
 **Git Layer** (`src/git/`):
 
@@ -53,7 +53,7 @@ The memory graph is a **Retrieval-Augmented Generation (RAG)** system. Agents MU
 | `CONTEXTPLUS_EMBED_TRACKER_MAX_FILES`   | `8`                | Max changed files per tracker tick (hard-capped to 5-10)      |
 | `CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS` | `700`              | Debounce before applying tracker refresh                      |
 
-Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, memory graph store, restore-point manifest, and persisted file/identifier search state. The durable full-engine index substrate now lives in `.contextplus/state/index.sqlite`, while inspectable JSON mirrors remain under `.contextplus/config/`, `.contextplus/embeddings/`, and `.contextplus/derived/`. `index` defaults to `full` mode, which also persists chunk and code-structure artifacts under `.contextplus/derived/`. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, sqlite-backed storage, invalidation rules, and crash-only failure semantics. Later `search` calls refresh only changed files before querying the prepared indexes, while the realtime tracker keeps ignoring `.contextplus/`.
+Project state lives under `.contextplus/`. Run `index` to materialize the repo-local layout, config snapshot, indexing status, persisted stage state, memory graph store, restore-point manifest, context-tree export, embedding caches, and persisted file/identifier/chunk/structure search state. The authoritative durable machine state lives only in `.contextplus/state/index.sqlite`. `index` defaults to `full` mode, which persists the richer chunk and code-structure artifacts in SQLite in addition to the core file and identifier indexes. Legacy JSON and cache artifacts are deleted during bootstrap so the database remains the only source of truth. The persisted config, status, stage state, and full-artifact manifest carry explicit contract metadata for supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics. Later `search` calls refresh only changed files before querying the prepared indexes, while the realtime tracker keeps ignoring `.contextplus/`.
 
 ## Fast Execute Mode (Mandatory)
 
@@ -129,7 +129,7 @@ Strict order within every file:
 
 | Tool                         | When to Use                                                                        |
 | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists the authoritative sqlite index substrate at `.contextplus/state/index.sqlite`, plus mirrored file, identifier, chunk, and code-structure artifacts, indexing status, stage state, and versioned contract metadata. |
+| `index`                      | Build or refresh repo-local `.contextplus/` state. Full mode is the default and persists the authoritative sqlite index substrate at `.contextplus/state/index.sqlite`, including file, identifier, chunk, structure, memory, restore-point, and context-tree state with no JSON mirrors. |
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse codebase by meaning, not directory structure.                               |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |

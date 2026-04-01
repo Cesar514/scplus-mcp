@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ollama } from "ollama";
@@ -74,12 +74,8 @@ describe("semantic-identifiers", () => {
         query: "greet user",
         topK: 3,
       });
-      const initialState = JSON.parse(
-        await readFile(
-          join(rootDir, ".contextplus", "embeddings", "identifier-search-index.json"),
-          "utf8",
-        ),
-      );
+      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const initialState = readArtifactFromDb(dbPath, "identifier-search-index");
 
       assert.match(firstResult, /function greetUser/);
       assert.equal(initialState.files["service.ts"].docs.some((doc) => doc.name === "greetUser"), true);
@@ -101,21 +97,14 @@ describe("semantic-identifiers", () => {
         query: "welcome user",
         topK: 3,
       });
-      const refreshedState = JSON.parse(
-        await readFile(
-          join(rootDir, ".contextplus", "embeddings", "identifier-search-index.json"),
-          "utf8",
-        ),
-      );
-      const dbState = readArtifactFromDb(
-        join(rootDir, ".contextplus", "state", "index.sqlite"),
-        "identifier-search-index",
-      );
+      const refreshedState = readArtifactFromDb(dbPath, "identifier-search-index");
+      const dbState = readArtifactFromDb(dbPath, "identifier-search-index");
 
       assert.match(secondResult, /Index refresh: 1 changed, 0 removed/);
       assert.match(secondResult, /function welcomeUser/);
       assert.equal(refreshedState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
       assert.equal(dbState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
+      await assert.rejects(access(join(rootDir, ".contextplus", "embeddings", "identifier-search-index.json")));
     } finally {
       Ollama.prototype.embed = originalEmbed;
       await rm(rootDir, { recursive: true, force: true });

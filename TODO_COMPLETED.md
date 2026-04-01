@@ -24,6 +24,9 @@
 
 ## maintenance
 
+- [x] complete the sqlite-only follow-up migration so `.contextplus/state/index.sqlite` becomes the single authoritative machine-state store
+- [x] migrate the remaining file-backed machine state into sqlite, including the memory graph, restore-point manifest, restore-point backups, context-tree export, and embedding caches
+- [x] delete legacy json and cache artifacts during bootstrap and verify they stay absent after a real full index run and an MCP `index` run
 - [x] finish roadmap step 02.5 by moving the durable full-engine index substrate onto sqlite-backed local storage under `.contextplus/state/index.sqlite`
 - [x] verify roadmap step 02.5 directly with build, tests, a real full index run, and direct sqlite artifact inspection
 - [x] finish roadmap step 02 by splitting the indexing pipeline into durable rerunnable stages with persisted dependencies and strict core prerequisites for `full`

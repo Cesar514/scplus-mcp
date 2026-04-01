@@ -14,6 +14,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-03-31 19:34Z) Completed Step 01. Added a shared indexing contract module, versioned persisted schema metadata, explicit invalidation semantics, explicit failure semantics, and direct test coverage for those fields.
 - [x] (2026-03-31 19:35Z) Completed Step 02. Split the indexing pipeline into durable rerunnable stages, persisted stage state in `.contextplus/config/index-stages.json`, and added direct rerun coverage that enforces `core` prerequisites before `full-artifacts`.
 - [x] (2026-04-01 10:39Z) Completed Step 02.5. Moved the durable index substrate into `.contextplus/state/index.sqlite`, made SQLite the authoritative storage contract, and kept inspectable JSON mirrors for direct artifact inspection.
+- [x] (2026-04-01 12:55Z) Completed the sqlite-only follow-up migration. Removed JSON mirror persistence, migrated memory graph, restore-point state, restore-point backups, embedding caches, and context-tree storage into SQLite, and made bootstrap delete legacy artifact files before rebuilding.
 - [ ] Step 03. Add chunk-level AST indexing as a first-class artifact.
 - [ ] Step 04. Add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring.
 - [ ] Step 05. Add stronger incremental refresh with file hashes, chunk hashes, and dependency-aware invalidation.
@@ -44,8 +45,8 @@ The work is large enough that it must be delivered in validated increments. Each
 - Observation: The staged pipeline benefits from explicit stage-state persistence rather than inferring progress from individual artifact files.
   Evidence: Step 02 added `.contextplus/config/index-stages.json`, and direct verification showed durable stage dependencies, stage-local run counts, and completed-state gating for `full-artifacts`.
 
-- Observation: The current indexing surfaces can move to SQLite with relatively small behavioral changes when JSON mirrors remain as projections.
-  Evidence: Step 02.5 replaced the JSON files as the source of truth for config, status, stage, file-search, identifier-search, chunk, structure, and full-manifest state while keeping the mirror files intact for direct inspection and test compatibility.
+- Observation: The JSON-mirror transition step made the final sqlite-only migration straightforward once the remaining file-backed subsystems were enumerated.
+  Evidence: After Step 02.5, the remaining file-backed state was isolated to the memory graph, restore-point manifests and backup payloads, context-tree text export, and embedding caches.
 
 ## Decision Log
 
@@ -69,9 +70,13 @@ The work is large enough that it must be delivered in validated increments. Each
   Rationale: Step 02.5 needs one explicit repo-local database substrate for future retrieval and ranking work, but preserving inspectable mirrors avoids breaking current workflows and strengthens direct verification.
   Date/Author: 2026-04-01 / Codex
 
+- Decision: Finish the migration by deleting mirror persistence instead of keeping a long-lived hybrid model.
+  Rationale: The best full-engine architecture needs one source of truth. SQLite-only persistence removes drift risk, simplifies later ranking and repair logic, and matches the user goal of a fully migrated local engine.
+  Date/Author: 2026-04-01 / Codex
+
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, and 02.5 are complete and verified. Step 03 is next and will focus on promoting chunk-level AST indexing from a mirrored artifact into a clearer first-class contract.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, and the sqlite-only follow-up migration are complete and verified. Step 03 is next and will focus on promoting chunk-level AST indexing from a persisted helper artifact into a clearer first-class contract.
 
 ## Context and Orientation
 
@@ -98,6 +103,8 @@ Step 02 refactored the pipeline into separately rerunnable stages without changi
 
 Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage so later retrieval, refresh, and ranking work can build on one explicit transactional store instead of only scattered JSON artifacts.
 
+The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
+
 Step 03 will now strengthen chunk indexing itself so chunk artifacts have a clearer first-class contract and more explicit AST-oriented semantics than the current helper-oriented full-artifact path.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
@@ -109,7 +116,7 @@ From the repository root:
 1. Keep this plan current as milestones progress.
 2. For Step 03, formalize chunk-level AST indexing as a clearer first-class contract on top of the sqlite-backed substrate rather than only a helper-oriented mirrored artifact.
 3. Update the tests to assert the chunk-artifact contract directly.
-4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated chunk artifacts in both SQLite and the exported mirrors.
+4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated chunk artifacts in SQLite.
 5. Commit Step 03 with a message that names the chunk-indexing milestone.
 
 Verification transcript used for Step 01:

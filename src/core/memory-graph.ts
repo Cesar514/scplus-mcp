@@ -1,10 +1,8 @@
-// In-memory property graph with JSON persistence for linking memory nodes
-// FEATURE: Memory Graph — traversal, decay scoring, auto-similarity edges
+// In-memory property graph with sqlite persistence for linking memory nodes
+// FEATURE: Memory Graph — traversal, decay scoring, auto-similarity edges on sqlite state
 
-import { readFile, writeFile } from "fs/promises";
-import { join } from "path";
 import { fetchEmbedding } from "./embeddings.js";
-import { CONTEXTPLUS_MEMORIES_DIR, ensureContextplusLayout } from "./project-layout.js";
+import { loadIndexArtifact, saveIndexArtifact } from "./index-database.js";
 
 export type NodeType = "concept" | "file" | "symbol" | "note";
 export type RelationType = "relates_to" | "depends_on" | "implements" | "references" | "similar_to" | "contains";
@@ -50,8 +48,6 @@ export interface GraphSearchResult {
   totalEdges: number;
 }
 
-const GRAPH_FILE = "memory-graph.json";
-const CACHE_DIR = CONTEXTPLUS_MEMORIES_DIR;
 const DECAY_LAMBDA = 0.05;
 const SIMILARITY_THRESHOLD = 0.72;
 const STALE_THRESHOLD = 0.15;
@@ -84,24 +80,19 @@ function decayWeight(edge: MemoryEdge): number {
 
 async function loadGraph(rootDir: string): Promise<GraphStore> {
   if (graphCache.has(rootDir)) return graphCache.get(rootDir)!;
-  try {
-    const raw = JSON.parse(await readFile(join(rootDir, CACHE_DIR, GRAPH_FILE), "utf-8"));
-    const store: GraphStore = {
-      nodes: raw?.nodes && typeof raw.nodes === "object" ? raw.nodes : {},
-      edges: raw?.edges && typeof raw.edges === "object" ? raw.edges : {},
-    };
-    graphCache.set(rootDir, store);
-  } catch {
-    graphCache.set(rootDir, { nodes: {}, edges: {} });
-  }
+  const raw = await loadIndexArtifact(rootDir, "memory-graph", () => ({ nodes: {}, edges: {} }));
+  const store: GraphStore = {
+    nodes: raw?.nodes && typeof raw.nodes === "object" ? raw.nodes as Record<string, MemoryNode> : {},
+    edges: raw?.edges && typeof raw.edges === "object" ? raw.edges as Record<string, MemoryEdge> : {},
+  };
+  graphCache.set(rootDir, store);
   return graphCache.get(rootDir)!;
 }
 
 async function persistGraph(rootDir: string): Promise<void> {
   const store = graphCache.get(rootDir);
   if (!store) return;
-  await ensureContextplusLayout(rootDir);
-  await writeFile(join(rootDir, CACHE_DIR, GRAPH_FILE), JSON.stringify(store, null, 2));
+  await saveIndexArtifact(rootDir, "memory-graph", store);
 }
 
 function scheduleSave(rootDir: string): void {
@@ -110,7 +101,12 @@ function scheduleSave(rootDir: string): void {
   savePending.set(rootDir, true);
   saveTimeout.set(rootDir, setTimeout(() => {
     if (savePending.get(rootDir)) {
-      persistGraph(rootDir).catch(() => {}).finally(() => savePending.set(rootDir, false));
+      void persistGraph(rootDir)
+        .catch((error) => {
+          console.error("FATAL: Failed to persist memory graph:", error);
+          throw error;
+        })
+        .finally(() => savePending.set(rootDir, false));
     }
   }, 500));
 }

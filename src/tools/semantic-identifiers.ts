@@ -11,8 +11,7 @@ import {
   saveEmbeddingCache,
   type EmbeddingCache,
 } from "../core/embeddings.js";
-import { join, resolve } from "path";
-import { CONTEXTPLUS_EMBEDDINGS_DIR } from "../core/project-layout.js";
+import { resolve } from "path";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 
 export interface SemanticIdentifierSearchOptions {
@@ -192,21 +191,11 @@ function removeFileScopedCacheEntries(cache: EmbeddingCache, relativePath: strin
 }
 
 async function loadPersistedIdentifierIndexState(rootDir: string): Promise<PersistedIdentifierIndexState> {
-  return loadIndexArtifact(
-    rootDir,
-    "identifier-search-index",
-    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE),
-    () => ({ generatedAt: "", files: {} }),
-  );
+  return loadIndexArtifact(rootDir, "identifier-search-index", () => ({ generatedAt: "", files: {} }));
 }
 
 async function savePersistedIdentifierIndexState(rootDir: string, state: PersistedIdentifierIndexState): Promise<void> {
-  await saveIndexArtifact(
-    rootDir,
-    "identifier-search-index",
-    state,
-    join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR, IDENTIFIER_INDEX_STATE_FILE),
-  );
+  await saveIndexArtifact(rootDir, "identifier-search-index", state);
 }
 
 async function buildIdentifierDocsForFile(rootDir: string, relativePath: string): Promise<PersistedIdentifierFileEntry | null> {

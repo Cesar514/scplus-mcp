@@ -3,12 +3,11 @@
 
 import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { join, dirname } from "path";
-import { CONTEXTPLUS_CHECKPOINTS_DIR, ensureContextplusLayout } from "../core/project-layout.js";
+import { dirname, join } from "path";
+import { loadIndexArtifact, loadRestorePointBackup, pruneRestorePointBackups, saveIndexArtifact, saveRestorePointBackup } from "../core/index-database.js";
+import { ensureContextplusLayout } from "../core/project-layout.js";
 
 const SHADOW_BRANCH = "mcp-shadow-history";
-const DATA_DIR = CONTEXTPLUS_CHECKPOINTS_DIR;
-
 export interface RestorePoint {
   id: string;
   timestamp: number;
@@ -16,39 +15,24 @@ export interface RestorePoint {
   message: string;
 }
 
-async function ensureDataDir(rootDir: string): Promise<string> {
-  await ensureContextplusLayout(rootDir);
-  const dataPath = join(rootDir, DATA_DIR);
-  await mkdir(dataPath, { recursive: true });
-  return dataPath;
-}
-
 async function loadManifest(rootDir: string): Promise<RestorePoint[]> {
-  const manifestPath = join(rootDir, DATA_DIR, "restore-points.json");
-  try {
-    return JSON.parse(await readFile(manifestPath, "utf-8"));
-  } catch {
-    return [];
-  }
+  return loadIndexArtifact(rootDir, "restore-points", () => []);
 }
 
 async function saveManifest(rootDir: string, points: RestorePoint[]): Promise<void> {
-  const dataPath = await ensureDataDir(rootDir);
-  await writeFile(join(dataPath, "restore-points.json"), JSON.stringify(points, null, 2));
+  await saveIndexArtifact(rootDir, "restore-points", points);
+  await pruneRestorePointBackups(rootDir, points.map((point) => point.id));
 }
 
 export async function createRestorePoint(rootDir: string, files: string[], message: string): Promise<RestorePoint> {
-  const dataPath = await ensureDataDir(rootDir);
+  await ensureContextplusLayout(rootDir);
   const id = `rp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const backupDir = join(dataPath, "backups", id);
-  await mkdir(backupDir, { recursive: true });
 
   for (const file of files) {
     const fullPath = join(rootDir, file);
     try {
       const content = await readFile(fullPath, "utf-8");
-      const backupPath = join(backupDir, file.replace(/[\\/]/g, "__"));
-      await writeFile(backupPath, content);
+      await saveRestorePointBackup(rootDir, id, file, content);
     } catch {
     }
   }
@@ -67,13 +51,12 @@ export async function restorePoint(rootDir: string, pointId: string): Promise<st
   const point = manifest.find((p) => p.id === pointId);
   if (!point) throw new Error(`Restore point ${pointId} not found`);
 
-  const backupDir = join(rootDir, DATA_DIR, "backups", pointId);
   const restoredFiles: string[] = [];
 
   for (const file of point.files) {
-    const backupPath = join(backupDir, file.replace(/[\\/]/g, "__"));
     try {
-      const content = await readFile(backupPath, "utf-8");
+      const content = await loadRestorePointBackup(rootDir, pointId, file);
+      if (content === null) continue;
       const targetPath = join(rootDir, file);
       await mkdir(dirname(targetPath), { recursive: true });
       await writeFile(targetPath, content);
