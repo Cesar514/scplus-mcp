@@ -21,6 +21,15 @@ function readArtifactFromDb(dbPath, artifactKey) {
   }
 }
 
+function readVectorEntriesFromDb(dbPath, namespace) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    return db.prepare("SELECT entry_id, content_hash FROM vector_entries WHERE namespace = ? ORDER BY entry_id").all(namespace);
+  } finally {
+    db.close();
+  }
+}
+
 describe("chunk-index", () => {
   it("builds first-class symbol and fallback chunk artifacts", async () => {
     const { buildChunkArtifactsForFile } = await import("../../build/tools/chunk-index.js");
@@ -100,10 +109,10 @@ describe("chunk-index", () => {
       const secondWarm = await warmChunkEmbeddings(rootDir, chunks);
       const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
       const chunkState = readArtifactFromDb(dbPath, "chunk-search-index");
-      const chunkCache = readArtifactFromDb(dbPath, "embedding-cache:chunk-embeddings-cache.json");
+      const chunkVectors = readVectorEntriesFromDb(dbPath, "chunk-search");
 
-      assert.equal(firstRefresh.state.artifactVersion, 11);
-      assert.equal(firstRefresh.state.contractVersion, 9);
+      assert.equal(firstRefresh.state.artifactVersion, 12);
+      assert.equal(firstRefresh.state.contractVersion, 10);
       assert.equal(firstRefresh.state.mode, "full");
       assert.equal(firstRefresh.stats.totalFiles, 1);
       assert.equal(firstRefresh.stats.changedFiles, 1);
@@ -117,7 +126,7 @@ describe("chunk-index", () => {
       assert.equal(secondWarm.embeddedChunks, 0);
       assert.equal(secondWarm.reusedChunks, chunks.length);
       assert.equal(chunkState.files["src/app.ts"].chunks.some((chunk) => chunk.symbolName === "run"), true);
-      assert.equal(Object.keys(chunkCache).length, chunks.length);
+      assert.equal(chunkVectors.length, chunks.length);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

@@ -44,8 +44,8 @@ describe("structure-index", () => {
       const consumerEntry = result.state.files["src/services/consumer.ts"];
       const helperEntry = result.state.files["src/lib/helper.ts"];
 
-      assert.equal(result.state.artifactVersion, 11);
-      assert.equal(result.state.contractVersion, 9);
+      assert.equal(result.state.artifactVersion, 12);
+      assert.equal(result.state.contractVersion, 10);
       assert.equal(result.state.mode, "full");
       assert.ok(consumerEntry);
       assert.ok(helperEntry);

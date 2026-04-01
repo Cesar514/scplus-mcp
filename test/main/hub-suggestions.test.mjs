@@ -65,8 +65,8 @@ describe("hub suggestions", () => {
       const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
       const state = readArtifact(dbPath, "hub-suggestion-index");
       assert.ok(state);
-      assert.equal(state.artifactVersion, 11);
-      assert.equal(state.contractVersion, 9);
+      assert.equal(state.artifactVersion, 12);
+      assert.equal(state.contractVersion, 10);
       assert.equal(Object.keys(state.suggestions).length >= 1, true);
       assert.equal(Object.keys(state.featureGroups).length >= 1, true);
 
@@ -85,6 +85,15 @@ describe("hub suggestions", () => {
       const detailOutput = await getFeatureHub({ rootDir, featureName: "Authentication" });
       assert.match(detailOutput, /Hub: Authentication/);
       assert.match(detailOutput, /src\/auth\/login\.ts/);
+
+      const rankedOutput = await getFeatureHub({
+        rootDir,
+        query: "authentication session login",
+        rankingMode: "both",
+      });
+      assert.match(rankedOutput, /Ranked hubs for: "authentication session login"/);
+      assert.match(rankedOutput, /Ranking mode: both/);
+      assert.match(rankedOutput, /\.contextplus\/hubs\/suggested\/authentication\.md \[suggested\]/);
     } finally {
       if (previousProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
       else process.env.CONTEXTPLUS_EMBED_PROVIDER = previousProvider;

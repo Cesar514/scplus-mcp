@@ -415,6 +415,7 @@ server.tool(
     intent: z.enum(["exact", "related"]).describe("Query intent. exact = deterministic fast lookup, related = ranked discovery."),
     search_type: z.enum(["file", "symbol", "mixed"]).describe("Select file results, symbol results, or both together."),
     query: z.string().describe("Natural language intent to rank against the prepared full-engine artifacts."),
+    retrieval_mode: z.enum(["semantic", "keyword", "both"]).optional().describe("For related search, force semantic-only, keyword-only, or mixed retrieval. Defaults to both."),
     top_k: z.number().optional().describe("How many ranked hits to return. Default: 5."),
     include_kinds: z.array(z.string()).optional().describe("Optional symbol-kind filter, e.g. [\"function\", \"method\", \"variable\"]."),
   },
@@ -422,6 +423,7 @@ server.tool(
     intent,
     search_type,
     query,
+    retrieval_mode,
     top_k,
     include_kinds,
   }) => ({
@@ -432,6 +434,7 @@ server.tool(
         intent,
         searchType: search_type,
         query,
+        retrievalMode: retrieval_mode,
         topK: top_k,
         includeKinds: include_kinds,
       }),
@@ -567,19 +570,24 @@ server.tool(
   "Obsidian-style feature hub navigator. Hub files are .md files containing [[path/to/file]] wikilinks that act as a Map of Content. " +
   "Modes: (1) No args = list all hubs plus persisted suggested hubs and feature-group candidates, " +
   "(2) hub_path or feature_name = show hub with bundled skeletons of all linked files, " +
-  "(3) show_orphans = find files not linked to any hub. Prevents orphaned code and enables graph-based codebase navigation.",
+  "(3) query = rank candidate hubs by keyword, semantic, or mixed retrieval, " +
+  "(4) show_orphans = find files not linked to any hub. Prevents orphaned code and enables graph-based codebase navigation.",
   {
     hub_path: z.string().optional().describe("Path to a specific hub .md file (relative to root)."),
     feature_name: z.string().optional().describe("Feature name to search for. Finds matching hub file automatically."),
+    query: z.string().optional().describe("Rank hubs against a natural-language feature or subsystem query."),
+    ranking_mode: z.enum(["keyword", "semantic", "both"]).optional().describe("How to rank hub query candidates. Defaults to both."),
     show_orphans: z.boolean().optional().describe("If true, lists all source files not linked to any feature hub."),
   },
-  withRequestActivity(async ({ hub_path, feature_name, show_orphans }) => ({
+  withRequestActivity(async ({ hub_path, feature_name, query, ranking_mode, show_orphans }) => ({
     content: [{
       type: "text" as const,
       text: await getFeatureHub({
         rootDir: ROOT_DIR,
         hubPath: hub_path,
         featureName: feature_name,
+        query,
+        rankingMode: ranking_mode,
         showOrphans: show_orphans,
       }),
     }],

@@ -45,6 +45,8 @@ export interface IndexStorageContract {
   substrate: "sqlite";
   databasePath: string;
   mirrorPolicy: "sqlite-only";
+  vectorStoreTable: "vector_entries";
+  vectorCollectionTable: "vector_collections";
 }
 
 export interface IndexContractMetadata {
@@ -170,8 +172,8 @@ export interface FullArtifactManifest {
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 9;
-export const INDEX_ARTIFACT_VERSION = 11;
+export const INDEX_CONTRACT_VERSION = 10;
+export const INDEX_ARTIFACT_VERSION = 12;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -218,6 +220,8 @@ export const INDEX_STORAGE_CONTRACT: IndexStorageContract = {
   substrate: "sqlite",
   databasePath: CONTEXTPLUS_INDEX_DB_FILE,
   mirrorPolicy: "sqlite-only",
+  vectorStoreTable: "vector_entries",
+  vectorCollectionTable: "vector_collections",
 };
 
 export function buildIndexContract(): IndexContractMetadata {
@@ -258,7 +262,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       modes: ["core", "full"],
       outputs: [
         "sqlite:index_artifacts/file-search-index",
-        "sqlite:index_artifacts/embedding-cache:file-search",
+        "sqlite:vector_collections/file-search",
       ],
     },
     "identifier-search": {
@@ -268,7 +272,8 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       modes: ["core", "full"],
       outputs: [
         "sqlite:index_artifacts/identifier-search-index",
-        "sqlite:index_artifacts/embedding-cache:identifier-search",
+        "sqlite:vector_collections/identifier-search",
+        "sqlite:vector_collections/identifier-callsite-search",
       ],
     },
     "full-artifacts": {
@@ -284,7 +289,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
         "sqlite:index_artifacts/semantic-cluster-index",
         "sqlite:index_artifacts/hub-suggestion-index",
         "sqlite:index_artifacts/full-index-manifest",
-        "sqlite:index_artifacts/embedding-cache:chunk-search",
+        "sqlite:vector_collections/chunk-search",
       ],
     },
   };

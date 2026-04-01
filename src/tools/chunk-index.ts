@@ -3,7 +3,7 @@
 
 import { readFile } from "fs/promises";
 import { resolve } from "path";
-import { fetchEmbedding, getEmbeddingBatchSize, loadEmbeddingCache, saveEmbeddingCache } from "../core/embeddings.js";
+import { buildEmbeddingCacheHash, fetchEmbedding, getEmbeddingBatchSize, loadEmbeddingCache, saveEmbeddingCache } from "../core/embeddings.js";
 import { analyzeFile, flattenSymbols, isSupportedFile, type SymbolKind, type SymbolLocation } from "../core/parser.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { walkDirectory } from "../core/walker.js";
@@ -250,7 +250,7 @@ export async function warmChunkEmbeddings(
 
   for (const doc of docs) {
     const text = `${doc.header} ${doc.symbolName ?? ""} ${doc.signature ?? ""} ${doc.path} ${doc.content}`;
-    const hash = hashTextContent(text);
+    const hash = buildEmbeddingCacheHash(text);
     if (cache[doc.id]?.hash === hash) reusedChunks++;
     else pending.push({ key: doc.id, hash, text });
   }

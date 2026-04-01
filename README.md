@@ -60,7 +60,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | `deps`                      | Compact direct and reverse dependency report for one indexed file. |
 | `status`                    | Tiny git worktree status summary for the current repository. |
 | `changes`                   | Tiny git change summary, optionally scoped to one file, including line-range hunks when available. |
-| `search`                    | Query-intent router for repository search. Use `intent: "exact"` for deterministic fast-substrate answers when you already know the symbol or file target, and `intent: "related"` for ranked related-item and pattern discovery. `search_type` still selects `file`, `symbol`, or `mixed`. |
+| `search`                    | Query-intent router for repository search. Use `intent: "exact"` for deterministic fast-substrate answers when you already know the symbol or file target, and `intent: "related"` for ranked related-item and pattern discovery. `search_type` still selects `file`, `symbol`, or `mixed`, and related search now accepts explicit `retrieval_mode` values of `semantic`, `keyword`, or `both`. |
 | `research`                  | Broad repository research report. Use this for subsystem understanding after exact lookup and related-item search are no longer enough. |
 | `evaluate`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
 | `cluster`                   | Browse persisted semantic clusters from the full index. Renders labeled subsystem groupings, related files, and cluster summaries from sqlite-backed artifacts. |
@@ -70,14 +70,14 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | Tool                  | Description                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `blast_radius`        | Trace every file and line where a symbol is imported or used. Prevents orphaned references.                                   |
-| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go. |
+| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go, and now reports a repo score plus lowest-scoring files from Context+ repo-rule findings. |
 
 ### Code Ops
 
 | Tool              | Description                                                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `checkpoint`   | The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing. |
-| `find_hub`     | Obsidian-style feature hub navigator. Lists handwritten hubs plus persisted suggested hubs and feature-group candidates generated from the full index. |
+| `find_hub`     | Obsidian-style feature hub navigator. Lists handwritten hubs plus persisted suggested hubs and feature-group candidates generated from the full index, and can rank hub candidates for a natural-language query with `keyword`, `semantic`, or `both` modes. |
 
 ### Version Control
 
@@ -160,7 +160,7 @@ Config file locations:
 ### CLI Subcommands
 
 - `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`).
-- `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. The authoritative durable machine state now lives only in `state/index.sqlite`. `core` persists the project config, context-tree export, file manifest, stage state, indexing status, and eager file/identifier search state in SQLite. `full` also persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, and the full-manifest plus embedding caches in SQLite. The structure layer now includes per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol maps, ownership edges, module summaries, and module import edges. The hybrid layer stores lexical term maps alongside embedding-cache keys so later search surfaces can combine lexical and dense evidence without rebuilding transient indexes. Refresh uses file content hashes for file and identifier artifacts, file-plus-chunk content hashes for chunk reuse, and dependency hashes for structure artifacts so local import changes invalidate affected downstream files. Legacy JSON artifact files are deleted during bootstrap so the database remains the only source of truth. The persisted contract metadata covers supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics.
+- `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. The authoritative durable machine state now lives only in `state/index.sqlite`. `core` persists the project config, context-tree export, file manifest, stage state, indexing status, and eager file/identifier search state in SQLite. `full` also persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, and the full-manifest plus vector collections in SQLite. Dense retrieval now writes into `vector_collections` and `vector_entries` instead of artifact-shaped embedding-cache blobs, while the hybrid layer keeps lexical term maps plus embedding keys so later search surfaces can combine lexical and dense evidence without rebuilding transient indexes. The structure layer now includes per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol maps, ownership edges, module summaries, and module import edges. Refresh uses file content hashes for file and identifier artifacts, file-plus-chunk content hashes for chunk reuse, dependency hashes for structure artifacts so local import changes invalidate affected downstream files, and embed-provider/model-aware cache hashes so vector reuse stops immediately when the embedding backend changes. Legacy JSON artifact files are deleted during bootstrap so the database remains the only source of truth. The persisted contract metadata covers supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics.
 - `validate_index` - Verify that a prepared `core` or `full` index is still version-compatible and internally consistent before query tools rely on it.
 - `repair_index` - Repair a broken prepared index by rerunning `core`, `full`, or a specific stage target like `full-artifacts`, then revalidate the result.
 - `skeleton [path]` or `tree [path]` - **(New)** View the structural tree of a project with file headers and symbol definitions directly in your terminal.
@@ -279,13 +279,13 @@ Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.co
 
 Three layers built with TypeScript over stdio using the Model Context Protocol SDK:
 
-**Core** (`src/core/`) - Multi-language AST parsing (tree-sitter, 43 extensions), gitignore-aware traversal, Ollama vector embeddings with disk cache, and wikilink hub graph.
+**Core** (`src/core/`) - Multi-language AST parsing (tree-sitter, 43 extensions), gitignore-aware traversal, Ollama/OpenAI-compatible vector embeddings with sqlite vector collections, and wikilink hub graph.
 
 **Tools** (`src/tools/`) - MCP tools exposing structural, semantic, and operational codebase capabilities.
 
 **Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
 
-**Project State** (`.contextplus/`) - created by `index`; stores repo-local config, context-tree snapshots, indexing status, persisted stage state for rerunnable indexing stages, persisted file and identifier search state, full-mode derived chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, restore-point manifests, embedding caches, and suggested hub markdown under `.contextplus/hubs/suggested/`. Later searches refresh only changed files before querying the prepared state.
+**Project State** (`.contextplus/`) - created by `index`; stores authoritative machine state in `.contextplus/state/index.sqlite` plus generated suggested hub markdown under `.contextplus/hubs/suggested/` when full-mode hub suggestions exist. Legacy sqlite-migration directories such as `.contextplus/config/`, `.contextplus/embeddings/`, `.contextplus/checkpoints/`, and `.contextplus/derived/` are removed instead of being recreated empty. Later searches refresh only changed files before querying the prepared state.
 
 ## Config
 

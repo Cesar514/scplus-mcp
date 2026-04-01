@@ -1,5 +1,23 @@
 # TODO Completed
 
+## maintenance
+
+- [x] reorder the remaining v1 items so query-ranked hubs, explicit search retrieval modes, stronger lint scoring, and vector-database-backed embedding/search storage land before the old roadmap step 21
+- [x] finish roadmap step 21 by extending `find_hub` with query-ranked keyword, semantic, and blended hub discovery
+- [x] finish roadmap step 22 by exposing explicit `retrieval_mode` controls on the unified `search` surface
+- [x] finish roadmap step 23 by adding stronger `lint` repo/file scoring and reporting on top of deterministic diagnostics
+- [x] finish roadmap step 24 by moving persisted embedding/search storage onto sqlite vector collections
+- [x] verify roadmap steps 21-24 directly with build, focused suites, broader index/search suites, a real full reindex on this repository, sqlite inspection, and direct built-tool outputs
+- [x] remove the stale `checkpoint` v1 backlog item after deciding it is not part of the product direction
+- [x] stop generating empty legacy `.contextplus/` directories during bootstrap
+- [x] remove obsolete sqlite-migration-era `.contextplus/` directories on reindex
+- [x] update tests and docs to reflect the minimal populated `.contextplus/` layout
+- [x] verify fresh indexing and reindex cleanup only leave directories that are actually used
+- [x] run a fresh full Context+ index for this repository through the MCP tool
+- [x] verify the refreshed `.contextplus/state/index.sqlite` and generated durable artifacts directly on disk
+- [x] update the shared `contextplus-mcp` skill with current best-practice indexing and query workflow guidance
+- [x] verify the shared skill text matches the repo-local Context+ instructions for indexing and prepared-index use
+
 ## v1
 
 - [x] rename tools for better meaning

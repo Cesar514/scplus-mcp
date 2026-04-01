@@ -20,8 +20,10 @@ export interface IndexValidationReport {
   schemaVersion: number | null;
   requiredArtifactKeys: string[];
   requiredTextArtifactKeys: string[];
+  requiredVectorNamespaces: string[];
   presentArtifactKeys: string[];
   presentTextArtifactKeys: string[];
+  presentVectorNamespaces: string[];
   issues: IndexValidationIssue[];
 }
 
@@ -38,13 +40,14 @@ function addIssue(issues: IndexValidationIssue[], code: string, message: string)
   issues.push({ code, message });
 }
 
-function parseStageOutputs(mode: IndexMode): { artifactKeys: Set<string>; textArtifactKeys: Set<string> } {
+function parseStageOutputs(mode: IndexMode): { artifactKeys: Set<string>; textArtifactKeys: Set<string>; vectorNamespaces: Set<string> } {
   const definitions = getStageDefinitions();
   const activeStages = Object.values(definitions)
     .filter((definition) => definition.modes.includes(mode))
     .map((definition) => definition.name);
   const artifactKeys = new Set<string>();
   const textArtifactKeys = new Set<string>();
+  const vectorNamespaces = new Set<string>();
 
   for (const stage of activeStages) {
     for (const output of definitions[stage].outputs) {
@@ -53,11 +56,13 @@ function parseStageOutputs(mode: IndexMode): { artifactKeys: Set<string>; textAr
         if (!artifactKey.startsWith("embedding-cache:")) artifactKeys.add(artifactKey);
       } else if (output.startsWith("sqlite:index_text_artifacts/")) {
         textArtifactKeys.add(output.slice("sqlite:index_text_artifacts/".length));
+      } else if (output.startsWith("sqlite:vector_collections/")) {
+        vectorNamespaces.add(output.slice("sqlite:vector_collections/".length));
       }
     }
   }
 
-  return { artifactKeys, textArtifactKeys };
+  return { artifactKeys, textArtifactKeys, vectorNamespaces };
 }
 
 function modeSatisfies(persistedMode: string | undefined, requestedMode: IndexMode): boolean {
@@ -142,6 +147,11 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
       addIssue(issues, "missing-text-artifact", `Missing required text artifact "${artifactKey}" for ${options.mode} mode.`);
     }
   }
+  for (const namespace of required.vectorNamespaces) {
+    if (!inspection.vectorNamespaces.includes(namespace)) {
+      addIssue(issues, "missing-vector-namespace", `Missing required vector collection "${namespace}" for ${options.mode} mode.`);
+    }
+  }
 
   if (issues.length === 0) {
     const config = await loadRequiredArtifact<ProjectIndexConfig>(options.rootDir, "project-config");
@@ -212,8 +222,10 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
     schemaVersion: inspection.schemaVersion,
     requiredArtifactKeys: Array.from(required.artifactKeys).sort(),
     requiredTextArtifactKeys: Array.from(required.textArtifactKeys).sort(),
+    requiredVectorNamespaces: Array.from(required.vectorNamespaces).sort(),
     presentArtifactKeys: inspection.artifactKeys,
     presentTextArtifactKeys: inspection.textArtifactKeys,
+    presentVectorNamespaces: inspection.vectorNamespaces,
     issues,
   };
 }
@@ -226,8 +238,10 @@ export function formatIndexValidationReport(report: IndexValidationReport): stri
     `Database schemaVersion: ${String(report.schemaVersion)}`,
     `Required artifacts: ${report.requiredArtifactKeys.length}`,
     `Required text artifacts: ${report.requiredTextArtifactKeys.length}`,
+    `Required vector collections: ${report.requiredVectorNamespaces.length}`,
     `Present artifacts: ${report.presentArtifactKeys.length}`,
     `Present text artifacts: ${report.presentTextArtifactKeys.length}`,
+    `Present vector collections: ${report.presentVectorNamespaces.length}`,
   ];
 
   if (report.issues.length === 0) {

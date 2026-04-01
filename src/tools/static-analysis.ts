@@ -35,6 +35,12 @@ interface RuleFinding {
   message: string;
 }
 
+interface ScoreSummary {
+  score: number;
+  errors: number;
+  warnings: number;
+}
+
 const COMMENT_PREFIXES: Record<string, string> = {
   ".c": "//",
   ".cpp": "//",
@@ -226,6 +232,43 @@ function formatFindings(findings: RuleFinding[]): string[] {
   });
 }
 
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function summarizeRuleSeverities(findings: RuleFinding[]): ScoreSummary {
+  const errors = findings.filter((finding) => finding.severity === "error").length;
+  const warnings = findings.length - errors;
+  return {
+    score: clampScore(100 - errors * 18 - warnings * 6),
+    errors,
+    warnings,
+  };
+}
+
+function summarizeRepoScore(findings: RuleFinding[], nativeFailures: NativeLintResult[]): ScoreSummary {
+  const ruleSummary = summarizeRuleSeverities(findings);
+  return {
+    score: clampScore(ruleSummary.score - nativeFailures.length * 25),
+    errors: ruleSummary.errors + nativeFailures.length,
+    warnings: ruleSummary.warnings,
+  };
+}
+
+function summarizeFileScores(findings: RuleFinding[]): Array<{ file: string; summary: ScoreSummary }> {
+  const grouped = new Map<string, RuleFinding[]>();
+  for (const finding of findings) {
+    grouped.set(finding.file, [...(grouped.get(finding.file) ?? []), finding]);
+  }
+  return Array.from(grouped.entries())
+    .map(([file, fileFindings]) => ({ file, summary: summarizeRuleSeverities(fileFindings) }))
+    .sort((left, right) =>
+      left.summary.score - right.summary.score
+      || right.summary.errors - left.summary.errors
+      || right.summary.warnings - left.summary.warnings
+      || left.file.localeCompare(right.file));
+}
+
 export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise<string> {
   const rootDir = resolve(options.rootDir);
   const targetFiles = await getTargetFiles(rootDir, options.targetPath);
@@ -235,11 +278,15 @@ export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise
   const ruleFindings = await collectRuleFindings(rootDir, targetFiles);
   const nativeFailures = nativeResults.filter((result) => result.exitCode !== 0);
   const nativeOutput = nativeResults.filter((result) => result.output);
+  const repoScore = summarizeRepoScore(ruleFindings, nativeFailures);
+  const fileScores = summarizeFileScores(ruleFindings);
 
   const lines = [
     `Lint target: ${options.targetPath ?? "."}`,
     `Files inspected: ${relativeFiles.length}`,
     `Native tools run: ${nativeResults.length > 0 ? nativeResults.map((result) => result.tool).join(", ") : "none"}`,
+    `Repo score: ${repoScore.score}/100`,
+    `Severity summary: ${repoScore.errors} errors, ${repoScore.warnings} warnings`,
     `Rule findings: ${ruleFindings.length}`,
   ];
 
@@ -250,6 +297,13 @@ export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise
   if (ruleFindings.length > 0) {
     lines.push("", "Context+ rule findings:");
     lines.push(...formatFindings(ruleFindings));
+  }
+
+  if (fileScores.length > 0) {
+    lines.push("", "Lowest-scoring files:");
+    for (const entry of fileScores.slice(0, 5)) {
+      lines.push(`- ${entry.file} score=${entry.summary.score}/100 errors=${entry.summary.errors} warnings=${entry.summary.warnings}`);
+    }
   }
 
   if (nativeOutput.length > 0) {

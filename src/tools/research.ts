@@ -294,7 +294,7 @@ export function formatResearchReport(report: ResearchReport): string {
   if (report.codeHits.length === 0) {
     lines.push("  No ranked code hits found in the prepared full-engine artifacts.");
   } else {
-    lines.push(formatUnifiedSearchResults(report.query, ["file", "symbol"], report.codeHits));
+    lines.push(formatUnifiedSearchResults(report.query, ["file", "symbol"], report.codeHits, "both"));
   }
 
   lines.push("");

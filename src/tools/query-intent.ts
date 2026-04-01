@@ -11,18 +11,19 @@ import {
   lookupPathCandidates,
   lookupWord,
 } from "./exact-query.js";
-import { runCanonicalSearch } from "./unified-ranking.js";
+import { runCanonicalSearch, type RetrievalMode } from "./unified-ranking.js";
 
 export type SearchIntent = "exact" | "related";
 export type SearchEntityType = "file" | "symbol" | "mixed";
 
-interface SearchIntentOptions {
+export interface SearchIntentOptions {
   rootDir: string;
   intent: SearchIntent;
   searchType: SearchEntityType;
   query: string;
   topK?: number;
   includeKinds?: string[];
+  retrievalMode?: RetrievalMode;
 }
 
 function filterSymbolHitsByKind(hits: ExactSymbolHit[], includeKinds?: string[]): ExactSymbolHit[] {
@@ -83,5 +84,6 @@ export async function runSearchByIntent(options: SearchIntentOptions): Promise<s
     topK: options.topK,
     entityTypes: options.searchType === "mixed" ? ["file", "symbol"] : [options.searchType],
     includeKinds: options.includeKinds,
+    retrievalMode: options.retrievalMode,
   });
 }

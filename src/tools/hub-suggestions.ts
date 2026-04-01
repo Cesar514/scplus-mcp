@@ -223,7 +223,6 @@ export async function refreshHubSuggestionState(rootDir: string): Promise<{ stat
   const clusterState = await loadClusterState(rootDir);
   const suggestionsDir = join(layout.hubs, "suggested");
   await rm(suggestionsDir, { recursive: true, force: true });
-  await mkdir(suggestionsDir, { recursive: true });
 
   const suggestions: Record<string, HubSuggestion> = {};
   const suggestionOrder: HubSuggestion[] = [];
@@ -315,11 +314,14 @@ export async function refreshHubSuggestionState(rootDir: string): Promise<{ stat
     };
   }
 
-  for (const suggestion of suggestionOrder) {
-    const linkedSuggestions = suggestion.linkedSuggestionIds
-      .map((suggestionId) => suggestions[suggestionId])
-      .filter((value): value is HubSuggestion => Boolean(value));
-    await writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
+  if (suggestionOrder.length > 0) {
+    await mkdir(suggestionsDir, { recursive: true });
+    for (const suggestion of suggestionOrder) {
+      const linkedSuggestions = suggestion.linkedSuggestionIds
+        .map((suggestionId) => suggestions[suggestionId])
+        .filter((value): value is HubSuggestion => Boolean(value));
+      await writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
+    }
   }
 
   const state: PersistedHubSuggestionState = {

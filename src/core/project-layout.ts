@@ -1,5 +1,5 @@
 // Context+ project layout definitions for durable repo-local state
-// FEATURE: Project state paths for config, embeddings, checkpoints, and index
+// FEATURE: Project state paths for sqlite storage and generated hubs
 
 import { mkdir } from "fs/promises";
 import { join } from "path";
@@ -38,11 +38,6 @@ export function getContextplusLayout(rootDir: string): ContextplusLayout {
 export async function ensureContextplusLayout(rootDir: string): Promise<ContextplusLayout> {
   const layout = getContextplusLayout(rootDir);
   await mkdir(layout.root, { recursive: true });
-  await mkdir(layout.hubs, { recursive: true });
-  await mkdir(layout.embeddings, { recursive: true });
-  await mkdir(layout.config, { recursive: true });
-  await mkdir(layout.checkpoints, { recursive: true });
-  await mkdir(layout.derived, { recursive: true });
   await mkdir(layout.state, { recursive: true });
   return layout;
 }

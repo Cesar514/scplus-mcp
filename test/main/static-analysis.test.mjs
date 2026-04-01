@@ -21,6 +21,7 @@ describe("static-analysis", async () => {
         rootDir: FIXTURE_DIR,
         targetPath: "data.csv",
       });
+      assert.ok(result.includes("Repo score:"));
       assert.ok(result.includes("No native lint tool"));
     });
 
@@ -109,6 +110,8 @@ describe("static-analysis", async () => {
         rootDir: FIXTURE_DIR,
         targetPath: "headerless.ts",
       });
+      assert.ok(result.includes("Lowest-scoring files:"));
+      assert.ok(result.includes("score="));
       assert.ok(result.includes("[header]"));
     });
   });

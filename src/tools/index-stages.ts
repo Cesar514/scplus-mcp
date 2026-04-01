@@ -199,6 +199,10 @@ async function cleanupLegacyArtifacts(layout: ContextplusLayout): Promise<void> 
     join(layout.derived, "full-index-manifest.json"),
     ...legacyEmbeddingArtifacts,
     ...legacyCheckpointArtifacts,
+    layout.embeddings,
+    layout.config,
+    layout.checkpoints,
+    layout.derived,
   ]);
 }
 

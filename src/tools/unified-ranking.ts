@@ -7,6 +7,7 @@ import { ensureFileSearchIndex } from "./semantic-search.js";
 import { searchHybridChunkIndex, searchHybridIdentifierIndex, type HybridSearchMatch } from "./hybrid-retrieval.js";
 
 type EntityType = "file" | "symbol";
+export type RetrievalMode = "semantic" | "keyword" | "both";
 
 interface StructureSymbolRecord {
   id: string;
@@ -77,6 +78,7 @@ export interface UnifiedRankingOptions {
   query: string;
   topK?: number;
   entityTypes?: EntityType[];
+  retrievalMode?: RetrievalMode;
   semanticWeight?: number;
   lexicalWeight?: number;
   fileWeight?: number;
@@ -164,6 +166,10 @@ function normalizeTopK(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.floor(value));
 }
 
+function normalizeRetrievalMode(value: RetrievalMode | undefined): RetrievalMode {
+  return value ?? "both";
+}
+
 function createCandidate(id: string, entityType: EntityType, path: string, title: string, kind: string, line: number, endLine: number, modulePath?: string): Candidate {
   return {
     id,
@@ -245,6 +251,7 @@ function computeStructureScoreForFile(
   path: string,
   state: PersistedStructureIndexState,
   hasSymbolEvidence: boolean,
+  retrievalMode: RetrievalMode,
 ): { score: number; matchedTerms: string[]; modulePath?: string } {
   const entry = state.files[path];
   if (!entry) return { score: hasSymbolEvidence ? 0.12 : 0, matchedTerms: [] };
@@ -262,7 +269,9 @@ function computeStructureScoreForFile(
     artifact.symbols.map((symbol) => `${symbol.name} ${symbol.kind} ${symbol.signature} ${symbol.parentName ?? ""}`).join(" "),
     moduleSummary?.externalDependencySources.join(" ") ?? "",
   ].join(" ");
-  const coverage = computeCoverageScore(query, queryTerms, structureText);
+  const coverage = retrievalMode === "semantic"
+    ? { score: 0, matchedTerms: [] as string[] }
+    : computeCoverageScore(query, queryTerms, structureText);
   const ownershipBoost = hasSymbolEvidence ? 0.12 : 0;
   return {
     score: clamp01(coverage.score + ownershipBoost),
@@ -277,6 +286,7 @@ function computeStructureScoreForSymbol(
   symbol: StructureSymbolRecord | undefined,
   fileEntry: PersistedStructureIndexState["files"][string] | undefined,
   hasHybridEvidence: boolean,
+  retrievalMode: RetrievalMode,
 ): { score: number; matchedTerms: string[]; modulePath?: string } {
   if (!symbol) return { score: hasHybridEvidence ? 0.12 : 0, matchedTerms: [] };
   const structureText = [
@@ -289,7 +299,9 @@ function computeStructureScoreForSymbol(
     fileEntry?.artifact.header ?? "",
     fileEntry?.artifact.dependencyPaths.join(" ") ?? "",
   ].join(" ");
-  const coverage = computeCoverageScore(query, queryTerms, structureText);
+  const coverage = retrievalMode === "semantic"
+    ? { score: 0, matchedTerms: [] as string[] }
+    : computeCoverageScore(query, queryTerms, structureText);
   const ownershipBoost = hasHybridEvidence ? 0.12 : 0;
   return {
     score: clamp01(coverage.score + ownershipBoost),
@@ -348,15 +360,16 @@ function formatEvidenceSummary(hit: UnifiedRankedHit): string {
   ].join(" | ");
 }
 
-export function formatUnifiedSearchResults(query: string, entityTypes: EntityType[], hits: UnifiedRankedHit[]): string {
+export function formatUnifiedSearchResults(query: string, entityTypes: EntityType[], hits: UnifiedRankedHit[], retrievalMode: RetrievalMode): string {
   const requested = entityTypes.join(", ");
   if (hits.length === 0) {
-    return `Search: "${query}"\nRequested result types: ${requested}\nNo matching results found in the prepared full-engine artifacts.`;
+    return `Search: "${query}"\nRequested result types: ${requested}\nRetrieval mode: ${retrievalMode}\nNo matching results found in the prepared full-engine artifacts.`;
   }
 
   const lines = [
     `Search: "${query}"`,
     `Requested result types: ${requested}`,
+    `Retrieval mode: ${retrievalMode}`,
     `Ranked hits: ${hits.length}`,
     "",
   ];
@@ -378,7 +391,7 @@ export function formatUnifiedSearchResults(query: string, entityTypes: EntityTyp
 export async function runCanonicalSearch(options: CanonicalSearchOptions): Promise<string> {
   const entityTypes = options.entityTypes ?? ["file", "symbol"];
   const hits = await rankUnifiedSearch(options);
-  return formatUnifiedSearchResults(options.query, entityTypes, hits);
+  return formatUnifiedSearchResults(options.query, entityTypes, hits, normalizeRetrievalMode(options.retrievalMode));
 }
 
 export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise<UnifiedRankedHit[]> {
@@ -391,14 +404,17 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
   const queryTerms = splitTerms(options.query);
   const topK = normalizeTopK(options.topK, 5);
   const entityTypes = new Set(options.entityTypes ?? ["file", "symbol"]);
+  const retrievalMode = normalizeRetrievalMode(options.retrievalMode);
+  const semanticWeight = retrievalMode === "keyword" ? 0 : options.semanticWeight;
+  const lexicalWeight = retrievalMode === "semantic" ? 0 : options.lexicalWeight;
   const structureState = await loadStructureState(rootDir);
   const candidates = new Map<string, Candidate>();
 
   const { index } = await ensureFileSearchIndex(rootDir);
   const fileResults = await index.search(options.query, {
     topK: Math.max(topK * 8, 20),
-    semanticWeight: options.semanticWeight,
-    keywordWeight: options.lexicalWeight,
+    semanticWeight,
+    keywordWeight: lexicalWeight,
   });
 
   for (const result of fileResults) {
@@ -415,8 +431,8 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
 
   const chunkMatches = await searchHybridChunkIndex(rootDir, options.query, {
     topK: Math.max(topK * 10, 40),
-    semanticWeight: options.semanticWeight,
-    lexicalWeight: options.lexicalWeight,
+    semanticWeight,
+    lexicalWeight,
   });
   for (const match of chunkMatches) {
     const candidateId = match.title === "file"
@@ -435,8 +451,8 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
 
   const identifierMatches = await searchHybridIdentifierIndex(rootDir, options.query, {
     topK: Math.max(topK * 10, 40),
-    semanticWeight: options.semanticWeight,
-    lexicalWeight: options.lexicalWeight,
+    semanticWeight,
+    lexicalWeight,
   });
   for (const match of identifierMatches) {
     const candidateId = getSymbolCandidateId(match.path, match.title, match.line);
@@ -462,6 +478,7 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
         candidate.path,
         structureState,
         candidate.chunkScore > 0 || candidate.identifierScore > 0,
+        retrievalMode,
       );
       candidate.structureScore = Math.max(candidate.structureScore, structure.score);
       candidate.modulePath = structure.modulePath ?? candidate.modulePath;
@@ -487,6 +504,7 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
         matchingSymbolId ? structureState.symbols[matchingSymbolId] : undefined,
         fileEntry,
         candidate.chunkScore > 0 || candidate.identifierScore > 0,
+        retrievalMode,
       );
       candidate.structureScore = Math.max(candidate.structureScore, structure.score);
       candidate.modulePath = structure.modulePath ?? candidate.modulePath;

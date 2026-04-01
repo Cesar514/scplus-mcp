@@ -6,23 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 21 and verify it directly
-- [ ] commit the verified step 21 work
+No incomplete current-goal tasks. The completed step 21-24 work was moved to `TODO_COMPLETED.md`.
 
 ## full engine roadmap (ordered)
 
-- [ ] 21. expose the full engine cleanly through the planned CLI and UX layers only after the underlying fast-path, indexing, retrieval, structure, and research primitives are stable
-
-## v1
-
-- [ ] move persisted embedding/search storage to a vector database once the eager indexing pipeline is solid
-- [ ] rename tools for better meaning
-  - [ ] extend `find_hub` so it returns rankings or relevant hubs based on a search query with options for semantic or keyword search or both
-    - [ ] add parameter to search for data in hubs by semantic meaning or keyword match or both
-    - [ ] add search result ranking for matching hubs instead of only direct name/path resolution
-- [ ] extend the unified `search` tool with explicit filtering modes for semantic, keyword, or both
-- [ ] extend `lint` with stronger repo-rule checking and project/file scoring where it is still genuinely useful
-- [ ] extend `checkpoint` with clearer long-worksession checkpoint behavior if shadow checkpoints need more functionality
+- [ ] 25. expose the full engine cleanly through the planned CLI and UX layers only after the underlying fast-path, indexing, retrieval, structure, and research primitives are stable
 
 ---
 

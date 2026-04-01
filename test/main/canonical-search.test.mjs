@@ -42,16 +42,28 @@ describe("canonical-search", () => {
         entityTypes: ["symbol"],
         topK: 2,
         includeKinds: ["function"],
+        retrievalMode: "keyword",
+      });
+      const semanticOnly = await runCanonicalSearch({
+        rootDir,
+        query: "canonical search knowledge base",
+        entityTypes: ["symbol"],
+        topK: 2,
+        retrievalMode: "semantic",
       });
 
       assert.match(mixed, /Requested result types: file, symbol/);
+      assert.match(mixed, /Retrieval mode: both/);
       assert.match(mixed, /src\/search\.ts:L3-L5 \[symbol\] searchKnowledgeBase \(function\)/);
       assert.match(mixed, /evidence file=/);
       assert.match(mixed, /supporting chunks:/);
       assert.match(mixed, /supporting identifiers:/);
       assert.match(symbolOnly, /Requested result types: symbol/);
+      assert.match(symbolOnly, /Retrieval mode: keyword/);
       assert.match(symbolOnly, /\[symbol\] searchKnowledgeBase \(function\)/);
       assert.doesNotMatch(symbolOnly, /\[symbol\].+\(interface\)/);
+      assert.match(semanticOnly, /Retrieval mode: semantic/);
+      assert.match(semanticOnly, /\[symbol\] searchKnowledgeBase \(function\)/);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

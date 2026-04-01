@@ -1,8 +1,8 @@
 // Multi-provider vector embedding engine with cosine similarity search
 // Supports Ollama (local) and OpenAI-compatible APIs (Gemini, OpenAI, etc.)
-// Indexes file headers and symbols, caches embeddings in sqlite for speed
+// Indexes file headers and symbols, persists vectors in sqlite collections
 
-import { loadIndexArtifact, saveIndexArtifact } from "./index-database.js";
+import { loadVectorCollection, replaceVectorCollection } from "./index-database.js";
 
 const EMBED_TIMEOUT_MS = 60_000;
 let embedAbortController = new AbortController();
@@ -95,6 +95,10 @@ const MAX_SINGLE_INPUT_RETRIES = 40;
 const MIN_EMBED_CHUNK_CHARS = 256;
 const DEFAULT_EMBED_CHUNK_CHARS = 2000;
 const MAX_EMBED_CHUNK_CHARS = 8000;
+const FILE_SEARCH_VECTOR_NAMESPACE = "file-search";
+const IDENTIFIER_VECTOR_NAMESPACE = "identifier-search";
+const IDENTIFIER_CALLSITE_VECTOR_NAMESPACE = "identifier-callsite-search";
+const CHUNK_VECTOR_NAMESPACE = "chunk-search";
 
 type OllamaEmbedClient = { embed: (params: Record<string, unknown>) => Promise<{ embeddings: number[][] }> };
 let ollamaClient: OllamaEmbedClient | null = null;
@@ -331,6 +335,10 @@ function hashContent(text: string): string {
   return h.toString(36);
 }
 
+export function buildEmbeddingCacheHash(text: string): string {
+  return hashContent(`${EMBED_PROVIDER}:${ACTIVE_EMBED_MODEL}:${text}`);
+}
+
 function cosine(a: number[], b: number[]): number {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
@@ -429,15 +437,68 @@ async function saveCache(rootDir: string, cache: EmbeddingCache): Promise<void> 
 }
 
 export async function ensureEmbeddingCacheDir(rootDir: string): Promise<void> {
-  await loadIndexArtifact(rootDir, `embedding-cache:${CACHE_FILE}`, () => ({}));
+  await loadEmbeddingCache(rootDir, CACHE_FILE);
+}
+
+function resolveEmbeddingNamespaces(fileName: string): { primary: string; secondary?: string } {
+  if (fileName === CACHE_FILE) return { primary: FILE_SEARCH_VECTOR_NAMESPACE };
+  if (fileName === "identifier-embeddings-cache.json") {
+    return {
+      primary: IDENTIFIER_VECTOR_NAMESPACE,
+      secondary: IDENTIFIER_CALLSITE_VECTOR_NAMESPACE,
+    };
+  }
+  if (fileName === "chunk-embeddings-cache.json") return { primary: CHUNK_VECTOR_NAMESPACE };
+  throw new Error(`Unsupported embedding cache namespace for "${fileName}".`);
 }
 
 export async function loadEmbeddingCache(rootDir: string, fileName: string): Promise<EmbeddingCache> {
-  return loadIndexArtifact(rootDir, `embedding-cache:${fileName}`, () => ({}));
+  const namespaces = resolveEmbeddingNamespaces(fileName);
+  const cache: EmbeddingCache = {};
+  const primaryEntries = await loadVectorCollection(rootDir, namespaces.primary);
+  for (const entry of primaryEntries) {
+    cache[entry.id] = {
+      hash: entry.contentHash,
+      vector: entry.vector,
+    };
+  }
+  if (namespaces.secondary) {
+    const secondaryEntries = await loadVectorCollection(rootDir, namespaces.secondary);
+    for (const entry of secondaryEntries) {
+      cache[entry.id] = {
+        hash: entry.contentHash,
+        vector: entry.vector,
+      };
+    }
+  }
+  return cache;
 }
 
 export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
-  await saveIndexArtifact(rootDir, `embedding-cache:${fileName}`, cache);
+  const namespaces = resolveEmbeddingNamespaces(fileName);
+  const primaryEntries = Object.entries(cache)
+    .filter(([key]) => !namespaces.secondary || !key.startsWith("callsite:"))
+    .map(([key, value]) => ({
+      id: key,
+      contentHash: value.hash,
+      searchText: key,
+      vector: value.vector,
+      metadata: null,
+    }));
+  await replaceVectorCollection(rootDir, namespaces.primary, primaryEntries);
+
+  if (namespaces.secondary) {
+    const secondaryEntries = Object.entries(cache)
+      .filter(([key]) => key.startsWith("callsite:"))
+      .map(([key, value]) => ({
+        id: key,
+        contentHash: value.hash,
+        searchText: key,
+        vector: value.vector,
+        metadata: null,
+      }));
+    await replaceVectorCollection(rootDir, namespaces.secondary, secondaryEntries);
+  }
 }
 
 function formatLineRange(line: number, endLine?: number): string {
@@ -464,7 +525,7 @@ export class SearchIndex {
     for (let i = 0; i < docs.length; i++) {
       const doc = docs[i];
       const rawText = `${doc.header} ${doc.symbols.join(" ")} ${doc.content}`;
-      const hash = hashContent(rawText);
+      const hash = buildEmbeddingCacheHash(rawText);
 
       if (cache[doc.path]?.hash === hash) {
         this.vectors[i] = cache[doc.path].vector;
