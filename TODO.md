@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 08 and verify it directly
-- [ ] commit the verified step 08 work
+- [ ] finish roadmap step 09 and verify it directly
+- [ ] commit the verified step 09 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 08. make `search` the canonical query entrypoint over those precomputed artifacts and remove overlapping or weaker search surfaces after callers are migrated
 - [ ] 09. persist semantic clusters, cluster labels, related-file graphs, and subsystem summaries as `full` artifacts instead of generating them only on demand
 - [ ] 10. generate hub suggestions and feature-group candidates automatically from clusters, structure graphs, and feature tags so humans and agents get higher-level maps for free
 - [ ] 11. replace the current memory store with the planned graph-plus-markdown-plus-vector memory system and make memory writes update embeddings and relations automatically

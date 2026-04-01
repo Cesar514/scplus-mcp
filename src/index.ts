@@ -12,8 +12,8 @@ import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeErro
 import { getContextTree } from "./tools/context-tree.js";
 import { getFileSkeleton } from "./tools/file-skeleton.js";
 import { cancelAllEmbeddings } from "./core/embeddings.js";
-import { semanticCodeSearch, invalidateSearchCache } from "./tools/semantic-search.js";
-import { semanticIdentifierSearch, invalidateIdentifierSearchCache } from "./tools/semantic-identifiers.js";
+import { invalidateSearchCache } from "./tools/semantic-search.js";
+import { invalidateIdentifierSearchCache } from "./tools/semantic-identifiers.js";
 import { getBlastRadius } from "./tools/blast-radius.js";
 import { runStaticAnalysis } from "./tools/static-analysis.js";
 import { proposeCommit } from "./tools/propose-commit.js";
@@ -23,6 +23,7 @@ import { getFeatureHub } from "./tools/feature-hub.js";
 import { toolUpsertMemoryNode, toolCreateRelation, toolSearchMemoryGraph, toolPruneStaleLinks, toolAddInterlinkedContext, toolRetrieveWithTraversal } from "./tools/memory-tools.js";
 import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
+import { runCanonicalSearch } from "./tools/unified-ranking.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -243,60 +244,50 @@ server.tool(
 
 server.tool(
   "search",
-  "Search the codebase by meaning. Use search_type='file' for semantic file retrieval or search_type='identifier' " +
-  "for symbol-level matches with ranked call sites.",
+  "Search the prepared full-engine artifacts with unified ranking. Use search_type='file' for file results, " +
+  "search_type='symbol' for symbol-level results, or search_type='mixed' to rank both together.",
   {
-    search_type: z.enum(["file", "identifier"]).describe("Select file-level or identifier-level semantic search."),
-    query: z.string().describe("Natural language intent to match identifiers and usages."),
-    top_k: z.number().optional().describe("How many identifiers to return. Default: 5."),
-    min_semantic_score: z.number().optional().describe("File search only. Minimum semantic score filter. Accepts 0-1 or 0-100."),
-    min_keyword_score: z.number().optional().describe("File search only. Minimum keyword score filter. Accepts 0-1 or 0-100."),
-    min_combined_score: z.number().optional().describe("File search only. Minimum final score filter. Accepts 0-1 or 0-100."),
-    require_keyword_match: z.boolean().optional().describe("File search only. When true, only return files with keyword overlap."),
-    require_semantic_match: z.boolean().optional().describe("File search only. When true, only return files with positive semantic similarity."),
-    top_calls_per_identifier: z.number().optional().describe("How many ranked call sites per identifier. Default: 10."),
-    include_kinds: z.array(z.string()).optional().describe("Optional kinds filter, e.g. [\"function\", \"method\", \"variable\"]."),
-    semantic_weight: z.number().optional().describe("Weight for semantic similarity score. File default: 0.72. Identifier default: 0.78."),
-    keyword_weight: z.number().optional().describe("Weight for keyword overlap score. File default: 0.28. Identifier default: 0.22."),
+    search_type: z.enum(["file", "symbol", "mixed"]).describe("Select file results, symbol results, or both together."),
+    query: z.string().describe("Natural language intent to rank against the prepared full-engine artifacts."),
+    top_k: z.number().optional().describe("How many ranked hits to return. Default: 5."),
+    include_kinds: z.array(z.string()).optional().describe("Optional symbol-kind filter, e.g. [\"function\", \"method\", \"variable\"]."),
+    semantic_weight: z.number().optional().describe("Weight for semantic similarity inside the hybrid retrieval layers."),
+    lexical_weight: z.number().optional().describe("Weight for lexical overlap inside the hybrid retrieval layers."),
+    file_weight: z.number().optional().describe("Weight for file-level evidence in the final unified rank."),
+    chunk_weight: z.number().optional().describe("Weight for chunk-level evidence in the final unified rank."),
+    identifier_weight: z.number().optional().describe("Weight for identifier evidence in the final unified rank."),
+    structure_weight: z.number().optional().describe("Weight for structure-graph evidence in the final unified rank."),
+    memory_weight: z.number().optional().describe("Weight for memory-graph evidence in the final unified rank."),
   },
   withRequestActivity(async ({
     search_type,
     query,
     top_k,
-    min_semantic_score,
-    min_keyword_score,
-    min_combined_score,
-    require_keyword_match,
-    require_semantic_match,
-    top_calls_per_identifier,
     include_kinds,
     semantic_weight,
-    keyword_weight,
+    lexical_weight,
+    file_weight,
+    chunk_weight,
+    identifier_weight,
+    structure_weight,
+    memory_weight,
   }) => ({
     content: [{
       type: "text" as const,
-      text: search_type === "file"
-        ? await semanticCodeSearch({
-          rootDir: ROOT_DIR,
-          query,
-          topK: top_k,
-          semanticWeight: semantic_weight,
-          keywordWeight: keyword_weight,
-          minSemanticScore: min_semantic_score,
-          minKeywordScore: min_keyword_score,
-          minCombinedScore: min_combined_score,
-          requireKeywordMatch: require_keyword_match,
-          requireSemanticMatch: require_semantic_match,
-        })
-        : await semanticIdentifierSearch({
-          rootDir: ROOT_DIR,
-          query,
-          topK: top_k,
-          topCallsPerIdentifier: top_calls_per_identifier,
-          includeKinds: include_kinds,
-          semanticWeight: semantic_weight,
-          keywordWeight: keyword_weight,
-        }),
+      text: await runCanonicalSearch({
+        rootDir: ROOT_DIR,
+        query,
+        topK: top_k,
+        entityTypes: search_type === "mixed" ? ["file", "symbol"] : [search_type],
+        includeKinds: include_kinds,
+        semanticWeight: semantic_weight,
+        lexicalWeight: lexical_weight,
+        fileWeight: file_weight,
+        chunkWeight: chunk_weight,
+        identifierWeight: identifier_weight,
+        structureWeight: structure_weight,
+        memoryWeight: memory_weight,
+      }),
     }],
   }), { useEmbeddingTracker: true }),
 );

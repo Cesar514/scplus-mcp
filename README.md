@@ -52,7 +52,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, and code-structure indexes, writes indexing status, preserves durable memories/checkpoints, refreshes incrementally using content hashes plus dependency-aware structure invalidation, persists richer module graph artifacts, and prepares the unified ranking substrate used by canonical search. |
 | `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
 | `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
-| `search`                    | Unified semantic search. Use `search_type: "file"` for file retrieval or `search_type: "identifier"` for symbol matches with ranked call sites.                 |
+| `search`                    | Canonical full-engine search. Use `search_type: "file"` for file results, `search_type: "symbol"` for symbol results, or `search_type: "mixed"` to rank both together over the unified evidence model. |
 | `cluster`                   | Browse codebase by meaning using spectral clustering. Groups semantically related files into labeled clusters.                                                   |
 
 ### Analysis

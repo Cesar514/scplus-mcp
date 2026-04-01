@@ -115,6 +115,8 @@ export interface UnifiedRankedHit {
   evidence: UnifiedSearchEvidence;
 }
 
+export interface CanonicalSearchOptions extends UnifiedRankingOptions {}
+
 interface Candidate {
   id: string;
   entityType: EntityType;
@@ -361,6 +363,52 @@ function finalizeCandidate(candidate: Candidate, options: UnifiedRankingOptions)
   };
 }
 
+function formatEvidenceSummary(hit: UnifiedRankedHit): string {
+  return [
+    `evidence file=${hit.evidence.file.toFixed(2)}`,
+    `chunk=${hit.evidence.chunk.toFixed(2)}`,
+    `identifier=${hit.evidence.identifier.toFixed(2)}`,
+    `structure=${hit.evidence.structure.toFixed(2)}`,
+    `memory=${hit.evidence.memory.toFixed(2)}`,
+    `semantic=${hit.evidence.semantic.toFixed(2)}`,
+    `lexical=${hit.evidence.lexical.toFixed(2)}`,
+  ].join(" | ");
+}
+
+export function formatUnifiedSearchResults(query: string, entityTypes: EntityType[], hits: UnifiedRankedHit[]): string {
+  const requested = entityTypes.join(", ");
+  if (hits.length === 0) {
+    return `Search: "${query}"\nRequested result types: ${requested}\nNo matching results found in the prepared full-engine artifacts.`;
+  }
+
+  const lines = [
+    `Search: "${query}"`,
+    `Requested result types: ${requested}`,
+    `Ranked hits: ${hits.length}`,
+    "",
+  ];
+
+  for (const hit of hits) {
+    const lineRange = hit.endLine > hit.line ? `L${hit.line}-L${hit.endLine}` : `L${hit.line}`;
+    lines.push(`${hit.path}:${lineRange} [${hit.entityType}] ${hit.title} (${hit.kind}) score=${hit.score.toFixed(3)}`);
+    if (hit.modulePath) lines.push(`  module: ${hit.modulePath}`);
+    lines.push(`  ${formatEvidenceSummary(hit)}`);
+    if (hit.evidence.matchedTerms.length > 0) lines.push(`  matched terms: ${hit.evidence.matchedTerms.join(", ")}`);
+    if (hit.evidence.supportingChunkIds.length > 0) lines.push(`  supporting chunks: ${hit.evidence.supportingChunkIds.slice(0, 3).join(", ")}`);
+    if (hit.evidence.supportingIdentifierIds.length > 0) lines.push(`  supporting identifiers: ${hit.evidence.supportingIdentifierIds.slice(0, 3).join(", ")}`);
+    if (hit.evidence.supportingMemoryNodeIds.length > 0) lines.push(`  supporting memory nodes: ${hit.evidence.supportingMemoryNodeIds.slice(0, 3).join(", ")}`);
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+export async function runCanonicalSearch(options: CanonicalSearchOptions): Promise<string> {
+  const entityTypes = options.entityTypes ?? ["file", "symbol"];
+  const hits = await rankUnifiedSearch(options);
+  return formatUnifiedSearchResults(options.query, entityTypes, hits);
+}
+
 export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise<UnifiedRankedHit[]> {
   const rootDir = options.rootDir;
   const queryTerms = splitTerms(options.query);
@@ -514,8 +562,12 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     }
   }
 
+  const normalizedKinds = options.includeKinds?.map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const kindFilter = normalizedKinds && normalizedKinds.length > 0 ? new Set(normalizedKinds) : null;
+
   return Array.from(candidates.values())
     .filter((candidate) => entityTypes.has(candidate.entityType))
+    .filter((candidate) => !kindFilter || candidate.entityType !== "symbol" || kindFilter.has(candidate.kind.toLowerCase()))
     .map((candidate) => finalizeCandidate(candidate, options))
     .sort((a, b) =>
       b.score - a.score

@@ -133,7 +133,7 @@ Strict order within every file:
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse codebase by meaning, not directory structure.                               |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |
-| `search`                     | Find relevant files or identifiers by concept using `search_type`.                 |
+| `search`                     | Canonical full-engine search over persisted artifacts. Use `search_type` = `file`, `symbol`, or `mixed`. |
 | `blast_radius`               | Before deleting or modifying any symbol.                                           |
 | `lint`                       | After writing code. Catch dead code deterministically.                             |
 | `checkpoint`                 | The ONLY way to save files. Validates before writing.                              |

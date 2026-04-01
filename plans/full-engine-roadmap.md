@@ -20,7 +20,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 18:11Z) Completed Step 05. Replaced size-plus-mtime refresh checks with content hashes for file and identifier artifacts, content-hash-plus-chunk-content-hash reuse for chunk artifacts, and dependency-aware structure invalidation driven by local import hashes, then verified both same-size content changes and dependent-file refresh behavior directly.
 - [x] (2026-04-01 19:06Z) Completed Step 06. Expanded the structure artifact into a richer graph-backed substrate with per-file module metadata, normalized symbol records, file-to-symbol mappings, ownership edges, module summaries, and module import edges, then verified the persisted shape directly.
 - [x] (2026-04-01 19:45Z) Completed Step 07. Added a unified ranking engine that combines persisted file, chunk, identifier, structure, and memory evidence into one scoreable file/symbol result set, then verified it with focused ranking tests and a real full-index rerun.
-- [ ] Step 08. Make `search` the canonical query entrypoint over the precomputed artifacts.
+- [x] (2026-04-01 20:03Z) Completed Step 08. Routed the public `search` surface through the unified ranking engine, simplified the search contract to `file` / `symbol` / `mixed`, and verified canonical output directly.
 - [ ] Step 09. Persist semantic clusters, cluster labels, related-file graphs, and subsystem summaries.
 - [ ] Step 10. Generate hub suggestions and feature-group candidates automatically.
 - [ ] Step 11. Replace the current memory store with the planned graph-plus-markdown-plus-vector memory system.
@@ -76,7 +76,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, and Step 07 are complete and verified. Step 08 is next and will route the public `search` surface through the unified ranker over the persisted retrieval and structure substrates.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, Step 04, Step 05, Step 06, Step 07, and Step 08 are complete and verified. Step 09 is next and will persist semantic clusters and subsystem summaries into the full-index artifact set.
 
 ## Context and Orientation
 
@@ -105,7 +105,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, structure, and memory evidence into one scoreable result set.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 completed the stronger invalidation layer by moving refresh logic onto content hashes and dependency-aware structure recomputation. Step 06 expanded the structure substrate into a real module graph with ownership and symbol mappings so ranking and canonical search can consume stable graph artifacts instead of inferring them on demand. Step 07 added the unified ranking layer that can combine file, chunk, identifier, structure, and memory evidence into one scoreable result set. Step 08 moved the public `search` surface onto that unified ranker and removed the older split search contract from the MCP boundary.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -114,10 +114,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 08, route the public `search` surface through the unified ranking engine and make it the canonical query entrypoint over the persisted artifacts.
-3. Update the tests to assert that the public search output now comes from the unified ranker instead of the older split ranking paths.
-4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the refreshed artifacts and live search output.
-5. Commit Step 08 with a message that names the canonical search milestone.
+2. For Step 09, persist semantic clusters, cluster labels, related-file graphs, and subsystem summaries into sqlite as full-engine artifacts.
+3. Update the tests so clustering is verified from persisted artifacts instead of only on-demand generation.
+4. Run the build and focused/full tests, then run `node build/index.js index --mode=full` and inspect the cluster-related sqlite artifacts and `cluster` output.
+5. Commit Step 09 with a message that names the persisted clustering milestone.
 
 Verification transcript used for Step 01:
 

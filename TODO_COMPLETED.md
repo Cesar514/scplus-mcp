@@ -73,3 +73,5 @@
 - [x] verify the updated lint and checkpoint behavior with targeted suites and the full main test run
 - [x] finish roadmap step 07 by building a unified ranking engine that combines file, chunk, identifier, structure, and memory evidence over the persisted sqlite artifacts
 - [x] verify roadmap step 07 directly with the focused unified-ranking test and a clean full-index rerun on the repository
+- [x] finish roadmap step 08 by routing the public `search` surface through the unified ranking engine and simplifying the search contract around file, symbol, and mixed result types
+- [x] verify roadmap step 08 directly with focused canonical-search coverage and a real full-index plus canonical-search run on the repository
