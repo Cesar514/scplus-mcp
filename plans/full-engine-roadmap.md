@@ -27,7 +27,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 13:56Z) Completed Step 13. Added a unified `research` tool surface that aggregates ranked code hits, structure-backed related files, subsystem summaries, and hub context from the prepared full-engine artifacts, then verified it with focused coverage, the full suite, a real full index run, and a direct repository research query.
 - [x] (2026-04-01 14:55Z) Completed Step 14. Added prepared-index validation and repair tools, enforced crash-only prepared-index checks in query surfaces, preserved handwritten hub browsing when no prepared full index exists, and verified direct repair behavior plus the full suite.
 - [x] (2026-04-01 15:40Z) Completed Step 15. Added a deterministic `evaluate` benchmark suite over a synthetic fixture repo, measured initial and refresh index timings, verified retrieval/navigation/research quality plus artifact freshness, and exposed it through the public tool surface.
-- [ ] Step 16. Simplify the public tool surface by deleting superseded interfaces.
+- [x] (2026-04-01 16:12Z) Completed Step 16. Removed public weight-tuning knobs from `search`, collapsed the public `research` surface to a query-only interface, aligned the landing examples with the shipped MCP contract, and verified the simplified boundary with build, tests, Context+ blast-radius/lint checks, and source sweeps.
 - [ ] Step 17. Expose the full engine cleanly through the CLI and UX layers.
 
 ## Surprises & Discoveries

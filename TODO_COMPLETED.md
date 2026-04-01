@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 16 by removing public weight-tuning knobs from `search`, collapsing `research` to a query-only public interface, and aligning the landing tool examples with the shipped MCP surface
+- [x] verify roadmap step 16 directly with build, the full test suite, Context+ blast-radius/lint checks, and source sweeps that prove the removed public knobs are gone from the active tool boundary
+- [x] commit the verified step 16 work
 - [x] finish roadmap step 15 by adding a deterministic evaluation suite and public `evaluate` benchmark tool for retrieval, navigation, freshness, speed, and research output quality
 - [x] verify roadmap step 15 directly with build, focused evaluation coverage, the full test suite, and a direct `evaluate` run against the built tool
 - [x] commit the verified step 15 work
