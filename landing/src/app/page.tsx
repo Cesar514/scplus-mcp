@@ -46,6 +46,48 @@ const toolRefRows = [
       '"[function] L12-L58 export function parseFile(\n  filePath: string,\n  options?: ParseOptions\n): Promise<AST>;\n\n[class] L60-L130 export class Walker;\n  [method] L72-L94 walk(node: Node): void;\n  [method] L96-L118 getSymbols(): Symbol[];"',
   },
   {
+    name: "symbol",
+    desc: "Run a tiny exact symbol lookup when you already know the identifier name and want deterministic exact matches.",
+    input: "{ query: string, top_k?: number }",
+    output:
+      '"Exact symbol matches for \\"verifyToken\\" (1)\n- src/auth/jwt.ts:3-5 | function | verifyToken(token: string): string"',
+  },
+  {
+    name: "word",
+    desc: "Run a tiny indexed word lookup over paths, headers, symbols, and content snippets before escalating to broader search.",
+    input: "{ query: string, top_k?: number }",
+    output:
+      '"Word hits for \\"auth\\" (2)\n- src/auth/session.ts:5 | symbol | createSession | export function createSession(token: string): string {\n- scripts/setup-auth.ts | path | scripts/setup-auth.ts | scripts/setup-auth.ts"',
+  },
+  {
+    name: "outline",
+    desc: "Return a compact imports/exports/symbol outline for a known file from the prepared fast-query substrate.",
+    input: "{ file_path: string }",
+    output:
+      '"Outline: src/auth/session.ts\nHeader: Session auth helpers\nLanguage: typescript\nModule: src/auth\nImports (1)\n- L3 ./jwt | verifyToken\nExports (1)\n- L5 function createSession\nSymbols (1)\n- L5-7 function createSession(token: string): string"',
+  },
+  {
+    name: "deps",
+    desc: "Return compact direct and reverse dependency information for one indexed file.",
+    input: "{ target: string }",
+    output:
+      '"Dependencies: src/auth/jwt.ts\nModule: src/auth\nDirect (0)\nReverse (1)\n- src/auth/session.ts\nExports: verifyToken\nImports: none"',
+  },
+  {
+    name: "status",
+    desc: "Return a tiny git worktree status summary for the current repository.",
+    input: "{ limit?: number }",
+    output:
+      '"Status: main\nahead=0 behind=0 staged=0 unstaged=1 untracked=1 conflicted=0\nmodified=1 created=0 deleted=0 renamed=0\nFiles (2)\n-  M src/auth/session.ts\n- ?? scripts/auth-status.ts"',
+  },
+  {
+    name: "changes",
+    desc: "Return a tiny git change summary, optionally scoped to one file, including line-range hunks when available.",
+    input: "{ path?: string, limit?: number }",
+    output:
+      '"Changes: files=2 staged=0 unstaged=1 untracked=1\nFiles (2)\n- src/auth/session.ts |  M | +1 -1 | ranges old 6:1 -> new 6:1\n- scripts/auth-status.ts | ?? | +0 -0 | ranges none"',
+  },
+  {
     name: "search",
     desc: "Canonical full-engine search over the persisted ranking substrate. Use search_type 'file', 'symbol', or 'mixed' to query ranked file and symbol evidence.",
     input:

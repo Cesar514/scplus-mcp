@@ -19,6 +19,9 @@
 
 ## maintenance
 
+- [x] finish roadmap step 18 by exposing the fast exact-query substrate through tiny public MCP tools for exact symbol lookup, word lookup, file outlines, dependency tracing, git status, and git changes
+- [x] verify roadmap step 18 directly with a built-server MCP integration test, build, the full main test suite, and the landing production build
+- [x] commit the verified step 18 work
 - [x] finish roadmap step 17 by adding a fast exact-query substrate over the prepared full index with hot in-memory caches for exact symbol lookup, word lookup, file outlines, reverse dependencies, and git-backed change/status tracking
 - [x] verify roadmap step 17 directly with Context+ lint, a focused exact-query test, build, and the full main test suite
 - [x] commit the verified step 17 work

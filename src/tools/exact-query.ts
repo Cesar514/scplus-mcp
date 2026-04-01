@@ -232,13 +232,11 @@ interface FastQueryState {
 
 interface CachedRepoState {
   repoKey: string;
-  updatedAtMs: number;
   status: RepoStatusSummary;
   changes: RepoChangesSummary;
   fileRanges: Map<string, ChangeRange[]>;
 }
 
-const FAST_QUERY_TTL_MS = 750;
 const stateCache = new Map<string, FastQueryState>();
 const repoCache = new Map<string, CachedRepoState>();
 
@@ -257,6 +255,24 @@ function splitTerms(text: string): string[] {
     .toLowerCase()
     .split(/[^a-z0-9_./-]+/)
     .filter((token) => token.length > 1);
+}
+
+function trimSnippet(value: string, maxLength: number = 120): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+}
+
+function formatNameList(values: string[]): string {
+  return values.length > 0 ? values.join(", ") : "none";
+}
+
+function formatChangeRanges(ranges?: ChangeRange[]): string {
+  if (!ranges || ranges.length === 0) return "none";
+  return ranges
+    .slice(0, 5)
+    .map((range) => `old ${range.oldStart}:${range.oldLines} -> new ${range.newStart}:${range.newLines}`)
+    .join(" | ");
 }
 
 function buildLookupTokens(text: string): Set<string> {
@@ -557,9 +573,6 @@ async function getFastQueryState(rootDir: string): Promise<FastQueryState> {
 
 async function getRepoState(rootDir: string): Promise<CachedRepoState> {
   const normalizedRootDir = resolve(rootDir);
-  const cached = repoCache.get(normalizedRootDir);
-  if (cached && (Date.now() - cached.updatedAtMs) < FAST_QUERY_TTL_MS) return cached;
-
   const git = simpleGit(normalizedRootDir);
   if (!(await git.checkIsRepo())) {
     throw new Error(`Git status queries require a git repository: ${normalizedRootDir}`);
@@ -575,6 +588,9 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
     .filter((entry): entry is RepoStatusFile => Boolean(entry))
     .filter((entry) => !shouldIgnoreRepoStatusPath(entry.path));
   const statusSummary = summarizeStatus(branch, status.ahead, status.behind, files);
+  const repoKey = `${branch}|${statusSummary.files.map((file) => `${file.index}${file.workingTree}:${file.path}`).join("|")}`;
+  const cached = repoCache.get(normalizedRootDir);
+  if (cached && cached.repoKey === repoKey) return cached;
 
   const unstagedSummary = await git.diffSummary();
   const stagedSummary = await git.diffSummary(["--cached"]);
@@ -622,8 +638,7 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
   };
 
   const repoState: CachedRepoState = {
-    repoKey: `${branch}|${statusSummary.files.map((file) => `${file.index}${file.workingTree}:${file.path}`).join("|")}`,
-    updatedAtMs: Date.now(),
+    repoKey,
     status: statusSummary,
     changes,
     fileRanges,
@@ -741,4 +756,105 @@ export async function lookupExactPathContent(rootDir: string, filePath: string):
     throw new Error(`No indexed file path found for "${filePath}".`);
   }
   return readFile(resolve(rootDir, resolvedPath), "utf8");
+}
+
+export function formatExactSymbolResults(query: string, hits: ExactSymbolHit[]): string {
+  const lines = [`Exact symbol matches for "${query}" (${hits.length})`];
+  if (hits.length === 0) {
+    lines.push("No exact symbol matches.");
+    return lines.join("\n");
+  }
+  for (const hit of hits) {
+    const parent = hit.parentName ? ` | parent ${hit.parentName}` : "";
+    lines.push(`- ${hit.path}:${hit.line}-${hit.endLine} | ${hit.kind} | ${hit.signature}${parent}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatWordMatches(query: string, hits: WordMatchHit[]): string {
+  const lines = [`Word hits for "${query}" (${hits.length})`];
+  if (hits.length === 0) {
+    lines.push("No indexed word hits.");
+    return lines.join("\n");
+  }
+  for (const hit of hits) {
+    const line = hit.line ? `:${hit.line}` : "";
+    lines.push(`- ${hit.path}${line} | ${hit.kind} | ${trimSnippet(hit.title, 80)} | ${trimSnippet(hit.snippet)}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatOutline(outline: FileOutline): string {
+  const lines = [
+    `Outline: ${outline.path}`,
+    `Header: ${outline.header || "none"}`,
+    `Language: ${outline.language}`,
+    `Module: ${outline.modulePath}`,
+    `Imports (${outline.imports.length})`,
+  ];
+  for (const entry of outline.imports) {
+    lines.push(`- L${entry.line} ${entry.source} | ${formatNameList(entry.names)}`);
+  }
+  lines.push(`Exports (${outline.exports.length})`);
+  for (const entry of outline.exports) {
+    lines.push(`- L${entry.line} ${entry.kind} ${entry.name}`);
+  }
+  lines.push(`Symbols (${outline.symbols.length})`);
+  for (const symbol of outline.symbols) {
+    const parent = symbol.parentName ? ` | parent ${symbol.parentName}` : "";
+    lines.push(`- L${symbol.line}-${symbol.endLine} ${symbol.kind} ${symbol.signature}${parent}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatDependencyInfo(info: DependencyInfo): string {
+  const lines = [
+    `Dependencies: ${info.targetPath}`,
+    `Module: ${info.modulePath}`,
+    `Direct (${info.directDependencies.length})`,
+  ];
+  for (const dependency of info.directDependencies) {
+    lines.push(`- ${dependency}`);
+  }
+  lines.push(`Reverse (${info.reverseDependencies.length})`);
+  for (const dependency of info.reverseDependencies) {
+    lines.push(`- ${dependency}`);
+  }
+  lines.push(`Exports: ${formatNameList(info.exportedSymbolNames)}`);
+  lines.push(`Imports: ${formatNameList(info.importedSources)}`);
+  return lines.join("\n");
+}
+
+export function formatRepoStatusSummary(status: RepoStatusSummary, limit?: number): string {
+  const fileLimit = Math.max(1, Math.floor(limit ?? status.files.length));
+  const files = status.files.slice(0, fileLimit);
+  const omitted = Math.max(0, status.files.length - files.length);
+  const lines = [
+    `Status: ${status.branch}`,
+    `ahead=${status.ahead} behind=${status.behind} staged=${status.stagedCount} unstaged=${status.unstagedCount} untracked=${status.untrackedCount} conflicted=${status.conflictedCount}`,
+    `modified=${status.modifiedCount} created=${status.createdCount} deleted=${status.deletedCount} renamed=${status.renamedCount}`,
+    `Files (${status.files.length})`,
+  ];
+  for (const file of files) {
+    lines.push(`- ${file.index}${file.workingTree} ${file.path}`);
+  }
+  if (omitted > 0) lines.push(`- … ${omitted} more`);
+  return lines.join("\n");
+}
+
+export function formatRepoChangesSummary(summary: RepoChangesSummary, limit?: number): string {
+  const fileLimit = Math.max(1, Math.floor(limit ?? summary.files.length));
+  const files = summary.files.slice(0, fileLimit);
+  const omitted = Math.max(0, summary.files.length - files.length);
+  const lines = [
+    `Changes: files=${summary.changedFiles} staged=${summary.stagedFiles} unstaged=${summary.unstagedFiles} untracked=${summary.untrackedFiles}`,
+    `Files (${summary.files.length})`,
+  ];
+  for (const file of files) {
+    lines.push(
+      `- ${file.path} | ${file.staged}${file.unstaged} | +${file.additions} -${file.deletions} | ranges ${formatChangeRanges(file.ranges)}`,
+    );
+  }
+  if (omitted > 0) lines.push(`- … ${omitted} more`);
+  return lines.join("\n");
 }

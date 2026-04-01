@@ -54,6 +54,12 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | `repair_index`              | Repair a broken prepared index by rerunning either the full pipeline or a specific durable stage, then revalidate the repaired state loudly. |
 | `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
 | `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
+| `symbol`                    | Tiny exact symbol lookup over the prepared fast-query substrate. Use this when you already know the symbol name and want deterministic exact matches. |
+| `word`                      | Tiny indexed word lookup over paths, headers, symbols, and content snippets. Use this for exact words or short phrases before escalating to broader search. |
+| `outline`                   | Compact imports/exports/symbol outline for a known file from the prepared fast-query substrate. |
+| `deps`                      | Compact direct and reverse dependency report for one indexed file. |
+| `status`                    | Tiny git worktree status summary for the current repository. |
+| `changes`                   | Tiny git change summary, optionally scoped to one file, including line-range hunks when available. |
 | `search`                    | Canonical full-engine search. Use `search_type: "file"` for file results, `search_type: "symbol"` for symbol results, or `search_type: "mixed"` to rank both together over the unified evidence model. |
 | `research`                  | Unified repository research report. Aggregates ranked code hits, related files from structure and cluster artifacts, subsystem summaries, and relevant hubs in one bounded response. |
 | `evaluate`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |

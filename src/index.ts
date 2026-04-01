@@ -26,6 +26,21 @@ import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "./tools/index-reliability.js";
 import { runResearch } from "./tools/research.js";
 import { runCanonicalSearch } from "./tools/unified-ranking.js";
+import {
+  formatDependencyInfo,
+  formatExactSymbolResults,
+  formatOutline,
+  formatRepoChangesSummary,
+  formatRepoStatusSummary,
+  formatWordMatches,
+  getDependencyInfo,
+  getOutline,
+  getRepoChanges,
+  getRepoStatus,
+  invalidateFastQueryCache,
+  lookupExactSymbol,
+  lookupWord,
+} from "./tools/exact-query.js";
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -277,6 +292,93 @@ server.tool(
 );
 
 server.tool(
+  "symbol",
+  "Run a tiny exact symbol lookup over the prepared fast-query substrate. Use this when you already know the symbol name and want deterministic exact matches instead of ranked related search.",
+  {
+    query: z.string().describe("Exact symbol name to look up."),
+    top_k: z.number().optional().describe("Maximum number of exact matches to return. Default: 10."),
+  },
+  withRequestActivity(async ({ query, top_k }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatExactSymbolResults(query, await lookupExactSymbol(ROOT_DIR, query, top_k)),
+    }],
+  })),
+);
+
+server.tool(
+  "word",
+  "Run a tiny indexed word lookup over paths, headers, symbols, and content snippets. Use this for exact words or short phrases before escalating to broader ranked search.",
+  {
+    query: z.string().describe("Word or short phrase to look up."),
+    top_k: z.number().optional().describe("Maximum number of hits to return. Default: 10."),
+  },
+  withRequestActivity(async ({ query, top_k }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatWordMatches(query, await lookupWord(ROOT_DIR, query, top_k)),
+    }],
+  })),
+);
+
+server.tool(
+  "outline",
+  "Return a compact file outline from the prepared fast-query substrate. Use this when you know the file and want imports, exports, and symbols without broader search or full-body reads.",
+  {
+    file_path: z.string().describe("Path to the indexed file to inspect (relative to project root)."),
+  },
+  withRequestActivity(async ({ file_path }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatOutline(await getOutline(ROOT_DIR, file_path)),
+    }],
+  })),
+);
+
+server.tool(
+  "deps",
+  "Return compact direct and reverse dependency information for one indexed file. Use this for exact dependency tracing instead of broader related search.",
+  {
+    target: z.string().describe("Indexed file path or close path fragment to resolve."),
+  },
+  withRequestActivity(async ({ target }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatDependencyInfo(await getDependencyInfo(ROOT_DIR, target)),
+    }],
+  })),
+);
+
+server.tool(
+  "status",
+  "Return a tiny git worktree status summary for the current repository. Use this for branch and dirty-file checks instead of reading broader change context.",
+  {
+    limit: z.number().optional().describe("Maximum number of status entries to render. Default: 20."),
+  },
+  withRequestActivity(async ({ limit }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatRepoStatusSummary(await getRepoStatus(ROOT_DIR), limit),
+    }],
+  })),
+);
+
+server.tool(
+  "changes",
+  "Return a tiny git change summary, optionally for one file. Use this for exact changed-file inspection and line-range summaries instead of broader repository search.",
+  {
+    path: z.string().optional().describe("Optional indexed file path to scope the change summary to one file."),
+    limit: z.number().optional().describe("Maximum number of changed files to render when path is omitted. Default: 20."),
+  },
+  withRequestActivity(async ({ path, limit }) => ({
+    content: [{
+      type: "text" as const,
+      text: formatRepoChangesSummary(await getRepoChanges(ROOT_DIR, { path, limit }), limit),
+    }],
+  })),
+);
+
+server.tool(
   "research",
   "Aggregate code retrieval, structure-backed related files, subsystem summaries, and relevant hubs into one bounded report.",
   {
@@ -392,6 +494,7 @@ server.tool(
   withRequestActivity(async ({ file_path, new_content }) => {
     invalidateSearchCache();
     invalidateIdentifierSearchCache();
+    invalidateFastQueryCache(ROOT_DIR);
     return {
       content: [{
         type: "text" as const,
@@ -428,6 +531,7 @@ server.tool(
     const restored = await restorePoint(ROOT_DIR, point_id);
     invalidateSearchCache();
     invalidateIdentifierSearchCache();
+    invalidateFastQueryCache(ROOT_DIR);
     return {
       content: [{
         type: "text" as const,

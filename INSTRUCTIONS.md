@@ -74,7 +74,7 @@ Default to execution-first behavior. Use minimal tokens, minimal narration, and 
 ### Token-Efficiency Rules
 
 1. Treat 100 effective tokens as better than 1000 vague tokens.
-2. Use high-signal tool calls first (`skeleton`, `tree`, `blast_radius`).
+2. Use high-signal tool calls first (`symbol`, `word`, `outline`, `deps`, `status`, `changes`, `skeleton`, `tree`, `blast_radius`).
 3. Read full file bodies only when signatures/structure are insufficient.
 4. Avoid repeated scans of unchanged areas.
 5. Prefer direct edits + deterministic validation over extended speculative analysis.
@@ -132,6 +132,12 @@ Strict order within every file:
 | `tree`                       | Start of every task. Map files + symbols with line ranges.                         |
 | `cluster`                    | Browse persisted semantic clusters, subsystem summaries, and related files from the full index. |
 | `skeleton`                   | MUST run before full reads. Get signatures + line ranges first.                    |
+| `symbol`                     | Use for exact symbol-name lookups when you already know the identifier you want. |
+| `word`                       | Use for tiny indexed word or short-phrase lookup before escalating to broader search. |
+| `outline`                    | Use for compact imports/exports/symbol outlines of a known file. |
+| `deps`                       | Use for direct and reverse dependency tracing of a known indexed file. |
+| `status`                     | Use for tiny git worktree summaries instead of broader repository inspection. |
+| `changes`                    | Use for changed-file summaries and line-range hunks, optionally scoped to one file. |
 | `search`                     | Canonical full-engine search over persisted artifacts. Use `search_type` = `file`, `symbol`, or `mixed`. |
 | `research`                   | Unified research report that combines ranked code hits, related files, subsystem summaries, and hubs from prepared artifacts. |
 | `evaluate`                   | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality. |
