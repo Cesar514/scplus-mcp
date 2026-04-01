@@ -2,13 +2,13 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"contextplus/cli/internal/backend"
 	"contextplus/cli/internal/hubs"
-	"contextplus/cli/internal/watcher"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -81,8 +81,8 @@ type hubCreatedMsg struct {
 
 type frameMsg time.Time
 
-type watchBatchMsg struct {
-	batch watcher.BatchEvent
+type backendEventMsg struct {
+	event backend.Event
 }
 
 type wizardState struct {
@@ -94,40 +94,41 @@ type wizardState struct {
 }
 
 type Model struct {
-	root           string
-	client         *backend.Client
-	width          int
-	height         int
-	tab            int
-	magicianFrame  int
-	doctor         backend.DoctorReport
-	doctorLoaded   bool
-	treeText       string
-	hubsText       string
-	clusterText    string
-	restorePoints  []backend.RestorePoint
-	viewport       viewport.Model
-	logs           []string
-	lastError      string
-	indexing       bool
-	pendingReindex bool
-	watchEnabled   bool
-	watcher        *watcher.Service
-	watchEvents    <-chan watcher.BatchEvent
-	wizard         wizardState
+	root          string
+	client        *backend.Client
+	width         int
+	height        int
+	tab           int
+	magicianFrame int
+	doctor        backend.DoctorReport
+	doctorLoaded  bool
+	treeText      string
+	hubsText      string
+	clusterText   string
+	restorePoints []backend.RestorePoint
+	viewport      viewport.Model
+	logs          []string
+	lastError     string
+	indexing      bool
+	watchEnabled  bool
+	backendOnline bool
+	jobPhase      string
+	jobMessage    string
+	wizard        wizardState
 }
 
 func NewModel(root string, client *backend.Client) Model {
 	vp := viewport.New(80, 20)
 	model := Model{
-		root:         root,
-		client:       client,
-		width:        110,
-		height:       36,
-		viewport:     vp,
-		logs:         []string{"Context+ CLI started."},
-		wizard:       newWizardState(),
-		watchEnabled: false,
+		root:          root,
+		client:        client,
+		width:         110,
+		height:        36,
+		viewport:      vp,
+		logs:          []string{"Context+ CLI started."},
+		wizard:        newWizardState(),
+		backendOnline: true,
+		watchEnabled:  false,
 	}
 	model.syncViewport()
 	return model
@@ -207,13 +208,13 @@ func createHubCmd(root string, wizard wizardState) tea.Cmd {
 	}
 }
 
-func waitForWatchEventCmd(events <-chan watcher.BatchEvent) tea.Cmd {
+func waitForBackendEventCmd(events <-chan backend.Event) tea.Cmd {
 	return func() tea.Msg {
-		batch, ok := <-events
+		event, ok := <-events
 		if !ok {
-			return watchBatchMsg{batch: watcher.BatchEvent{Err: fmt.Errorf("watcher stopped")}}
+			return backendEventMsg{event: backend.Event{Kind: "disconnect", Message: "backend session closed"}}
 		}
-		return watchBatchMsg{batch: batch}
+		return backendEventMsg{event: event}
 	}
 }
 
@@ -228,7 +229,7 @@ func refreshAllCmd(client *backend.Client, root string) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(animateCmd(), refreshAllCmd(m.client, m.root))
+	return tea.Batch(animateCmd(), refreshAllCmd(m.client, m.root), waitForBackendEventCmd(m.client.Events()))
 }
 
 func (m *Model) appendLog(line string) {
@@ -284,26 +285,18 @@ func (m *Model) activateTab(index int) {
 }
 
 func (m *Model) toggleWatcher() tea.Cmd {
-	if m.watchEnabled {
-		if m.watcher != nil {
-			_ = m.watcher.Close()
-			m.watcher = nil
-			m.watchEvents = nil
-		}
-		m.watchEnabled = false
-		m.appendLog("watcher disabled")
-		return nil
-	}
-	service, err := watcher.New(m.root, 1200*time.Millisecond)
+	state, err := m.client.SetWatchEnabled(context.Background(), m.root, !m.watchEnabled)
 	if err != nil {
 		m.setError(err)
 		return nil
 	}
-	m.watchEnabled = true
-	m.watcher = service
-	m.watchEvents = service.Events()
-	m.appendLog("watcher enabled")
-	return waitForWatchEventCmd(m.watchEvents)
+	m.watchEnabled = state.Enabled
+	if state.Enabled {
+		m.appendLog("watcher enabled")
+	} else {
+		m.appendLog("watcher disabled")
+	}
+	return nil
 }
 
 func (m *Model) nextTab(delta int) {
@@ -333,9 +326,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, animateCmd()
 	case doctorLoadedMsg:
 		if message.err != nil {
+			m.backendOnline = false
 			m.setError(message.err)
 			return m, nil
 		}
+		m.backendOnline = true
 		m.doctor = message.report
 		m.doctorLoaded = true
 		m.appendLog("doctor report refreshed")
@@ -364,7 +359,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncViewport()
 		return m, nil
 	case indexFinishedMsg:
-		m.indexing = false
 		if message.err != nil {
 			m.setError(message.err)
 		} else {
@@ -373,12 +367,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				firstLine = "index completed"
 			}
 			m.appendLog(firstLine)
-		}
-		if m.pendingReindex {
-			m.pendingReindex = false
-			m.indexing = true
-			m.appendLog("running queued reindex after recent file changes")
-			return m, runIndexCmd(m.client, m.root)
 		}
 		return m, refreshAllCmd(m.client, m.root)
 	case hubCreatedMsg:
@@ -392,32 +380,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendLog("created hub " + message.path)
 		m.activateTab(tabHubs)
 		return m, loadHubsCmd(m.client, m.root)
-	case watchBatchMsg:
-		if message.batch.Err != nil {
-			if message.batch.Err.Error() != "watcher stopped" {
-				m.setError(message.batch.Err)
+	case backendEventMsg:
+		m.backendOnline = message.event.Kind != "disconnect"
+		switch message.event.Kind {
+		case "disconnect":
+			m.setError(errors.New(message.event.Message))
+		case "log":
+			if message.event.Message != "" {
+				m.appendLog(message.event.Message)
 			}
-			return m, nil
+		case "watch-state":
+			m.watchEnabled = message.event.Enabled
+		case "watch-batch":
+			if len(message.event.ChangedPaths) > 0 {
+				m.appendLog("detected changes: " + strings.Join(message.event.ChangedPaths, ", "))
+			}
+		case "job":
+			m.jobPhase = message.event.Phase
+			m.jobMessage = message.event.Message
+			m.indexing = message.event.State == "running" || message.event.State == "progress" || message.event.State == "queued"
 		}
-		m.appendLog("detected changes: " + strings.Join(message.batch.Paths, ", "))
-		var nextCmd tea.Cmd
-		if m.indexing {
-			m.pendingReindex = true
-			m.appendLog("queued reindex because one is already running")
-		} else {
-			m.indexing = true
-			nextCmd = runIndexCmd(m.client, m.root)
-		}
-		return m, tea.Batch(nextCmd, waitForWatchEventCmd(m.watchEvents))
+		return m, waitForBackendEventCmd(m.client.Events())
 	case tea.KeyMsg:
 		if m.wizard.active {
 			return m.updateWizard(message)
 		}
 		switch message.String() {
 		case "ctrl+c", "q":
-			if m.watcher != nil {
-				_ = m.watcher.Close()
-			}
 			return m, tea.Quit
 		case "left", "shift+tab":
 			m.nextTab(-1)
@@ -570,6 +559,8 @@ func (m Model) renderOverview() string {
 			fmt.Sprintf("restore points %d", m.doctor.RestorePointCount),
 			fmt.Sprintf("watcher %s", map[bool]string{true: "enabled", false: "disabled"}[m.watchEnabled]),
 			fmt.Sprintf("indexing %s", map[bool]string{true: "running", false: "idle"}[m.indexing]),
+			fmt.Sprintf("backend %s", map[bool]string{true: "connected", false: "offline"}[m.backendOnline]),
+			fmt.Sprintf("phase %s", formatBlankAsNone(m.jobPhase)),
 		}, "\n")
 	}
 	logs := "No activity yet."
@@ -635,9 +626,6 @@ func (m Model) View() string {
 }
 
 func (m Model) Close() error {
-	if m.watcher != nil {
-		return m.watcher.Close()
-	}
 	return nil
 }
 
@@ -694,4 +682,11 @@ func formatOptionalInt(value *int) string {
 		return "none"
 	}
 	return fmt.Sprintf("%d", *value)
+}
+
+func formatBlankAsNone(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "none"
+	}
+	return value
 }

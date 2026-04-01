@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "path";
 import { z } from "zod";
+import { createBackendCore } from "./cli/backend-core.js";
 import { CLI_SUBCOMMANDS, handleCliCommand } from "./cli/commands.js";
 import { createEmbeddingTrackerController } from "./core/embedding-tracker.js";
 import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeError, runCleanup, startParentMonitor } from "./core/process-lifecycle.js";
@@ -19,7 +20,6 @@ import { listRestorePoints, restorePoint } from "./git/shadow.js";
 import { semanticNavigate } from "./tools/semantic-navigate.js";
 import { getFeatureHub } from "./tools/feature-hub.js";
 import { runEvaluation } from "./tools/evaluation.js";
-import { indexCodebase } from "./tools/index-codebase.js";
 import { DEFAULT_INDEX_MODE } from "./tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "./tools/index-reliability.js";
 import { runResearch } from "./tools/research.js";
@@ -48,6 +48,7 @@ const INSTRUCTIONS_RESOURCE_URI = "contextplus://instructions";
 
 let noteServerActivity = () => { };
 let ensureTrackerRunning = () => { };
+const backendCore = createBackendCore();
 
 async function formatPreparedQueryResponse(text: string): Promise<string> {
   return `${await formatPreparedIndexFreshnessHeader(ROOT_DIR)}\n\n${text}`;
@@ -98,7 +99,7 @@ server.tool(
   withRequestActivity(async ({ mode }) => ({
     content: [{
       type: "text" as const,
-      text: await indexCodebase({ rootDir: ROOT_DIR, mode }),
+      text: await backendCore.index(ROOT_DIR, mode),
     }],
   })),
 );
@@ -509,6 +510,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.error(`Context+ MCP shutdown requested: ${reason}`);
+    await backendCore.close();
     await runCleanup({
       cancelEmbeddings: cancelAllEmbeddings,
       stopTracker: trackerController.stop,

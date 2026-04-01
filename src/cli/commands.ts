@@ -3,6 +3,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { getContextTree } from "../tools/context-tree.js";
 import { getFileSkeleton } from "../tools/file-skeleton.js";
 import {
@@ -16,8 +17,27 @@ import { listRestorePoints } from "../git/shadow.js";
 import { semanticNavigate } from "../tools/semantic-navigate.js";
 import { DEFAULT_INDEX_MODE } from "../tools/index-contract.js";
 import { formatIndexValidationReport, repairPreparedIndex, validatePreparedIndex } from "../tools/index-reliability.js";
-import { indexCodebase } from "../tools/index-codebase.js";
 import { buildDoctorReport } from "./reports.js";
+import { createBackendCore } from "./backend-core.js";
+
+// Persistent CLI bridge protocol:
+// request  => {"type":"request","id":number,"command":string,"args":object}
+// response => {"type":"response","id":number,"ok":boolean,"result"?:unknown,"error"?:string}
+// event    => {"type":"event","kind":"log"|"job"|"watch-batch"|"watch-state", ...eventFields}
+interface BridgeServeRequest {
+  type: "request";
+  id: number;
+  command: string;
+  args?: Record<string, unknown>;
+}
+
+interface BridgeServeResponse {
+  type: "response";
+  id: number;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
 
 type AgentTarget = "claude" | "cursor" | "vscode" | "windsurf" | "opencode" | "codex";
 
@@ -39,6 +59,7 @@ const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
 
 export const CLI_SUBCOMMANDS = new Set([
   "bridge",
+  "bridge-serve",
   "changes",
   "cluster",
   "doctor",
@@ -56,6 +77,14 @@ export const CLI_SUBCOMMANDS = new Set([
   "validate-index",
   "validate_index",
 ]);
+
+const backendCore = createBackendCore();
+const bridgeServiceCore = createBackendCore(async (event) => {
+  await writeBridgeFrame({
+    type: "event",
+    ...event,
+  });
+});
 
 function parseAgentTarget(input?: string): AgentTarget {
   const normalized = (input ?? "claude").toLowerCase();
@@ -267,7 +296,7 @@ async function runIndexCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
   const targetRoot = resolveRoot(parsed);
   const mode = normalizeIndexMode(getFlag(parsed.flags, "mode"));
-  process.stdout.write(`${await indexCodebase({ rootDir: targetRoot, mode })}\n`);
+  process.stdout.write(`${await backendCore.index(targetRoot, mode)}\n`);
 }
 
 async function runTreeCommand(args: string[]): Promise<void> {
@@ -407,6 +436,166 @@ async function runDoctorCommand(args: string[], forceJson: boolean): Promise<voi
   process.stdout.write(`${formatDoctorReport(report)}\n`);
 }
 
+async function writeBridgeFrame(frame: unknown): Promise<void> {
+  await new Promise<void>((resolveWrite, rejectWrite) => {
+    process.stdout.write(`${JSON.stringify(frame)}\n`, (error) => {
+      if (error) {
+        rejectWrite(error);
+        return;
+      }
+      resolveWrite();
+    });
+  });
+}
+
+function assertObject(value: unknown, message: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(message);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertString(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Persistent bridge command requires string arg "${name}".`);
+  }
+  return value;
+}
+
+function assertBoolean(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Persistent bridge command requires boolean arg "${name}".`);
+  }
+  return value;
+}
+
+function normalizePersistentIndexMode(value: unknown): "core" | "full" {
+  if (value === undefined) return DEFAULT_INDEX_MODE;
+  if (value === "core" || value === "full") return value;
+  throw new Error(`Persistent bridge command received invalid mode "${String(value)}".`);
+}
+
+function normalizeDebounceMs(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`Persistent bridge command received invalid debounceMs "${String(value)}".`);
+  }
+  return Math.floor(value);
+}
+
+async function executePersistentBridgeCommand(command: string, rawArgs: unknown): Promise<unknown> {
+  const args = rawArgs === undefined ? {} : assertObject(rawArgs, "Persistent bridge args must be an object.");
+  if (command === "doctor") {
+    return bridgeServiceCore.doctor(assertString(args.root, "root"));
+  }
+  if (command === "tree") {
+    return bridgeServiceCore.tree(assertString(args.root, "root"));
+  }
+  if (command === "hubs") {
+    return bridgeServiceCore.hubs(assertString(args.root, "root"));
+  }
+  if (command === "cluster") {
+    return bridgeServiceCore.cluster(assertString(args.root, "root"));
+  }
+  if (command === "restore-points") {
+    return bridgeServiceCore.restorePoints(assertString(args.root, "root"));
+  }
+  if (command === "index") {
+    return {
+      output: await bridgeServiceCore.index(assertString(args.root, "root"), normalizePersistentIndexMode(args.mode)),
+    };
+  }
+  if (command === "watch-set") {
+    return bridgeServiceCore.setWatchEnabled(
+      assertString(args.root, "root"),
+      assertBoolean(args.enabled, "enabled"),
+      normalizeDebounceMs(args.debounceMs),
+    );
+  }
+  if (command === "shutdown") {
+    return { shuttingDown: true };
+  }
+  throw new Error(`Unsupported persistent bridge command "${command}".`);
+}
+
+function parseBridgeServeRequest(line: string): BridgeServeRequest {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch (error) {
+    throw new Error(`Persistent bridge received invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const request = assertObject(parsed, "Persistent bridge request must be an object.");
+  if (request.type !== "request") {
+    throw new Error(`Persistent bridge request type must be "request", got "${String(request.type)}".`);
+  }
+  if (typeof request.id !== "number" || !Number.isFinite(request.id)) {
+    throw new Error("Persistent bridge request requires numeric field \"id\".");
+  }
+  if (typeof request.command !== "string" || request.command.trim() === "") {
+    throw new Error("Persistent bridge request requires string field \"command\".");
+  }
+  return {
+    type: "request",
+    id: request.id,
+    command: request.command,
+    args: request.args === undefined ? undefined : assertObject(request.args, "Persistent bridge args must be an object."),
+  };
+}
+
+async function runBridgeServeCommand(): Promise<void> {
+  const input = createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity,
+  });
+  let shuttingDown = false;
+  const inFlight = new Set<Promise<void>>();
+
+  const startRequest = (request: BridgeServeRequest): void => {
+    const task = (async () => {
+      try {
+        const result = await executePersistentBridgeCommand(request.command, request.args);
+        const response: BridgeServeResponse = {
+          type: "response",
+          id: request.id,
+          ok: true,
+          result,
+        };
+        await writeBridgeFrame(response);
+        if (request.command === "shutdown") {
+          shuttingDown = true;
+          input.close();
+        }
+      } catch (error) {
+        const response: BridgeServeResponse = {
+          type: "response",
+          id: request.id,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        await writeBridgeFrame(response);
+      }
+    })();
+    inFlight.add(task);
+    void task.finally(() => {
+      inFlight.delete(task);
+    });
+  };
+
+  try {
+    for await (const line of input) {
+      if (!line.trim()) continue;
+      if (shuttingDown) {
+        throw new Error("Persistent bridge received a request after shutdown started.");
+      }
+      startRequest(parseBridgeServeRequest(line));
+    }
+  } finally {
+    await Promise.allSettled(inFlight);
+    await bridgeServiceCore.close();
+  }
+}
+
 async function runBridgeCommand(args: string[]): Promise<void> {
   const [subcommand, ...rest] = args;
   if (!subcommand) throw new Error("bridge requires a subcommand.");
@@ -448,6 +637,10 @@ async function runBridgeCommand(args: string[]): Promise<void> {
 export async function handleCliCommand(args: string[]): Promise<boolean> {
   const [subcommand, ...rest] = args;
   if (!subcommand) return false;
+  if (subcommand === "bridge-serve") {
+    await runBridgeServeCommand();
+    return true;
+  }
   if (subcommand === "init") {
     await runInitCommand(rest);
     return true;

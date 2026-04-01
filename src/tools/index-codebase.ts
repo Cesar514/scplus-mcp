@@ -12,6 +12,15 @@ import { createIndexRuntime, executeIndexStage, loadIndexStageState, loadIndexSt
 export interface IndexCodebaseOptions {
   rootDir: string;
   mode?: IndexMode;
+  onProgress?: (event: IndexCodebaseProgressEvent) => Promise<void> | void;
+}
+
+export interface IndexCodebaseProgressEvent {
+  elapsedMs: number;
+  message: string;
+  phase: string;
+  rootDir: string;
+  mode: IndexMode;
 }
 
 function formatProgressPrefix(startedAtMs: number): string {
@@ -75,6 +84,13 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
 
   const appendProgress = (message: string): void => {
     progressLog.push(`${formatProgressPrefix(startedAtMs)} ${message}`);
+    void options.onProgress?.({
+      elapsedMs: Date.now() - startedAtMs,
+      message,
+      phase: status.phase,
+      rootDir,
+      mode,
+    });
   };
 
   const persistStatus = async (): Promise<void> => {

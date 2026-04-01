@@ -16,10 +16,7 @@ import (
 func runInteractive(root string, client *backend.Client) error {
 	model := ui.NewModel(root, client)
 	program := tea.NewProgram(model, tea.WithAltScreen())
-	finalModel, err := program.Run()
-	if closed, ok := finalModel.(ui.Model); ok {
-		_ = closed.Close()
-	}
+	_, err := program.Run()
 	return err
 }
 
@@ -139,6 +136,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	defer func() {
+		_ = client.Close()
+	}()
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "--root" {
 		root, _, parseErr := parseRoot("contextplus-ui", args)

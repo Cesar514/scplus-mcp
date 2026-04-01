@@ -18,16 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 3: Persistent Backend Unification
-
-- [ ] Replace the repeated shell-out backend model in [cli/internal/backend/client.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/backend/client.go) with a persistent service connection that survives across UI actions.
-- [ ] Define one long-lived backend core that owns sqlite handles, embedding caches, parser pools, watcher state, job queue state, and active-generation serving state.
-- [ ] Expose that backend core through at least two transports: MCP transport and local CLI transport.
-- [ ] Decide and implement the local CLI transport shape, such as JSON-RPC over stdio, a local socket, or another persistent IPC channel, and document the protocol in code comments or plan docs.
-- [ ] Remove cold-start overhead from every human CLI action by keeping one backend process alive for the lifetime of `contextplus-ui`.
-- [ ] Ensure the long-lived backend publishes streaming logs, progress events, and job-state changes to the TUI without forcing polling shell commands.
-- [ ] Ensure watcher ownership lives in the backend service, not separately in MCP and the human CLI, so there is only one authoritative file-change queue.
-
 ## Phase 4: Bridge Parity Between CLI And MCP
 
 - [ ] Expand [src/cli/commands.ts](/home/cesar514/Documents/agent_programming/contextplus/src/cli/commands.ts) until the CLI bridge can access the same high-value engine surfaces that MCP already exposes.

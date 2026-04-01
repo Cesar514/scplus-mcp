@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] replace the repeated shell-out backend model in `cli/internal/backend/client.go` with a persistent local bridge session that survives across UI actions
+- [x] define a long-lived backend core that owns watcher state, index job state, active-generation service calls, and the persistent-process cache surface shared by the CLI bridge
+- [x] expose that backend core through two transports by routing MCP `index` through it and adding a local CLI stdio bridge transport for the human UI
+- [x] implement and document the local persistent CLI transport as a line-delimited JSON protocol with request, response, and event frames
+- [x] remove per-action cold starts from `contextplus-ui` by keeping one backend Node process alive for the lifetime of the Go client
+- [x] stream backend log lines, index progress events, watch batches, and job-state changes into the TUI over the persistent bridge instead of polling subprocess commands
+- [x] move watcher ownership and the file-change queue into the backend service so the human CLI no longer owns a separate watcher path
 - [x] add explicit index generations to the durable sqlite contract so a new index build writes into an inactive generation instead of mutating the live one
 - [x] add an active-generation pointer in sqlite and make query-time artifact and vector reads resolve through that serving pointer unless an explicit generation is requested
 - [x] make `indexCodebase()` reserve a pending generation, write stage artifacts into that generation, validate that generation fully, and switch the active pointer only after validation succeeds
