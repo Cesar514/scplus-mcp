@@ -102,8 +102,8 @@ describe("chunk-index", () => {
       const chunkState = readArtifactFromDb(dbPath, "chunk-search-index");
       const chunkCache = readArtifactFromDb(dbPath, "embedding-cache:chunk-embeddings-cache.json");
 
-      assert.equal(firstRefresh.state.artifactVersion, 5);
-      assert.equal(firstRefresh.state.contractVersion, 3);
+      assert.equal(firstRefresh.state.artifactVersion, 6);
+      assert.equal(firstRefresh.state.contractVersion, 4);
       assert.equal(firstRefresh.state.mode, "full");
       assert.equal(firstRefresh.stats.totalFiles, 1);
       assert.equal(firstRefresh.stats.changedFiles, 1);

@@ -17,6 +17,8 @@ export type IndexArtifactKey =
   | "file-search-index"
   | "identifier-search-index"
   | "chunk-search-index"
+  | "hybrid-chunk-index"
+  | "hybrid-identifier-index"
   | "code-structure-index"
   | "full-index-manifest"
   | "memory-graph"

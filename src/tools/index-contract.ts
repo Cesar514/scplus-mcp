@@ -17,6 +17,8 @@ export type IndexPhase =
   | "identifier-embeddings"
   | "chunk-scan"
   | "chunk-embeddings"
+  | "hybrid-chunk-scan"
+  | "hybrid-identifier-scan"
   | "structure-scan"
   | "completed"
   | "failed";
@@ -110,8 +112,12 @@ export interface FullArtifactManifest {
   artifactVersion: number;
   contractVersion: number;
   chunkIndexPath: string;
+  hybridChunkIndexPath: string;
+  hybridIdentifierIndexPath: string;
   structureIndexPath: string;
   chunkCount: number;
+  hybridChunkCount: number;
+  hybridIdentifierCount: number;
   structureCount: number;
   contract: IndexContractMetadata;
   stats: {
@@ -131,11 +137,23 @@ export interface FullArtifactManifest {
       removedFiles: number;
       indexedStructures: number;
     };
+    hybridChunkIndex: {
+      indexedDocuments: number;
+      changedDocuments: number;
+      reusedDocuments: number;
+      uniqueTerms: number;
+    };
+    hybridIdentifierIndex: {
+      indexedDocuments: number;
+      changedDocuments: number;
+      reusedDocuments: number;
+      uniqueTerms: number;
+    };
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 3;
-export const INDEX_ARTIFACT_VERSION = 5;
+export const INDEX_CONTRACT_VERSION = 4;
+export const INDEX_ARTIFACT_VERSION = 6;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -147,6 +165,8 @@ export const INDEX_STAGE_ORDER: IndexPhase[] = [
   "identifier-embeddings",
   "chunk-scan",
   "chunk-embeddings",
+  "hybrid-chunk-scan",
+  "hybrid-identifier-scan",
   "structure-scan",
   "completed",
   "failed",
@@ -234,11 +254,13 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
     },
     "full-artifacts": {
       name: "full-artifacts",
-      phases: ["chunk-scan", "chunk-embeddings", "structure-scan"],
+      phases: ["chunk-scan", "chunk-embeddings", "hybrid-chunk-scan", "hybrid-identifier-scan", "structure-scan"],
       dependencies: ["bootstrap", "file-search", "identifier-search"],
       modes: ["full"],
       outputs: [
         "sqlite:index_artifacts/chunk-search-index",
+        "sqlite:index_artifacts/hybrid-chunk-index",
+        "sqlite:index_artifacts/hybrid-identifier-index",
         "sqlite:index_artifacts/code-structure-index",
         "sqlite:index_artifacts/full-index-manifest",
         "sqlite:index_artifacts/embedding-cache:chunk-search",

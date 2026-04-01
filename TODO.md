@@ -6,12 +6,11 @@ ai agents may update this file to remove completed work, keep the backlog accura
 
 ## current goal
 
-- [ ] finish roadmap step 04 and verify it directly
-- [ ] commit the verified step 04 work
+- [ ] finish roadmap step 05 and verify it directly
+- [ ] commit the verified step 05 work
 
 ## full engine roadmap (ordered)
 
-- [ ] 04. add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring, while keeping repo-local defaults and optional local vector-db acceleration
 - [ ] 05. add a stronger incremental refresh engine with file hashes, chunk hashes, and dependency-aware invalidation so reindexing recomputes only the necessary artifacts
 - [ ] 06. persist richer code-structure artifacts per file and module, including imports, exports, call graphs, ownership edges, and file-to-symbol mappings
 - [ ] 07. build a unified ranking engine that can combine chunk, file, identifier, lexical, semantic, structural, and memory evidence in one search surface

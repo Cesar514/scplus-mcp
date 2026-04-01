@@ -44,6 +44,13 @@ export interface StructureIndexStatus {
   indexedStructures: number;
 }
 
+export interface HybridRetrievalIndexStatus {
+  indexedDocuments: number;
+  changedDocuments: number;
+  reusedDocuments: number;
+  uniqueTerms: number;
+}
+
 export interface IndexStatus {
   state: "running" | "completed" | "failed";
   phase: IndexPhase;
@@ -66,6 +73,8 @@ export interface IndexStatus {
   fullIndex?: {
     chunkIndex?: Partial<ChunkIndexStatus>;
     structureIndex?: Partial<StructureIndexStatus>;
+    hybridChunkIndex?: Partial<HybridRetrievalIndexStatus>;
+    hybridIdentifierIndex?: Partial<HybridRetrievalIndexStatus>;
   };
   stages: PersistedIndexStageState["stages"];
   error?: string;

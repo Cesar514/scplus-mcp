@@ -86,6 +86,19 @@ function shouldReportProgress(processedFiles: number, totalFiles: number): boole
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
 
+function isCurrentChunkArtifact(chunk: Partial<ChunkArtifact> | undefined): boolean {
+  if (!chunk) return false;
+  return typeof chunk.chunkType === "string"
+    && Array.isArray(chunk.symbolPath)
+    && typeof chunk.lineCount === "number"
+    && typeof chunk.contentHash === "string";
+}
+
+function canReuseChunkEntry(entry: PersistedChunkFileEntry | undefined): boolean {
+  if (!entry) return false;
+  return entry.chunks.every((chunk) => isCurrentChunkArtifact(chunk));
+}
+
 function getChunkId(relativePath: string, symbol: Pick<ChunkArtifact, "line" | "endLine" | "symbolName" | "signature">): string {
   return `${relativePath}:${symbol.line}:${symbol.endLine}:${symbol.symbolName ?? "file"}:${symbol.signature ?? ""}`;
 }
@@ -199,7 +212,7 @@ export async function refreshChunkIndexState(
     const fingerprint = buildFingerprint(fileStat.size, fileStat.mtimeMs);
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.fingerprint === fingerprint) {
+    if (previousEntry && previousEntry.fingerprint === fingerprint && canReuseChunkEntry(previousEntry)) {
       nextFiles[relativePath] = previousEntry;
     } else {
       const chunks = await buildChunkArtifactsForFile(rootDir, relativePath);

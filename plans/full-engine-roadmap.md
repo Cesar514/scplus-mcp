@@ -16,7 +16,7 @@ The work is large enough that it must be delivered in validated increments. Each
 - [x] (2026-04-01 10:39Z) Completed Step 02.5. Moved the durable index substrate into `.contextplus/state/index.sqlite`, made SQLite the authoritative storage contract, and kept inspectable JSON mirrors for direct artifact inspection.
 - [x] (2026-04-01 12:55Z) Completed the sqlite-only follow-up migration. Removed JSON mirror persistence, migrated memory graph, restore-point state, restore-point backups, embedding caches, and context-tree storage into SQLite, and made bootstrap delete legacy artifact files before rebuilding.
 - [x] (2026-04-01 14:20Z) Completed Step 03. Extracted chunk indexing into its own first-class module with explicit artifact/state/progress contracts, added direct chunk-index tests for symbol chunks, fallback chunks, and embedding-cache reuse, and verified the persisted chunk contract in SQLite after a real full index run.
-- [ ] Step 04. Add hybrid retrieval indexes for chunks and symbols with lexical plus dense scoring.
+- [x] (2026-04-01 15:15Z) Completed Step 04. Added sqlite-backed hybrid chunk and identifier retrieval indexes with lexical term maps plus dense embedding-cache references, surfaced their progress/status in full indexing, and verified the persisted hybrid artifacts and ranking behavior directly.
 - [ ] Step 05. Add stronger incremental refresh with file hashes, chunk hashes, and dependency-aware invalidation.
 - [ ] Step 06. Persist richer code-structure artifacts per file and module.
 - [ ] Step 07. Build a unified ranking engine across chunk, file, identifier, lexical, semantic, structural, and memory evidence.
@@ -76,7 +76,7 @@ The work is large enough that it must be delivered in validated increments. Each
 
 ## Outcomes & Retrospective
 
-This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, and Step 03 are complete and verified. Step 04 is next and will focus on hybrid lexical plus dense retrieval for chunks and symbols.
+This plan is now the controlling implementation document for the 17-step program. Steps 01, 02, 02.5, the sqlite-only follow-up migration, Step 03, and Step 04 are complete and verified. Step 05 is next and will focus on stronger invalidation and refresh fidelity.
 
 ## Context and Orientation
 
@@ -105,7 +105,7 @@ Step 02.5 moved the durable indexing substrate onto sqlite-backed local storage 
 
 The sqlite-only follow-up completed the transition by migrating the remaining file-backed machine state into SQLite and deleting the legacy artifact files during bootstrap and reindex flows.
 
-Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 now turns that chunk substrate into a stronger retrieval engine.
+Step 03 strengthened chunk indexing itself so chunk artifacts now have a clearer first-class contract and more explicit AST-oriented semantics than the previous helper-oriented full-artifact path. Step 04 turned that chunk and identifier substrate into a stronger hybrid retrieval layer with persisted lexical and dense retrieval state. Step 05 now needs to make refresh and invalidation smarter than the current size-plus-mtime fingerprints.
 
 Each later step must be implemented the same way: minimal coherent slice, direct verification, commit, plan update, TODO update, then move on.
 
@@ -114,10 +114,10 @@ Each later step must be implemented the same way: minimal coherent slice, direct
 From the repository root:
 
 1. Keep this plan current as milestones progress.
-2. For Step 04, add hybrid retrieval indexes for chunks and symbols so the engine can combine lexical and dense evidence on top of the sqlite-backed substrate.
-3. Update the tests to assert hybrid retrieval behavior directly rather than only the underlying artifact shape.
-4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the generated retrieval artifacts in SQLite.
-5. Commit Step 04 with a message that names the hybrid-retrieval milestone.
+2. For Step 05, upgrade refresh and invalidation to use file hashes, chunk hashes, and dependency-aware recomputation instead of only size-plus-mtime fingerprints.
+3. Update the tests to assert selective recomputation and dependency-aware invalidation directly.
+4. Run the build and test suite, then run `node build/index.js index --mode=full` and inspect the refreshed artifacts in SQLite.
+5. Commit Step 05 with a message that names the invalidation milestone.
 
 Verification transcript used for Step 01:
 
@@ -213,6 +213,6 @@ Step 01 must end with explicit shared interfaces for:
 
 These interfaces should live in the indexing domain alongside `src/tools/index-codebase.ts` and `src/tools/full-index-artifacts.ts`, and they should be imported by the callers rather than redefined in place.
 
-The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 04.
+The implementation must continue using the current project-local TypeScript toolchain, the existing Ollama-based embedding stack in `src/core/embeddings.ts`, and the existing parser and walker modules. No new environment manager or external service should be introduced during Step 05.
 
 Plan revision note: Created the initial ExecPlan to govern the 17-step full-engine implementation program and to require one verified commit per roadmap step.

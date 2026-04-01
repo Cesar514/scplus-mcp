@@ -9,19 +9,22 @@ import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest } from "./index-contract.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { refreshChunkIndexState, warmChunkEmbeddings, type ChunkArtifactStats, type ChunkIndexProgress } from "./chunk-index.js";
+import { refreshHybridChunkIndex, refreshHybridIdentifierIndex, type HybridRetrievalStats } from "./hybrid-retrieval.js";
 
 export interface FullIndexArtifactOptions {
   rootDir: string;
 }
 
 export interface FullIndexProgress {
-  phase: "chunk-scan" | "chunk-embeddings" | "structure-scan";
+  phase: "chunk-scan" | "chunk-embeddings" | "hybrid-chunk-scan" | "hybrid-identifier-scan" | "structure-scan";
   totalFiles: number;
   processedFiles: number;
   changedFiles: number;
   removedFiles: number;
   indexedChunks: number;
   indexedStructures: number;
+  indexedHybridChunks: number;
+  indexedHybridIdentifiers: number;
 }
 
 export interface StructureArtifactStats {
@@ -35,6 +38,8 @@ export interface StructureArtifactStats {
 export interface FullIndexArtifactStats {
   chunkIndex: ChunkArtifactStats;
   structureIndex: StructureArtifactStats;
+  hybridChunkIndex: HybridRetrievalStats;
+  hybridIdentifierIndex: HybridRetrievalStats;
 }
 
 interface ImportInfo {
@@ -318,6 +323,8 @@ async function refreshStructureIndexState(
         removedFiles: 0,
         indexedChunks: 0,
         indexedStructures: Object.keys(nextFiles).length,
+        indexedHybridChunks: 0,
+        indexedHybridIdentifiers: 0,
       });
     }
   }
@@ -351,6 +358,8 @@ export async function ensureFullIndexArtifacts(
     await onProgress?.({
       ...progress,
       indexedStructures: 0,
+      indexedHybridChunks: 0,
+      indexedHybridIdentifiers: 0,
     });
   });
   const allChunks = Object.values(chunkResult.state.files).flatMap((entry) => entry.chunks);
@@ -358,7 +367,33 @@ export async function ensureFullIndexArtifacts(
     await onProgress?.({
       ...progress,
       indexedStructures: 0,
+      indexedHybridChunks: 0,
+      indexedHybridIdentifiers: 0,
     });
+  });
+  const hybridChunkResult = await refreshHybridChunkIndex(rootDir, chunkResult.state);
+  await onProgress?.({
+    phase: "hybrid-chunk-scan",
+    totalFiles: hybridChunkResult.stats.indexedDocuments,
+    processedFiles: hybridChunkResult.stats.indexedDocuments,
+    changedFiles: hybridChunkResult.stats.changedDocuments,
+    removedFiles: 0,
+    indexedChunks: chunkResult.stats.indexedChunks,
+    indexedStructures: 0,
+    indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
+    indexedHybridIdentifiers: 0,
+  });
+  const hybridIdentifierResult = await refreshHybridIdentifierIndex(rootDir);
+  await onProgress?.({
+    phase: "hybrid-identifier-scan",
+    totalFiles: hybridIdentifierResult.stats.indexedDocuments,
+    processedFiles: hybridIdentifierResult.stats.indexedDocuments,
+    changedFiles: hybridIdentifierResult.stats.changedDocuments,
+    removedFiles: 0,
+    indexedChunks: chunkResult.stats.indexedChunks,
+    indexedStructures: 0,
+    indexedHybridChunks: hybridChunkResult.stats.indexedDocuments,
+    indexedHybridIdentifiers: hybridIdentifierResult.stats.indexedDocuments,
   });
   const structureResult = await refreshStructureIndexState(rootDir, onProgress);
 
@@ -368,6 +403,8 @@ export async function ensureFullIndexArtifacts(
       ...embeddingStats,
     },
     structureIndex: structureResult.stats,
+    hybridChunkIndex: hybridChunkResult.stats,
+    hybridIdentifierIndex: hybridIdentifierResult.stats,
   };
 
   const manifest: FullArtifactManifest = {
@@ -376,8 +413,12 @@ export async function ensureFullIndexArtifacts(
     artifactVersion: INDEX_ARTIFACT_VERSION,
     contractVersion: buildIndexContract().contractVersion,
     chunkIndexPath: "sqlite:index_artifacts/chunk-search-index",
+    hybridChunkIndexPath: "sqlite:index_artifacts/hybrid-chunk-index",
+    hybridIdentifierIndexPath: "sqlite:index_artifacts/hybrid-identifier-index",
     structureIndexPath: "sqlite:index_artifacts/code-structure-index",
     chunkCount: stats.chunkIndex.indexedChunks,
+    hybridChunkCount: stats.hybridChunkIndex.indexedDocuments,
+    hybridIdentifierCount: stats.hybridIdentifierIndex.indexedDocuments,
     structureCount: stats.structureIndex.indexedStructures,
     contract: buildIndexContract(),
     stats,

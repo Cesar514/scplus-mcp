@@ -46,6 +46,8 @@ function formatFullProgress(progress: FullIndexProgress): string {
     `${progress.removedFiles} removed`,
     `${progress.indexedChunks} indexed chunks`,
     `${progress.indexedStructures} indexed structures`,
+    `${progress.indexedHybridChunks} hybrid chunk docs`,
+    `${progress.indexedHybridIdentifiers} hybrid identifier docs`,
   ].join(" | ");
 }
 
@@ -163,6 +165,14 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
             removedFiles: progress.removedFiles,
             indexedStructures: progress.indexedStructures,
           },
+          hybridChunkIndex: {
+            ...(status.fullIndex?.hybridChunkIndex ?? {}),
+            indexedDocuments: progress.indexedHybridChunks,
+          },
+          hybridIdentifierIndex: {
+            ...(status.fullIndex?.hybridIdentifierIndex ?? {}),
+            indexedDocuments: progress.indexedHybridIdentifiers,
+          },
         };
         appendProgress(formatFullProgress(progress));
         await persistStatus();
@@ -171,7 +181,9 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       appendProgress(
         `full-ready | ${status.fullIndex?.chunkIndex?.indexedChunks ?? 0} chunks | ` +
         `${status.fullIndex?.structureIndex?.indexedStructures ?? 0} structures | ` +
-        `${status.fullIndex?.chunkIndex?.embeddedChunks ?? 0} chunk embeddings`,
+        `${status.fullIndex?.chunkIndex?.embeddedChunks ?? 0} chunk embeddings | ` +
+        `${status.fullIndex?.hybridChunkIndex?.indexedDocuments ?? 0} hybrid chunk docs | ` +
+        `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs`,
       );
     }
 
