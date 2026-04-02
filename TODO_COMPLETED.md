@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] audit `src/core/clustering.ts` and the semantic cluster artifact path to remove the current full affinity matrix, normalized Laplacian, eigen decomposition, and k-means pipeline as the default strategy
+- [x] replace spectral clustering with deterministic farthest-seed cosine k-means so semantic cluster building has a cost shape suitable for much larger repositories
+- [x] preserve semantic cluster artifact consumers by keeping cluster labels, related-file neighborhoods, subsystem summaries, and persisted cluster structure stable while swapping the algorithm underneath
+- [x] add explicit medium and large clustering benchmark coverage in `src/tools/evaluation.ts` and direct clustering tests so clustering cost is measured directly
 - [x] finish removing the remaining `null`-return contract from `parseWithTreeSitter()` in `src/core/tree-sitter.ts` so unsupported-language handling becomes an explicit `TreeSitterUnsupportedLanguageError` instead of a silent `null` path
 - [x] make unsupported-language handling fail loudly by contract so unsupported files no longer silently degrade into approximate parsing
 - [x] remove the remaining regex parser path from `src/core/parser.ts`, including the old brace-counting range heuristics, instead of keeping a hidden fallback implementation

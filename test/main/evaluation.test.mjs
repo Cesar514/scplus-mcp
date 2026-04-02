@@ -25,6 +25,12 @@ describe("evaluation", () => {
     assert.equal(Number.isFinite(report.timings.hotExactSearchMs), true);
     assert.equal(Number.isFinite(report.timings.relatedSearchMs), true);
     assert.equal(Number.isFinite(report.timings.broadResearchMs), true);
+    assert.equal(Number.isFinite(report.clusteringBenchmarks.medium.durationMs), true);
+    assert.equal(Number.isFinite(report.clusteringBenchmarks.large.durationMs), true);
+    assert.equal(report.clusteringBenchmarks.medium.vectorCount, 400);
+    assert.equal(report.clusteringBenchmarks.large.vectorCount, 2400);
+    assert.equal(report.clusteringBenchmarks.medium.clusterCount <= 12, true);
+    assert.equal(report.clusteringBenchmarks.large.clusterCount <= 20, true);
     assert.equal(report.treeSitter.totalParseCalls > 0, true);
     assert.equal(report.treeSitter.totalParseFailures, 0);
     assert.equal(report.tokenCost.exactSearchEstimatedTokens < report.tokenCost.relatedSearchEstimatedTokens, true);
@@ -33,6 +39,7 @@ describe("evaluation", () => {
     assert.match(rendered, /Hybrid efficiency: 4\/4/);
     assert.match(rendered, /Artifact freshness: 3\/3/);
     assert.match(rendered, /Token cost: exact=/);
+    assert.match(rendered, /Clustering benchmarks: medium=400 vectors in /);
     assert.match(rendered, /Tree-sitter stats: parses=/);
   });
 });

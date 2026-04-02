@@ -13,6 +13,7 @@ import { runResearch } from "./research.js";
 import { semanticNavigate } from "./semantic-navigate.js";
 import { rankUnifiedSearch, type UnifiedRankedHit } from "./unified-ranking.js";
 import { getTreeSitterRuntimeStats, resetTreeSitterRuntimeStats, type TreeSitterRuntimeStats } from "../core/tree-sitter.js";
+import { clusterVectors } from "../core/clustering.js";
 
 interface EvaluationCheck {
   name: string;
@@ -43,6 +44,12 @@ interface EvaluationTokenCost {
   broadResearchEstimatedTokens: number;
 }
 
+interface ClusteringBenchmarkSample {
+  vectorCount: number;
+  clusterCount: number;
+  durationMs: number;
+}
+
 export interface EvaluationReport {
   suite: "default";
   generatedAt: string;
@@ -58,7 +65,32 @@ export interface EvaluationReport {
   hybridEfficiency: EvaluationCategory;
   artifactFreshness: EvaluationCategory;
   tokenCost: EvaluationTokenCost;
+  clusteringBenchmarks: {
+    medium: ClusteringBenchmarkSample;
+    large: ClusteringBenchmarkSample;
+  };
   treeSitter: TreeSitterRuntimeStats;
+}
+
+function buildClusterBenchmarkVectors(vectorCount: number, groupCount: number = 8): number[][] {
+  return Array.from({ length: vectorCount }, (_, index) => {
+    const group = index % groupCount;
+    const angle = (index + 1) * 0.03125;
+    const vector = new Array(12).fill(0);
+    vector[group % vector.length] = 1;
+    vector[(group + 5) % vector.length] = 0.35;
+    return vector.map((value, dimension) => value + (Math.sin(angle + dimension) * 0.018));
+  });
+}
+
+async function runClusteringBenchmark(vectorCount: number, maxClusters: number): Promise<ClusteringBenchmarkSample> {
+  const vectors = buildClusterBenchmarkVectors(vectorCount);
+  const timed = await timeOperation(async () => clusterVectors(vectors, maxClusters));
+  return {
+    vectorCount,
+    clusterCount: timed.value.length,
+    durationMs: timed.durationMs,
+  };
 }
 
 async function writeFixtureRepo(rootDir: string): Promise<void> {
@@ -366,6 +398,11 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
       ),
     ]);
 
+    const clusteringBenchmarks = {
+      medium: await runClusteringBenchmark(400, 12),
+      large: await runClusteringBenchmark(2400, 20),
+    };
+
     const report: EvaluationReport = {
       suite: "default",
       generatedAt: new Date().toISOString(),
@@ -393,6 +430,7 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
       hybridEfficiency: hybridChecks,
       artifactFreshness: freshnessChecks,
       tokenCost,
+      clusteringBenchmarks,
       treeSitter: getTreeSitterRuntimeStats(),
     };
 
@@ -418,6 +456,7 @@ export function formatEvaluationReport(report: EvaluationReport): string {
     `Validation: initial=${report.validation.initialOk ? "ok" : "failed"} | refresh=${report.validation.refreshOk ? "ok" : "failed"}`,
     `Timings: initialIndexMs=${report.timings.initialIndexMs.toFixed(2)} | refreshIndexMs=${report.timings.refreshIndexMs.toFixed(2)} | hotExactSearchMs=${report.timings.hotExactSearchMs.toFixed(2)} | relatedSearchMs=${report.timings.relatedSearchMs.toFixed(2)} | broadResearchMs=${report.timings.broadResearchMs.toFixed(2)}`,
     `Token cost: exact=${report.tokenCost.exactSearchEstimatedTokens} (${report.tokenCost.exactSearchChars} chars) | related=${report.tokenCost.relatedSearchEstimatedTokens} (${report.tokenCost.relatedSearchChars} chars) | research=${report.tokenCost.broadResearchEstimatedTokens} (${report.tokenCost.broadResearchChars} chars)`,
+    `Clustering benchmarks: medium=${report.clusteringBenchmarks.medium.vectorCount} vectors in ${report.clusteringBenchmarks.medium.durationMs.toFixed(2)}ms (${report.clusteringBenchmarks.medium.clusterCount} clusters) | large=${report.clusteringBenchmarks.large.vectorCount} vectors in ${report.clusteringBenchmarks.large.durationMs.toFixed(2)}ms (${report.clusteringBenchmarks.large.clusterCount} clusters)`,
     `Tree-sitter stats: parses=${report.treeSitter.totalParseCalls} | parseFailures=${report.treeSitter.totalParseFailures} | grammarLoadFailures=${report.treeSitter.totalGrammarLoadFailures} | parserReuses=${report.treeSitter.totalParserReuses}`,
     "",
   ];

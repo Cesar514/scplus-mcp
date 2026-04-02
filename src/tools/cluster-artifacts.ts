@@ -3,7 +3,7 @@
 
 import { extname } from "path";
 import { fetchEmbedding } from "../core/embeddings.js";
-import { spectralCluster, findPathPattern } from "../core/clustering.js";
+import { clusterVectors, findPathPattern } from "../core/clustering.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
 
@@ -220,7 +220,7 @@ async function buildHierarchy(files: FileInfo[], vectors: number[][], maxCluster
     };
   }
 
-  const clusterResults = spectralCluster(vectors, maxClusters);
+  const clusterResults = clusterVectors(vectors, maxClusters);
   if (clusterResults.length <= 1) {
     return {
       id: `cluster-${depth}-leaf`,

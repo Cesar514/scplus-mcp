@@ -1,14 +1,25 @@
-// Spectral clustering and path pattern tests
-// Tests eigengap clustering, k-means, and file path pattern detection
+// Scalable clustering and path pattern tests
+// Tests deterministic centroid clustering and file path pattern detection
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { spectralCluster, findPathPattern } from "../../build/core/clustering.js";
+import { clusterVectors, findPathPattern } from "../../build/core/clustering.js";
+
+function makeClusteredVectors(count, groupCount = 4) {
+  return Array.from({ length: count }, (_, index) => {
+    const group = index % groupCount;
+    const angle = (index + 1) * 0.07;
+    const base = new Array(8).fill(0);
+    base[group % base.length] = 1;
+    base[(group + 3) % base.length] = 0.35;
+    return base.map((value, dimension) => value + (Math.sin(angle + dimension) * 0.02));
+  });
+}
 
 describe("clustering", () => {
-  describe("spectralCluster", () => {
+  describe("clusterVectors", () => {
     it("returns single cluster for 1 vector", () => {
-      const result = spectralCluster([[1, 0, 0]]);
+      const result = clusterVectors([[1, 0, 0]]);
       assert.equal(result.length, 1);
       assert.deepEqual(result[0].indices, [0]);
     });
@@ -19,7 +30,7 @@ describe("clustering", () => {
         [0, 1],
         [0.5, 0.5],
       ];
-      const result = spectralCluster(vectors, 20);
+      const result = clusterVectors(vectors, 20);
       assert.equal(result.length, 3);
     });
 
@@ -32,10 +43,14 @@ describe("clustering", () => {
         [0.1, 0.9, 0],
         [0.05, 0.95, 0],
       ];
-      const result = spectralCluster(vectors, 2);
-      assert.ok(result.length >= 1);
-      const allIndices = result.flatMap((c) => c.indices).sort();
+      const result = clusterVectors(vectors, 2);
+      assert.equal(result.length, 2);
+      const allIndices = result.flatMap((cluster) => cluster.indices).sort();
       assert.deepEqual(allIndices, [0, 1, 2, 3, 4, 5]);
+      const normalized = result
+        .map((cluster) => [...cluster.indices].sort((left, right) => left - right))
+        .sort((left, right) => left[0] - right[0]);
+      assert.deepEqual(normalized, [[0, 1, 2], [3, 4, 5]]);
     });
 
     it("respects maxClusters parameter", () => {
@@ -44,7 +59,7 @@ describe("clustering", () => {
         Math.sin(i),
         i / 50,
       ]);
-      const result = spectralCluster(vectors, 5);
+      const result = clusterVectors(vectors, 5);
       assert.ok(result.length <= 5);
       assert.ok(result.length >= 1);
     });
@@ -56,7 +71,7 @@ describe("clustering", () => {
         Math.sin(i * 0.5),
         i / n,
       ]);
-      const result = spectralCluster(vectors, 10);
+      const result = clusterVectors(vectors, 10);
       const allIndices = result.flatMap((c) => c.indices).sort((a, b) => a - b);
       assert.equal(allIndices.length, n);
       assert.deepEqual(
@@ -71,8 +86,19 @@ describe("clustering", () => {
         [1, 0, 0],
         [1, 0, 0],
       ];
-      const result = spectralCluster(vectors, 20);
+      const result = clusterVectors(vectors, 20);
       assert.ok(result.length >= 1);
+    });
+
+    it("handles medium and large clustered vector sets without matrix-based decomposition", () => {
+      for (const vectorCount of [240, 1800]) {
+        const vectors = makeClusteredVectors(vectorCount, 6);
+        const result = clusterVectors(vectors, 12);
+        const allIndices = result.flatMap((cluster) => cluster.indices).sort((left, right) => left - right);
+        assert.equal(result.length <= 12, true);
+        assert.equal(allIndices.length, vectorCount);
+        assert.deepEqual(allIndices, Array.from({ length: vectorCount }, (_, index) => index));
+      }
     });
   });
 
