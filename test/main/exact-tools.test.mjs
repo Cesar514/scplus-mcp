@@ -38,7 +38,7 @@ async function createFixtureRepo(rootDir) {
     [
       "// Session auth helpers for fast exact tool fixtures",
       "// FEATURE: exact tool mcp coverage",
-      "import { verifyToken } from './jwt';",
+      "import { verifyToken } from './jwt.js';",
       "",
       "export function createSession(token: string): string {",
       "  return `session:${verifyToken(token)}`;",
@@ -51,7 +51,7 @@ async function createFixtureRepo(rootDir) {
     [
       "// Script used to bootstrap auth exact tool fixtures",
       "// FEATURE: exact tool mcp coverage",
-      "import { createSession } from '../src/auth/session';",
+      "import { createSession } from '../src/auth/session.js';",
       "",
       "export function setupAuth(): string {",
       "  return createSession('Token');",
@@ -149,7 +149,7 @@ describe("exact-tools", () => {
         [
           "// Session auth helpers for fast exact tool fixtures",
           "// FEATURE: exact tool mcp coverage",
-          "import { verifyToken } from './jwt';",
+          "import { verifyToken } from './jwt.js';",
           "",
           "export function createSession(token: string): string {",
           "  return `session:${verifyToken(token)}:changed`;",

@@ -41,7 +41,7 @@ describe("cli bridge", () => {
       );
       await writeFile(
         join(cwd, "src", "runner.ts"),
-        "// Runner entrypoint used to exercise CLI bridge dependency paths\n// FEATURE: CLI bridge smoke fixture for dependency and blast-radius coverage\n\nimport { runApp } from \"./app\";\n\nexport function startRunner() {\n  return runApp();\n}\n",
+        "// Runner entrypoint used to exercise CLI bridge dependency paths\n// FEATURE: CLI bridge smoke fixture for dependency and blast-radius coverage\n\nimport { runApp } from \"./app.js\";\n\nexport function startRunner() {\n  return runApp();\n}\n",
       );
       await git(cwd, "init");
       await git(cwd, "config", "user.email", "contextplus@example.com");
@@ -134,7 +134,7 @@ describe("cli bridge", () => {
         "checkpoint",
         "src/runner.ts",
         "--new-content",
-        "// Runner entrypoint used to exercise CLI bridge dependency paths\n// FEATURE: CLI bridge smoke fixture for dependency and blast-radius coverage\n\nimport { runApp } from \"./app\";\n\nexport function startRunner() {\n  return runApp() + 1;\n}\n",
+        "// Runner entrypoint used to exercise CLI bridge dependency paths\n// FEATURE: CLI bridge smoke fixture for dependency and blast-radius coverage\n\nimport { runApp } from \"./app.js\";\n\nexport function startRunner() {\n  return runApp() + 1;\n}\n",
       );
       assert.equal(checkpointPayload.report.filePath, "src/runner.ts");
       assert.equal(checkpointPayload.text.includes("File saved"), true);

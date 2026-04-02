@@ -85,7 +85,7 @@ describe("invalidation", () => {
         [
           "// Dependency invalidation fixture for importer module",
           "// FEATURE: structure artifacts track local imports",
-          "import { sharedValue } from './helper';",
+          "import { sharedValue } from './helper.js';",
           "",
           "export function consumeValue(): string {",
           "  return sharedValue();",

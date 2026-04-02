@@ -36,7 +36,7 @@ async function createFixtureRepo(rootDir) {
     [
       "// Session auth helpers for fast exact-query fixtures",
       "// FEATURE: exact query cache coverage",
-      "import { verifyToken } from './jwt';",
+      "import { verifyToken } from './jwt.js';",
       "",
       "export function createSession(token: string): string {",
       "  return `session:${verifyToken(token)}`;",
@@ -49,7 +49,7 @@ async function createFixtureRepo(rootDir) {
     [
       "// Script used to bootstrap auth fixtures",
       "// FEATURE: exact query cache coverage",
-      "import { createSession } from '../src/auth/session';",
+      "import { createSession } from '../src/auth/session.js';",
       "",
       "export function setupAuth(): string {",
       "  return createSession('Token');",
@@ -94,7 +94,7 @@ describe("exact-query", () => {
       const outline = await getOutline(rootDir, "src/auth/session.ts");
       assert.equal(outline.path, "src/auth/session.ts");
       assert.equal(outline.symbols.some((symbol) => symbol.name === "createSession"), true);
-      assert.equal(outline.imports.some((entry) => entry.source === "./jwt"), true);
+      assert.equal(outline.imports.some((entry) => entry.source === "./jwt.js"), true);
 
       const deps = await getDependencyInfo(rootDir, "src/auth/jwt.ts");
       assert.deepEqual(deps.directDependencies, []);
@@ -109,7 +109,7 @@ describe("exact-query", () => {
         [
           "// Session auth helpers for fast exact-query fixtures",
           "// FEATURE: exact query cache coverage",
-          "import { verifyToken } from './jwt';",
+          "import { verifyToken } from './jwt.js';",
           "",
           "export function createSession(token: string): string {",
           "  return `session:${verifyToken(token)}:changed`;",

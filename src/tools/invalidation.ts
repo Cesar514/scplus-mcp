@@ -21,6 +21,13 @@ const LOCAL_DEPENDENCY_EXTENSIONS = [
   ".md",
 ];
 
+const RUNTIME_JS_IMPORT_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+]);
+
 export function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
@@ -58,8 +65,15 @@ export function resolveLocalDependencyPath(
   const candidates: string[] = [];
   const extension = extname(basePath);
 
-  if (extension) candidates.push(basePath);
-  else {
+  if (extension) {
+    candidates.push(basePath);
+    if (RUNTIME_JS_IMPORT_EXTENSIONS.has(extension)) {
+      const stem = basePath.slice(0, -extension.length);
+      for (const candidateExtension of LOCAL_DEPENDENCY_EXTENSIONS) {
+        candidates.push(`${stem}${candidateExtension}`);
+      }
+    }
+  } else {
     candidates.push(basePath);
     for (const candidateExtension of LOCAL_DEPENDENCY_EXTENSIONS) {
       candidates.push(`${basePath}${candidateExtension}`);

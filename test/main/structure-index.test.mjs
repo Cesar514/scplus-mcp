@@ -31,7 +31,7 @@ describe("structure-index", () => {
         [
           "// Structure fixture for consumer module",
           "// FEATURE: module import edges and file-to-symbol mappings",
-          "import { helperValue } from '../lib/helper';",
+          "import { helperValue } from '../lib/helper.js';",
           "",
           "export function consumeValue(): string {",
           "  return helperValue();",
