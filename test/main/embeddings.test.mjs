@@ -52,6 +52,21 @@ function readVectorEntries(dbPath, namespace) {
   }
 }
 
+function readVectorEntryStorage(dbPath, namespace, entryId) {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const generation = getActiveGeneration(dbPath);
+    const storedNamespace = qualifyNamespace(namespace, generation);
+    return db.prepare(`
+      SELECT typeof(vector_blob) AS vector_type, length(vector_blob) AS vector_length
+      FROM vector_entries
+      WHERE namespace = ? AND entry_id = ?
+    `).get(storedNamespace, entryId);
+  } finally {
+    db.close();
+  }
+}
+
 function readVectorCollectionEntryCount(dbPath, namespace) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -324,6 +339,25 @@ describe("embeddings", () => {
   });
 
   describe("saveEmbeddingCache", () => {
+    it("stores vectors as sqlite blobs instead of JSON text", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-binary-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-a-v1", vector: [1, 0.5, -2] },
+        }, "chunk-embeddings-cache.json");
+
+        const dbPath = await getIndexDatabasePath(rootDir);
+        const storage = readVectorEntryStorage(dbPath, "chunk-search", "src/a.ts");
+        assert.equal(storage.vector_type, "blob");
+        assert.equal(storage.vector_length, 3 * Float32Array.BYTES_PER_ELEMENT);
+
+        const cache = await loadEmbeddingCache(rootDir, "chunk-embeddings-cache.json");
+        assert.deepEqual(cache["src/a.ts"].vector, [1, 0.5, -2]);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
     it("updates only changed entries and deletes removed entries without rewriting untouched vectors", async () => {
       const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-cache-"));
       try {
@@ -455,6 +489,95 @@ describe("embeddings", () => {
         assert.equal(nextEntries.find((entry) => entry.entry_id === "src/a.ts").updated_at, firstUpdatedAtById.get("src/a.ts"));
         assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").content_hash, "hash-b-v2");
         assert.equal(nextEntries.find((entry) => entry.entry_id === "src/b.ts").updated_at !== firstUpdatedAtById.get("src/b.ts"), true);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("migrates legacy JSON vector rows to binary blobs when opening an existing database", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-migrate-"));
+      try {
+        const dbPath = await getIndexDatabasePath(rootDir);
+        const db = new DatabaseSync(dbPath);
+        try {
+          db.exec(`
+            DROP TABLE IF EXISTS vector_entries;
+            DROP TABLE IF EXISTS vector_collections;
+            DROP TABLE IF EXISTS index_db_meta;
+            CREATE TABLE index_db_meta (
+              meta_key TEXT PRIMARY KEY,
+              meta_value TEXT NOT NULL
+            );
+            CREATE TABLE vector_collections (
+              namespace TEXT PRIMARY KEY,
+              entry_count INTEGER NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE vector_entries (
+              namespace TEXT NOT NULL,
+              entry_id TEXT NOT NULL,
+              content_hash TEXT NOT NULL,
+              search_text TEXT NOT NULL,
+              vector_json TEXT NOT NULL,
+              metadata_json TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (namespace, entry_id)
+            );
+            INSERT INTO index_db_meta (meta_key, meta_value) VALUES ('schemaVersion', '3');
+            INSERT INTO index_db_meta (meta_key, meta_value) VALUES ('activeGeneration', '0');
+            INSERT INTO index_db_meta (meta_key, meta_value) VALUES ('latestGeneration', '0');
+            INSERT INTO index_db_meta (meta_key, meta_value) VALUES ('activeGenerationFreshness', 'fresh');
+            INSERT INTO vector_collections (namespace, entry_count, updated_at)
+            VALUES ('chunk-search', 1, '2026-01-01T00:00:00.000Z');
+            INSERT INTO vector_entries (
+              namespace,
+              entry_id,
+              content_hash,
+              search_text,
+              vector_json,
+              metadata_json,
+              updated_at
+            ) VALUES (
+              'chunk-search',
+              'src/legacy.ts',
+              'legacy-hash',
+              'legacy text',
+              '[1,0.5,-2]',
+              '{\"source\":\"legacy\"}',
+              '2026-01-01T00:00:00.000Z'
+            );
+          `);
+        } finally {
+          db.close();
+        }
+
+        const cache = await loadEmbeddingCache(rootDir, "chunk-embeddings-cache.json");
+        assert.deepEqual(cache["src/legacy.ts"].vector, [1, 0.5, -2]);
+
+        const migratedDb = new DatabaseSync(dbPath);
+        try {
+          const schemaVersion = migratedDb.prepare(`
+            SELECT meta_value
+            FROM index_db_meta
+            WHERE meta_key = 'schemaVersion'
+          `).get();
+          const columns = migratedDb.prepare(`PRAGMA table_info(vector_entries)`).all();
+          const legacyTable = migratedDb.prepare(`
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'vector_entries_legacy'
+          `).get();
+          assert.equal(schemaVersion.meta_value, "4");
+          assert.equal(columns.some((column) => column.name === "vector_blob"), true);
+          assert.equal(columns.some((column) => column.name === "vector_json"), false);
+          assert.equal(legacyTable, undefined);
+        } finally {
+          migratedDb.close();
+        }
+
+        const storage = readVectorEntryStorage(dbPath, "chunk-search", "src/legacy.ts");
+        assert.equal(storage.vector_type, "blob");
+        assert.equal(storage.vector_length, 3 * Float32Array.BYTES_PER_ELEMENT);
       } finally {
         await rm(rootDir, { recursive: true, force: true });
       }

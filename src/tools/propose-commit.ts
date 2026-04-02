@@ -5,7 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";
 import { createRestorePoint } from "../git/shadow.js";
 import { isSupportedFile } from "../core/parser.js";
-import { refreshPreparedIndexAfterWrite } from "./write-freshness.js";
+import { refreshPreparedIndexAfterWrite, runSerializedRootMutation } from "./write-freshness.js";
 
 export interface ProposeCommitOptions {
   rootDir: string;
@@ -100,33 +100,35 @@ export function formatCheckpointReport(report: CheckpointReport): string {
 }
 
 export async function buildCheckpointReport(options: ProposeCommitOptions): Promise<CheckpointReport> {
-  const fullPath = resolve(options.rootDir, options.filePath);
-  const ext = extname(fullPath);
-  const lines = options.newContent.split("\n");
-  const allErrors: ValidationError[] = [];
+  return runSerializedRootMutation(options.rootDir, async () => {
+    const fullPath = resolve(options.rootDir, options.filePath);
+    const ext = extname(fullPath);
+    const lines = options.newContent.split("\n");
+    const allErrors: ValidationError[] = [];
 
-  if (isSupportedFile(fullPath)) {
-    allErrors.push(...validateHeader(lines, ext));
-  }
-  allErrors.push(...validateAbstraction(lines));
-  const warnings = allErrors;
+    if (isSupportedFile(fullPath)) {
+      allErrors.push(...validateHeader(lines, ext));
+    }
+    allErrors.push(...validateAbstraction(lines));
+    const warnings = allErrors;
 
-  await createRestorePoint(options.rootDir, [options.filePath], `Pre-commit: ${options.filePath}`);
-  await mkdir(dirname(fullPath), { recursive: true });
-  await writeFile(fullPath, options.newContent, "utf-8");
-  const refresh = await refreshPreparedIndexAfterWrite({
-    rootDir: options.rootDir,
-    relativePaths: [options.filePath],
-    cause: "checkpoint",
+    await createRestorePoint(options.rootDir, [options.filePath], `Pre-commit: ${options.filePath}`);
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, options.newContent, "utf-8");
+    const refresh = await refreshPreparedIndexAfterWrite({
+      rootDir: options.rootDir,
+      relativePaths: [options.filePath],
+      cause: "checkpoint",
+    });
+
+    return {
+      filePath: options.filePath,
+      saved: true,
+      warnings,
+      refreshMode: refresh.mode,
+      restorePointCreated: true,
+    };
   });
-
-  return {
-    filePath: options.filePath,
-    saved: true,
-    warnings,
-    refreshMode: refresh.mode,
-    restorePointCreated: true,
-  };
 }
 
 export async function proposeCommit(options: ProposeCommitOptions): Promise<string> {

@@ -139,6 +139,29 @@ describe("propose-commit", async () => {
       );
       assert.equal(written, content);
     });
+
+    it("serializes concurrent writes against the same repo before refreshing the prepared index", async () => {
+      const [left, right] = await Promise.all([
+        proposeCommit({
+          rootDir: FIXTURE_DIR,
+          filePath: "parallel/left.ts",
+          newContent: "// Left 1\n// FEATURE: Left\n\nexport const left = 1;\n",
+        }),
+        proposeCommit({
+          rootDir: FIXTURE_DIR,
+          filePath: "parallel/right.ts",
+          newContent: "// Right 1\n// FEATURE: Right\n\nexport const right = 2;\n",
+        }),
+      ]);
+      assert.ok(left.includes("saved") || left.includes("✅"));
+      assert.ok(right.includes("saved") || right.includes("✅"));
+      const [leftWritten, rightWritten] = await Promise.all([
+        readFile(join(FIXTURE_DIR, "parallel", "left.ts"), "utf-8"),
+        readFile(join(FIXTURE_DIR, "parallel", "right.ts"), "utf-8"),
+      ]);
+      assert.match(leftWritten, /export const left = 1;/);
+      assert.match(rightWritten, /export const right = 2;/);
+    });
   });
 
   after(async () => {

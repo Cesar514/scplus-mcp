@@ -15,6 +15,8 @@ export interface RefreshPreparedIndexAfterWriteOptions {
   cause: "checkpoint" | "restore";
 }
 
+const rootMutationQueue = new Map<string, Promise<void>>();
+
 function formatAffectedPaths(relativePaths: string[]): string {
   const unique = Array.from(new Set(relativePaths.map((value) => value.trim()).filter(Boolean)));
   return unique.length > 0 ? unique.join(", ") : "(no files)";
@@ -37,6 +39,28 @@ function formatBlockedReason(
 ): string {
   const message = error instanceof Error ? error.message : String(error);
   return `Automatic ${cause} refresh failed for ${formatAffectedPaths(relativePaths)}: ${message}`;
+}
+
+export async function runSerializedRootMutation<T>(
+  rootDir: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const normalizedRootDir = resolve(rootDir);
+  const previous = rootMutationQueue.get(normalizedRootDir) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolveCurrent) => {
+    releaseCurrent = resolveCurrent;
+  });
+  rootMutationQueue.set(normalizedRootDir, previous.catch(() => {}).then(() => current));
+  await previous.catch(() => {});
+  try {
+    return await operation();
+  } finally {
+    releaseCurrent();
+    if (rootMutationQueue.get(normalizedRootDir) === current) {
+      rootMutationQueue.delete(normalizedRootDir);
+    }
+  }
 }
 
 export async function markPreparedIndexDirtyAfterWrite(

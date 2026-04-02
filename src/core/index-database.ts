@@ -7,7 +7,7 @@ import { rm } from "fs/promises";
 import { join, resolve } from "path";
 import { CONTEXTPLUS_INDEX_DB_FILE, ensureContextplusLayout } from "./project-layout.js";
 
-export const INDEX_DATABASE_SCHEMA_VERSION = 3;
+export const INDEX_DATABASE_SCHEMA_VERSION = 4;
 const GENERATION_KEY_PREFIX = "generation:";
 const GLOBAL_ARTIFACT_KEYS = new Set<IndexArtifactKey>(["index-status", "restore-points"]);
 const META_ACTIVE_GENERATION = "activeGeneration";
@@ -98,8 +98,40 @@ interface VectorEntryRow {
   entry_id: string;
   content_hash: string;
   search_text: string;
+  vector_blob: Uint8Array;
+  metadata_json: string;
+}
+
+interface LegacyVectorEntryRow {
+  namespace: string;
+  entry_id: string;
+  content_hash: string;
+  search_text: string;
   vector_json: string;
   metadata_json: string;
+  updated_at: string;
+}
+
+function encodeVectorBlob(vector: number[]): Uint8Array {
+  if (!Array.isArray(vector)) throw new Error("Vector entry must be an array of numbers.");
+  if (vector.some((value) => !Number.isFinite(value))) {
+    throw new Error("Vector entry contained a non-finite number.");
+  }
+  return new Uint8Array(Float32Array.from(vector).buffer);
+}
+
+function decodeVectorBlob(blob: Uint8Array): number[] {
+  if (!(blob instanceof Uint8Array)) {
+    throw new Error("Vector blob row was not returned as binary data.");
+  }
+  if (blob.byteLength % Float32Array.BYTES_PER_ELEMENT !== 0) {
+    throw new Error(`Vector blob length ${blob.byteLength} is not divisible by ${Float32Array.BYTES_PER_ELEMENT}.`);
+  }
+  const bytes = blob.byteOffset === 0 && blob.byteLength === blob.buffer.byteLength
+    ? blob
+    : blob.slice();
+  const vector = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / Float32Array.BYTES_PER_ELEMENT);
+  return Array.from(vector);
 }
 
 function mapVectorEntryRow<TMetadata>(row: VectorEntryRow): VectorStoreEntry<TMetadata> {
@@ -107,7 +139,7 @@ function mapVectorEntryRow<TMetadata>(row: VectorEntryRow): VectorStoreEntry<TMe
     id: row.entry_id,
     contentHash: row.content_hash,
     searchText: row.search_text,
-    vector: JSON.parse(row.vector_json) as number[],
+    vector: decodeVectorBlob(row.vector_blob),
     metadata: JSON.parse(row.metadata_json) as TMetadata,
   };
 }
@@ -233,6 +265,89 @@ function writeServingStateToDb(db: DatabaseSync, state: IndexServingState): void
   }
 }
 
+function hasTable(db: DatabaseSync, tableName: string): boolean {
+  const row = db.prepare(`
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = ?
+  `).get(tableName) as { name: string } | undefined;
+  return row?.name === tableName;
+}
+
+function getTableColumns(db: DatabaseSync, tableName: string): string[] {
+  if (!hasTable(db, tableName)) return [];
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return rows.map((row) => row.name);
+}
+
+function createBinaryVectorEntriesTable(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vector_entries (
+      namespace TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      search_text TEXT NOT NULL,
+      vector_blob BLOB NOT NULL,
+      metadata_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (namespace, entry_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vector_entries_namespace
+    ON vector_entries(namespace);
+  `);
+}
+
+function migrateLegacyVectorEntriesToBinary(db: DatabaseSync): void {
+  const columns = getTableColumns(db, "vector_entries");
+  if (columns.includes("vector_blob")) return;
+  if (!columns.includes("vector_json")) {
+    throw new Error("vector_entries table exists but does not expose either vector_blob or vector_json.");
+  }
+
+  db.exec("BEGIN");
+  try {
+    db.prepare(`ALTER TABLE vector_entries RENAME TO vector_entries_legacy`).run();
+    createBinaryVectorEntriesTable(db);
+    const legacyRows = db.prepare(`
+      SELECT namespace, entry_id, content_hash, search_text, vector_json, metadata_json, updated_at
+      FROM vector_entries_legacy
+      ORDER BY namespace, entry_id
+    `).all() as unknown as LegacyVectorEntryRow[];
+    const insert = db.prepare(`
+      INSERT INTO vector_entries (
+        namespace,
+        entry_id,
+        content_hash,
+        search_text,
+        vector_blob,
+        metadata_json,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const row of legacyRows) {
+      const parsedVector = JSON.parse(row.vector_json) as unknown;
+      if (!Array.isArray(parsedVector)) {
+        throw new Error(`Legacy vector entry ${row.namespace}/${row.entry_id} did not contain a JSON array.`);
+      }
+      insert.run(
+        row.namespace,
+        row.entry_id,
+        row.content_hash,
+        row.search_text,
+        encodeVectorBlob(parsedVector as number[]),
+        row.metadata_json,
+        row.updated_at,
+      );
+    }
+    db.prepare(`DROP TABLE vector_entries_legacy`).run();
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function initializeIndexDatabase(db: DatabaseSync): void {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -268,21 +383,9 @@ function initializeIndexDatabase(db: DatabaseSync): void {
       entry_count INTEGER NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE TABLE IF NOT EXISTS vector_entries (
-      namespace TEXT NOT NULL,
-      entry_id TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      search_text TEXT NOT NULL,
-      vector_json TEXT NOT NULL,
-      metadata_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (namespace, entry_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_vector_entries_namespace
-    ON vector_entries(namespace);
   `);
+  if (!hasTable(db, "vector_entries")) createBinaryVectorEntriesTable(db);
+  else migrateLegacyVectorEntriesToBinary(db);
 
   db.prepare(`
     INSERT INTO index_db_meta (meta_key, meta_value)
@@ -682,7 +785,7 @@ export async function loadVectorCollection<TMetadata = unknown>(
   try {
     const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
     const rows = db.prepare(`
-      SELECT entry_id, content_hash, search_text, vector_json, metadata_json
+      SELECT entry_id, content_hash, search_text, vector_blob, metadata_json
       FROM vector_entries
       WHERE namespace = ?
       ORDER BY entry_id
@@ -707,7 +810,7 @@ export async function loadVectorEntriesById<TMetadata = unknown>(
     const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
     const placeholders = uniqueEntryIds.map(() => "?").join(", ");
     const rows = db.prepare(`
-      SELECT entry_id, content_hash, search_text, vector_json, metadata_json
+      SELECT entry_id, content_hash, search_text, vector_blob, metadata_json
       FROM vector_entries
       WHERE namespace = ? AND entry_id IN (${placeholders})
       ORDER BY entry_id
@@ -756,7 +859,7 @@ export async function replaceVectorCollection<TMetadata = unknown>(
           entry_id,
           content_hash,
           search_text,
-          vector_json,
+          vector_blob,
           metadata_json,
           updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -767,7 +870,7 @@ export async function replaceVectorCollection<TMetadata = unknown>(
           entry.id,
           entry.contentHash,
           entry.searchText,
-          JSON.stringify(entry.vector),
+          encodeVectorBlob(entry.vector),
           JSON.stringify(entry.metadata),
           updatedAt,
         );
@@ -813,14 +916,14 @@ export async function upsertVectorEntries<TMetadata = unknown>(
           entry_id,
           content_hash,
           search_text,
-          vector_json,
+          vector_blob,
           metadata_json,
           updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(namespace, entry_id) DO UPDATE SET
           content_hash = excluded.content_hash,
           search_text = excluded.search_text,
-          vector_json = excluded.vector_json,
+          vector_blob = excluded.vector_blob,
           metadata_json = excluded.metadata_json,
           updated_at = excluded.updated_at
       `);
@@ -830,7 +933,7 @@ export async function upsertVectorEntries<TMetadata = unknown>(
           entry.id,
           entry.contentHash,
           entry.searchText,
-          JSON.stringify(entry.vector),
+          encodeVectorBlob(entry.vector),
           JSON.stringify(entry.metadata),
           updatedAt,
         );

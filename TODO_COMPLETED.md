@@ -2,6 +2,12 @@
 
 ## v1.5
 
+- [x] replace JSON text vector storage in sqlite with binary `Float32Array` blob storage in `src/core/index-database.ts`
+- [x] remove repeated vector JSON stringify and parse overhead from vector load and save paths by switching `vector_entries` to `vector_blob`
+- [x] migrate existing vector read and write helpers to the binary layout without reintroducing whole-namespace rewrites
+- [x] add explicit legacy vector-schema migration so existing `vector_json` rows upgrade to schema version `4` on open and the temporary legacy table is removed afterward
+- [x] add direct regression coverage proving vectors are stored as sqlite blobs and legacy JSON vector rows migrate to blob storage on first open
+- [x] serialize same-root checkpoint and restore write refreshes so prepared-index regeneration cannot race itself under concurrent repo mutations
 - [x] audit `indexCodebase()` progress callbacks and index-status writes so stage-state persistence is no longer triggered on every progress event
 - [x] keep stage-boundary and failure persistence in `executeIndexStage()` but debounce progress-driven status writes in `src/tools/index-codebase.ts`
 - [x] add a direct regression proving repeated same-phase progress bursts are coalesced while phase changes still persist immediately

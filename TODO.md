@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 12: Binary Vector Storage
-
-- [ ] Replace JSON text storage for vectors in sqlite with a binary representation such as `Float32Array` bytes.
-- [ ] Remove repeated JSON stringify and parse overhead from vector load and save code paths.
-- [ ] Migrate existing vector read and write helpers to the new binary layout without reintroducing whole-namespace rewrites.
-- [ ] Add migration or rebuild logic so old vector collections can be upgraded safely and explicitly.
-
 ## Phase 13: Clustering Scalability
 
 - [ ] Audit [src/core/clustering.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/clustering.ts) and the full-index cluster artifact path to remove the current full affinity matrix, normalized Laplacian, eigen decomposition, and k-means pipeline as the default large-repo strategy.
