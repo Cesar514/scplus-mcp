@@ -163,6 +163,10 @@
 ## maintenance
 
 - [x] audit `TODO.md` against the current codebase and recent roadmap commits, then move stale completed items out of the active TODO
+- [x] re-verify roadmap step 20 against the current real benchmark harness and public `evaluate` surface after later roadmap drift
+- [x] confirm the shipped evaluation report still exposes hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related efficiency
+- [x] re-run the direct step 20 verification pass with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
+- [x] commit the verified step 20 follow-up work
 - [x] finish roadmap step 20 by extending the evaluation suite to measure hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency
 - [x] verify roadmap step 20 directly with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
 - [x] commit the verified step 20 work
