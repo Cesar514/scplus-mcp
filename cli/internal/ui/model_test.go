@@ -65,7 +65,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
-		"context++ CLI doctor for /tmp/contextplus",
+		"contextplusplus-cli doctor for /tmp/contextplus",
 		"Branch: main",
 		"Prepared index: OK",
 		"Ollama: 1 running models",

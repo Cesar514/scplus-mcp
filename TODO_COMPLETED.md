@@ -356,8 +356,14 @@
 
 ## phase 31 completed
 
-- [x] Rename the shipped product and commands from Context+ / `contextplus` / `contextplus-ui` to context++ / `context++` / `context++-ui` across package metadata, install/build entrypoints, generated config output, MCP metadata, and human CLI labels.
+- [x] Rename the shipped product and commands from Context+ / `contextplus` / `contextplus-ui` to the context++ brand with `contextplusplus` and `contextplusplus-cli` as the executable surfaces across package metadata, install/build entrypoints, generated config output, MCP metadata, and human CLI labels.
 - [x] Keep the repo-local machine state contract under `.contextplus/` intact while migrating only the user-facing product and command surface.
 - [x] Update the landing/docs layer so the repo stops shipping mixed Context+ and context++ branding.
-- [x] Create README-ready image artifacts that explain the context++ CLI and serving model visually.
+- [x] Create README-ready image artifacts that explain the contextplusplus-cli surface and serving model visually.
 - [x] Generate benchmark artifacts from the real evaluation harness and use them in deeper README benchmark documentation.
+
+## rename refinement completed
+
+- [x] Finish the public rename pass so actual command, binary, config, and UI surfaces use `contextplusplus` / `contextplusplus-cli`, while `context++` remains product branding only in prose and reading-only labels.
+- [x] Remove lingering `++` command names from CLI-visible text, generated artifacts, install/build entrypoints, and repo-local completion notes.
+- [x] Verify the rename directly with root build/tests, Go CLI build/tests, landing build, and a repository grep sweep for stale actual-surface names.

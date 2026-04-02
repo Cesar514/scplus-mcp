@@ -4,8 +4,8 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "context++": "./build/index.js",
-    "context++-ui": "./build/cli-launcher.js"
+    "contextplusplus": "./build/index.js",
+    "contextplusplus-cli": "./build/cli-launcher.js"
   },
   "scripts": {
     "build": "tsc",

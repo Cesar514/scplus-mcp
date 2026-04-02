@@ -1,4 +1,4 @@
-   /\_    context++ Human CLI                                                                                           
+   /\_    contextplusplus-cli                                                                                           
  _( o.o)  Operator console with navigation history, command palette, and export layers                                  
   > ^ <                                                                                                                 
  /|_|_\                                                                                                                 

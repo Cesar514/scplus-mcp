@@ -23,10 +23,10 @@ describe("init-codex", () => {
         { cwd },
       );
       const raw = await readFile(join(cwd, ".codex", "config.toml"), "utf8");
-      assert.match(raw, /^\[mcp_servers\."context\+\+"\]$/m);
+      assert.match(raw, /^\[mcp_servers\."contextplusplus"\]$/m);
       assert.match(raw, /^command = "npx"$/m);
       assert.match(raw, /^args = \["-y","contextplusplus"\]$/m);
-      assert.match(raw, /^\[mcp_servers\."context\+\+"\.env\]$/m);
+      assert.match(raw, /^\[mcp_servers\."contextplusplus"\.env\]$/m);
       assert.match(raw, /^OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"$/m);
       assert.match(raw, /^OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"$/m);
     } finally {

@@ -15,7 +15,7 @@ const toolRefRows = [
     desc: "Create or refresh repo-local .contextplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\ncontext++ root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\ncontextplusplus root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
   },
   {
     name: "validate_index",

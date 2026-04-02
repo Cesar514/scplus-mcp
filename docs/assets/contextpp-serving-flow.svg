@@ -38,6 +38,6 @@
   <text x="718" y="372" fill="#111111" font-size="26" font-family="ui-sans-serif, system-ui, sans-serif">Failure behavior</text>
   <text x="718" y="412" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">If refresh or rebuild fails, freshness becomes blocked.</text>
   <text x="718" y="444" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">Prepared queries reject instead of serving stale answers.</text>
-  <text x="718" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">doctor, bridge events, backend logs, and context++-ui show</text>
+  <text x="718" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">doctor, bridge events, backend logs, and contextplusplus-cli show</text>
   <text x="718" y="504" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">the blocked reason and pending paths explicitly.</text>
 </svg>

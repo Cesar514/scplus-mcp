@@ -2,7 +2,7 @@
 
 Semantic intelligence for large-scale engineering.
 
-context++ is the renamed public surface for the Context+ engine: the MCP server is exposed as `context++`, the Bubble Tea operator console is exposed as `context++-ui`, and the npm package name is `contextplusplus`. The repo-local machine state and runtime environment variables keep the stable `.contextplus/` and `CONTEXTPLUS_` prefixes for now.
+context++ is the public product brand for the Context+ engine. The actual executable surface uses `contextplusplus` for the MCP command, `contextplusplus-cli` for the human CLI, and `contextplusplus` as the npm package name. The repo-local machine state and runtime environment variables keep the stable `.contextplus/` and `CONTEXTPLUS_` prefixes for now.
 
 The current committed benchmark artifact reports `22` golden operator questions, `0` stale-after-write failures, `0` restore failures, `3.14ms` exact p50 latency, `55.95ms` related-search p50 latency, and `63.52ms` research p50 latency. See [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md) and [latest.json](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.json).
 
@@ -13,18 +13,18 @@ The current committed benchmark artifact reports `22` golden operator questions,
 ## Naming
 
 - Public npm package: `contextplusplus`
-- Public MCP command: `context++`
-- Public human CLI command: `context++-ui`
+- Public MCP command: `contextplusplus`
+- Public human CLI command: `contextplusplus-cli`
 - Stable repo-local state directory: `.contextplus/`
 - Stable runtime env prefix: `CONTEXTPLUS_`
 - Existing repo and infrastructure identifiers may still use `contextplus` where external URLs or provisioned services must stay stable.
 
 ## Local Install
 
-For local development, install the linked `context++` CLI with:
+For local development, install the linked `contextplusplus` commands with:
 
 ```bash
-./install-context++.sh
+./install-contextplusplus.sh
 ```
 
 What it does:
@@ -33,8 +33,8 @@ What it does:
 - runs `npm run build`
 - runs `npm run build:cli`
 - runs `npm link`
-- verifies the linked `context++` command resolves to this checkout
-- verifies the linked `context++-ui` command resolves to this checkout
+- verifies the linked `contextplusplus` command resolves to this checkout
+- verifies the linked `contextplusplus-cli` command resolves to this checkout
 
 After editing this repo, rebuild the linked CLI with:
 
@@ -44,18 +44,18 @@ npm run build:all
 
 The human CLI is built with Bubble Tea in Go and uses a project-local Go toolchain through Pixi. `pixi` must be installed before running the install script.
 
-Because `npm link` points `context++` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `context++-ui` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
+Because `npm link` points `contextplusplus` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `contextplusplus-cli` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
 
 The renamed operator console snapshot used for the image above is committed in [cli-snapshot.txt](/home/cesar514/Documents/agent_programming/contextplus/docs/artifacts/cli-snapshot.txt).
 
 To add the locally linked command to Codex, put this in `~/.codex/config.toml` as a separate manual step:
 
 ```toml
-[mcp_servers."context++"]
-command = "context++"
+[mcp_servers."contextplusplus"]
+command = "contextplusplus"
 args = []
 
-[mcp_servers."context++".env]
+[mcp_servers."contextplusplus".env]
 OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
 CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
@@ -109,14 +109,14 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 
 ### Quick Start (npx / bunx)
 
-No installation needed. Add context++ to your IDE MCP config.
+No installation needed. Add contextplusplus to your IDE MCP config.
 
 For Claude Code, Cursor, and Windsurf, use `mcpServers`:
 
 ```json
 {
   "mcpServers": {
-    "context++": {
+    "contextplusplus": {
       "command": "bunx",
       "args": ["contextplusplus"],
       "env": {
@@ -134,7 +134,7 @@ For VS Code (`.vscode/mcp.json`), use `servers` and `inputs`:
 ```json
 {
   "servers": {
-    "context++": {
+    "contextplusplus": {
       "type": "stdio",
       "command": "bunx",
       "args": ["contextplusplus"],
@@ -191,22 +191,22 @@ Config file locations:
 - `restore-points [path] [--json]` - Print restore-point history for the repository.
 - `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, Ollama, and observability report, including stage timing, cache, integrity, and scheduler metrics.
 - `bridge <subcommand>` - Machine-readable JSON output for the shared local backend used by the human CLI and automation, not the full MCP catalog. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
-- `bridge-serve` - Persistent JSON-line session used by `context++-ui` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
+- `bridge-serve` - Persistent JSON-line session used by `contextplusplus-cli` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
 
 ### Human CLI
 
-The Bubble Tea terminal app is exposed as `context++-ui`.
+The Bubble Tea terminal app is exposed as `contextplusplus-cli`.
 
-- `context++-ui` - Launch the interactive dashboard.
-- `context++-ui snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
-- `context++-ui doctor --root .` - Print a concise health summary from the human CLI.
-- `context++-ui index --root .` - Trigger a full index run through the backend.
-- `context++-ui tree --root .`
-- `context++-ui hubs --root .`
-- `context++-ui cluster --root .`
-- `context++-ui restore-points --root .`
-- `context++-ui hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
+- `contextplusplus-cli` - Launch the interactive dashboard.
+- `contextplusplus-cli snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
+- `contextplusplus-cli doctor --root .` - Print a concise health summary from the human CLI.
+- `contextplusplus-cli index --root .` - Trigger a full index run through the backend.
+- `contextplusplus-cli tree --root .`
+- `contextplusplus-cli hubs --root .`
+- `contextplusplus-cli cluster --root .`
+- `contextplusplus-cli restore-points --root .`
+- `contextplusplus-cli hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
 
 The dashboard includes:
 
@@ -235,9 +235,9 @@ The dashboard includes:
 
 | Surface | What it exposes | What it does not expose |
 |---------|------------------|--------------------------|
-| MCP stdio server (`context++`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
-| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `context++-ui` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
-| Human CLI (`context++-ui`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
+| MCP stdio server (`contextplusplus`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
+| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `contextplusplus-cli` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
+| Human CLI (`contextplusplus-cli`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
 
 ### Serving Contract
 
@@ -248,7 +248,7 @@ The dashboard includes:
 
 ### Watcher And Scheduler Semantics
 
-- `context++-ui` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
+- `contextplusplus-cli` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
 - Bursty filesystem edits are deduped into one pending watch plan. If another backend job is already running, the scheduler keeps at most one queued plan and supersedes stale queued work when a newer change batch arrives.
 - Ordinary source edits schedule a background `refresh` job. Dependency or workspace configuration edits such as `package.json`, lockfiles, `pixi.toml`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `tsconfig*.json`, or `.gitignore` escalate to an `index` job with an explicit full-rebuild reason.
 - Pending paths, pending job kind, queue depth, canceled and superseded counts, and full rebuild reasons are surfaced through `doctor`, bridge payloads, backend logs, and the human CLI status and jobs panes.
@@ -316,11 +316,11 @@ EOF
 Codex uses project-scoped TOML configuration in `.codex/config.toml`:
 
 ```toml
-[mcp_servers."context++"]
+[mcp_servers."contextplusplus"]
 command = "bunx"
 args = ["contextplusplus"]
 
-[mcp_servers."context++".env]
+[mcp_servers."contextplusplus".env]
 OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
 OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
@@ -361,7 +361,7 @@ Full Claude Code `.mcp.json` example:
 ```json
 {
   "mcpServers": {
-    "context++": {
+    "contextplusplus": {
       "command": "npx",
       "args": ["-y", "contextplusplus"],
       "env": {
@@ -382,7 +382,7 @@ Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
 ```json
 {
   "mcpServers": {
-    "context++": {
+    "contextplusplus": {
       "command": "npx",
       "args": ["-y", "contextplusplus"],
       "env": {
@@ -402,7 +402,7 @@ Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.co
 ```json
 {
   "mcpServers": {
-    "context++": {
+    "contextplusplus": {
       "command": "npx",
       "args": ["-y", "contextplusplus"],
       "env": {

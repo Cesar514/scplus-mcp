@@ -21,11 +21,11 @@ function buildConfig(runner: string, ideId: string): string {
 
   if (ideId === "codex") {
     return [
-      '[mcp_servers."context++"]',
+      '[mcp_servers."contextplusplus"]',
       `command = "${isNpx ? "npx" : "bunx"}"`,
       `args = [${isNpx ? '"-y", "contextplusplus"' : '"contextplusplus"'}]`,
       "",
-      '[mcp_servers."context++".env]',
+      '[mcp_servers."contextplusplus".env]',
       'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
       'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
       'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
@@ -37,7 +37,7 @@ function buildConfig(runner: string, ideId: string): string {
       {
         $schema: "https://opencode.ai/config.json",
         mcp: {
-          "context++": {
+          contextplusplus: {
             type: "local",
             command: isNpx
               ? ["npx", "-y", "contextplusplus"]
@@ -60,7 +60,7 @@ function buildConfig(runner: string, ideId: string): string {
     return JSON.stringify(
       {
         servers: {
-          "context++": {
+          contextplusplus: {
             type: "stdio",
             command: isNpx ? "npx" : "bunx",
             args: isNpx ? ["-y", "contextplusplus"] : ["contextplusplus"],
@@ -81,7 +81,7 @@ function buildConfig(runner: string, ideId: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        "context++": {
+        contextplusplus: {
           command: isNpx ? "npx" : "bunx",
           args: isNpx ? ["-y", "contextplusplus"] : ["contextplusplus"],
           env: {

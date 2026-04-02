@@ -369,7 +369,7 @@ func Discover() (*Client, error) {
 		nodeBin = "node"
 	}
 	if _, err := exec.LookPath(nodeBin); err != nil {
-		return nil, fmt.Errorf("node runtime is required for the context++ CLI backend: %w", err)
+		return nil, fmt.Errorf("node runtime is required for the contextplusplus-cli backend: %w", err)
 	}
 	entry := os.Getenv("CONTEXTPLUS_BACKEND_ENTRY")
 	if entry == "" {
@@ -381,10 +381,10 @@ func Discover() (*Client, error) {
 	}
 	info, err := os.Stat(entry)
 	if err != nil {
-		return nil, fmt.Errorf("context++ backend entrypoint %q is missing: %w", entry, err)
+		return nil, fmt.Errorf("contextplusplus backend entrypoint %q is missing: %w", entry, err)
 	}
 	if info.IsDir() {
-		return nil, fmt.Errorf("context++ backend entrypoint %q is a directory", entry)
+		return nil, fmt.Errorf("contextplusplus backend entrypoint %q is a directory", entry)
 	}
 	client := &Client{
 		nodeBin: nodeBin,

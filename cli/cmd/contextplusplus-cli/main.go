@@ -141,7 +141,7 @@ func main() {
 	}()
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "--root" {
-		root, _, parseErr := parseRoot("context++-ui", args)
+		root, _, parseErr := parseRoot("contextplusplus-cli", args)
 		if parseErr != nil {
 			fmt.Fprintln(os.Stderr, parseErr)
 			os.Exit(1)
