@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 22 by rebuilding `contextplus-ui` around a real operator-console layout with distinct command, navigation, and job layers
+- [x] replace the tab-only overview wall with a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
+- [x] add a stacked vertical fallback layout for narrow terminals instead of relying on fragile horizontal card formulas
+- [x] keep the backend-facing UI model typed around section state and content items rather than monolithic raw text payload fields
+- [x] verify v1.5 phase 22 directly with the Go CLI test suite, direct `contextplus-ui snapshot` inspection on this repository, direct `contextplus-ui doctor`, and narrow-layout rendering coverage
+- [x] commit the verified v1.5 phase 22 work
+
 - [x] finish v1.5 phase 21 by exposing stage timing, cache, integrity, and scheduler observability as first-class operator signals instead of scattered internal counters
 - [x] add stage timing metrics with per-stage duration plus files-per-second, chunks-per-second, and embeds-per-second observability in the persisted index status and doctor surfaces
 - [x] expose cache observability for process-cache hits, vector-cache hits, parser-pool reuse, and lexical candidate counts through doctor text, machine-readable doctor JSON, and the human CLI views

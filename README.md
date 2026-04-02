@@ -196,9 +196,10 @@ The Bubble Tea terminal app is exposed as `contextplus-ui`.
 The dashboard includes:
 
 - an animated magician header
-- repo, index, hub, restore-point, and Ollama health panels
+- a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
+- a stacked vertical fallback layout for narrower terminals
 - observability details for stage timing, vector coverage, refresh failures, lexical candidate counts, and watcher scheduler state
-- full-text views for tree, hubs, restore points, and clusters
+- typed section navigation for overview, tree, hubs, restore points, and clusters instead of a tab-only card wall
 - a persistent backend session shared through `bridge-serve`
 - a backend-owned watcher that streams change batches and index-job events to the UI
 - a human hub-creation flow

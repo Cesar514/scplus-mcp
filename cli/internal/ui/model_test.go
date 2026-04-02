@@ -80,3 +80,68 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 func floatPtr(value float64) *float64 {
 	return &value
 }
+
+func TestViewRendersOperatorConsolePanes(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 140
+	model.height = 40
+	model.doctorLoaded = true
+	model.doctor = backend.DoctorReport{
+		Root: "/tmp/contextplus",
+		RepoStatus: backend.RepoStatusSummary{
+			Branch:         "main",
+			UnstagedCount:  1,
+			UntrackedCount: 0,
+		},
+		IndexValidation: backend.IndexValidationReport{OK: true},
+	}
+	model.refreshOverviewSection()
+	model.refreshSidebar()
+	model.syncDetailViewport()
+
+	rendered := model.View()
+	for _, needle := range []string{
+		"Operator console with navigation, detail, and job layers",
+		"Navigation",
+		"Overview",
+		"Detail",
+		"Jobs",
+		"Refresh data",
+		"Run full index",
+		"Enable watcher",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in operator console view: %s", needle, rendered)
+		}
+	}
+}
+
+func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 90
+	model.height = 26
+	model.doctorLoaded = true
+	model.doctor = backend.DoctorReport{
+		Root: "/tmp/contextplus",
+		RepoStatus: backend.RepoStatusSummary{
+			Branch:         "main",
+			UnstagedCount:  1,
+			UntrackedCount: 0,
+		},
+		IndexValidation: backend.IndexValidationReport{OK: true},
+	}
+	model.refreshOverviewSection()
+	model.refreshSidebar()
+	model.syncDetailViewport()
+
+	rendered := model.View()
+	for _, needle := range []string{
+		"Stacked operator console for narrow terminals",
+		"Navigation",
+		"Jobs",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
+		}
+	}
+}

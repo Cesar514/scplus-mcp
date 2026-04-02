@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 22: TUI Architecture Reset
-
-- [ ] Rebuild the TUI around three layers: command layer, navigation layer, and job layer, so `contextplus-ui` becomes an operator console instead of a dashboard with text panes.
-- [ ] Use a left sidebar for navigation and actions, a center pane for lists or tables, a right pane for preview or detail, and a bottom pane for logs and job state when terminal width allows.
-- [ ] Add a vertical or stacked fallback layout for narrow terminals instead of relying on fragile horizontal card formulas.
-- [ ] Keep the backend-facing UI model typed around domain objects, not monolithic text payloads.
-
 ## Phase 23: Overview Screen And Layout Fixes
 
 - [ ] Make the Overview screen scrollable instead of a static string render in `renderOverview()` inside [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go).
