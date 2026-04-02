@@ -171,6 +171,9 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
 		Root: "/tmp/contextplus",
+		Ollama: backend.OllamaRuntimeStatus{
+			OK: true,
+		},
 		RepoStatus: backend.RepoStatusSummary{
 			Branch:         "main",
 			UnstagedCount:  1,
@@ -185,6 +188,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Activity | contextplusplus-cli",
+		"The magician is resting",
 		"Type /command",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -199,6 +203,38 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 		if strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q to be absent from stacked activity shell: %s", needle, rendered)
 		}
+	}
+}
+
+func TestActivityShellShowsRestingStatusWhenNoModelIsActive(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.doctorLoaded = true
+	model.doctor.Ollama = backend.OllamaRuntimeStatus{OK: true, Models: nil}
+
+	rendered := model.renderActivityShell(90, 18)
+	if !strings.Contains(rendered, "The magician is resting") {
+		t.Fatalf("expected resting status in activity title: %s", rendered)
+	}
+}
+
+func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
+	t.Setenv("OLLAMA_CHAT_MODEL", "nemotron-3-nano:4b-128k")
+	model := NewModel("/tmp/contextplus", nil)
+	model.doctorLoaded = true
+	model.doctor.Ollama = backend.OllamaRuntimeStatus{
+		OK: true,
+		Models: []backend.OllamaRuntimeModel{
+			{Name: "qwen3-embedding:0.6b-32k"},
+			{Name: "nemotron-3-nano:4b-128k"},
+		},
+	}
+	queryJob := model.job("query")
+	queryJob.State = "running"
+	queryJob.Phase = "research"
+
+	rendered := model.renderActivityShell(120, 18)
+	if !strings.Contains(rendered, "The magician is using 'nemotron-3-nano:4b-128k' for query") {
+		t.Fatalf("expected active model status in activity title: %s", rendered)
 	}
 }
 

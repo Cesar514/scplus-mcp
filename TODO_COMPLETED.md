@@ -405,3 +405,10 @@
 - [x] Keep right-arrow from jumping into an empty detail state on the activity screen when there is no actionable command context.
 - [x] Wrap long current-status text within the activity shell instead of letting it run past the usable pane width.
 - [x] Verify the activity shell directly with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.
+
+## magician runtime title completed
+
+- [x] Show a grey live magician status next to `contextplusplus-cli` in the activity title line.
+- [x] Render `The magician is resting` when no active model-backed work is running.
+- [x] Render `The magician is using '<model>' for <activity>` when a model is running for the current active job.
+- [x] Verify the title-line status directly with focused Go UI tests and a rebuilt CLI snapshot render.

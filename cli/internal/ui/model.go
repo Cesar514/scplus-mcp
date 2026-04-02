@@ -2849,7 +2849,7 @@ func (m Model) renderActivityShell(width int, height int) string {
 	activeJob := m.activeStatusJob()
 	wrapWidth := max(24, int(float64(width)*0.7))
 	lines := []string{
-		renderPaneTitle("Activity | contextplusplus-cli", m.focus == focusContent),
+		renderPaneTitle("Activity | contextplusplus-cli", m.focus == focusContent) + subtitleStyle.Render(" | "+m.magicianRuntimeStatus(activeJob)),
 		"",
 		magician,
 		"",
@@ -3781,6 +3781,81 @@ func formatOllamaSummary(status backend.OllamaRuntimeStatus) string {
 		return "offline"
 	}
 	return status.Error
+}
+
+func (m Model) magicianRuntimeStatus(activeJob *jobState) string {
+	if activeJob == nil || !isActiveJobState(activeJob.State) {
+		return "The magician is resting"
+	}
+	modelName := m.activeRuntimeModelName(activeJob)
+	if strings.TrimSpace(modelName) == "" {
+		return "The magician is resting"
+	}
+	return fmt.Sprintf("The magician is using '%s' for %s", modelName, strings.ToLower(strings.TrimSpace(activeJob.Title)))
+}
+
+func (m Model) activeRuntimeModelName(activeJob *jobState) string {
+	if !m.doctorLoaded || !m.doctor.Ollama.OK || len(m.doctor.Ollama.Models) == 0 || activeJob == nil {
+		return ""
+	}
+	preferred := strings.TrimSpace(runtimeModelPreferenceForJob(activeJob))
+	if preferred != "" {
+		if match := matchRunningModel(preferred, m.doctor.Ollama.Models); match != "" {
+			return match
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(activeJob.ID), "query") {
+		for _, model := range m.doctor.Ollama.Models {
+			name := strings.TrimSpace(model.Name)
+			if name == "" {
+				continue
+			}
+			if !strings.Contains(strings.ToLower(name), "embed") {
+				return name
+			}
+		}
+	}
+	for _, model := range m.doctor.Ollama.Models {
+		name := strings.TrimSpace(model.Name)
+		if name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func runtimeModelPreferenceForJob(activeJob *jobState) string {
+	if activeJob == nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(activeJob.ID)) {
+	case "index", "refresh":
+		return strings.TrimSpace(os.Getenv("OLLAMA_EMBED_MODEL"))
+	case "query":
+		return strings.TrimSpace(os.Getenv("OLLAMA_CHAT_MODEL"))
+	default:
+		return strings.TrimSpace(os.Getenv("OLLAMA_CHAT_MODEL"))
+	}
+}
+
+func matchRunningModel(preferred string, models []backend.OllamaRuntimeModel) string {
+	normalizedPreferred := strings.ToLower(strings.TrimSpace(preferred))
+	if normalizedPreferred == "" {
+		return ""
+	}
+	for _, model := range models {
+		name := strings.TrimSpace(model.Name)
+		if strings.EqualFold(name, preferred) {
+			return name
+		}
+	}
+	for _, model := range models {
+		name := strings.TrimSpace(model.Name)
+		if strings.Contains(strings.ToLower(name), normalizedPreferred) {
+			return name
+		}
+	}
+	return ""
 }
 
 func titleFromID(value string) string {
