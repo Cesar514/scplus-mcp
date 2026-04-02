@@ -18,12 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 11: Index Status Persistence Noise
-
-- [ ] Audit `indexCodebase()` progress callbacks and index-status writes so stage-state persistence is not triggered on every progress event.
-- [ ] Debounce stage and status persistence to coarse intervals, stage boundaries, or explicit milestone checkpoints.
-- [ ] Preserve crash recovery value while reducing sqlite churn and noisy UI updates from over-frequent status writes.
-
 ## Phase 12: Binary Vector Storage
 
 - [ ] Replace JSON text storage for vectors in sqlite with a binary representation such as `Float32Array` bytes.

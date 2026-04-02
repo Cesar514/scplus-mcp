@@ -23,6 +23,33 @@ export interface IndexCodebaseProgressEvent {
   mode: IndexMode;
 }
 
+export interface IndexProgressPersistenceControllerOptions {
+  persist: () => Promise<void> | void;
+  now?: () => number;
+  minIntervalMs?: number;
+}
+
+const DEFAULT_PROGRESS_PERSIST_INTERVAL_MS = 1000;
+
+export function createIndexProgressPersistenceController(options: IndexProgressPersistenceControllerOptions): {
+  persist(phase: string): Promise<boolean>;
+} {
+  const now = options.now ?? Date.now;
+  const minIntervalMs = options.minIntervalMs ?? DEFAULT_PROGRESS_PERSIST_INTERVAL_MS;
+  let lastPersistedAt = Number.NEGATIVE_INFINITY;
+  let lastPersistedPhase = "";
+  return {
+    async persist(phase: string): Promise<boolean> {
+      const persistedAt = now();
+      if (phase === lastPersistedPhase && persistedAt - lastPersistedAt < minIntervalMs) return false;
+      await options.persist();
+      lastPersistedAt = persistedAt;
+      lastPersistedPhase = phase;
+      return true;
+    },
+  };
+}
+
 function formatProgressPrefix(startedAtMs: number): string {
   return `[${((Date.now() - startedAtMs) / 1000).toFixed(1)}s]`;
 }
@@ -93,10 +120,13 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     });
   };
 
-  const persistStatus = async (): Promise<void> => {
+  const persistStatusImmediately = async (): Promise<void> => {
     await saveIndexStageState(runtime, stageState);
     await saveIndexStatus(runtime, status, startedAtMs);
   };
+  const progressPersistence = createIndexProgressPersistenceController({
+    persist: persistStatusImmediately,
+  });
 
   try {
     await runWithIndexGenerationContext({
@@ -108,17 +138,17 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       status,
       stageState,
       stage: "bootstrap",
-      persist: persistStatus,
+      persist: persistStatusImmediately,
       });
       appendProgress(`bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`);
-      await persistStatus();
+      await persistStatusImmediately();
 
       await executeIndexStage({
         runtime,
         status,
         stageState,
         stage: "file-search",
-        persist: persistStatus,
+        persist: persistStatusImmediately,
         onFileProgress: async (progress) => {
         status.phase = progress.phase;
         status.fileSearch = {
@@ -130,21 +160,21 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           indexedDocuments: progress.indexedDocuments,
         };
         appendProgress(formatFileProgress(progress));
-        await persistStatus();
+        await progressPersistence.persist(status.phase);
       },
       });
       appendProgress(
         `file-ready | ${status.fileSearch?.indexedDocuments ?? 0} docs | ` +
         `${status.fileSearch?.embeddedDocuments ?? 0} embedded | ${status.fileSearch?.reusedDocuments ?? 0} reused`,
       );
-      await persistStatus();
+      await persistStatusImmediately();
 
       await executeIndexStage({
         runtime,
         status,
         stageState,
         stage: "identifier-search",
-        persist: persistStatus,
+        persist: persistStatusImmediately,
         onIdentifierProgress: async (progress) => {
         status.phase = progress.phase;
         status.identifierSearch = {
@@ -156,7 +186,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           indexedIdentifiers: progress.indexedIdentifiers,
         };
         appendProgress(formatIdentifierProgress(progress));
-        await persistStatus();
+        await progressPersistence.persist(status.phase);
       },
       });
       appendProgress(
@@ -175,7 +205,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           status,
           stageState,
           stage: "full-artifacts",
-          persist: persistStatus,
+          persist: persistStatusImmediately,
           onFullProgress: async (progress) => {
           status.phase = progress.phase;
           status.fullIndex = {
@@ -206,7 +236,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
             },
           };
           appendProgress(formatFullProgress(progress));
-          await persistStatus();
+          await progressPersistence.persist(status.phase);
         },
         });
         appendProgress(
@@ -235,7 +265,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     status.activeGenerationBlockedReason = activated.activeGenerationBlockedReason;
     status.runGeneration = pendingGeneration;
     status.completedAt = new Date().toISOString();
-    await persistStatus();
+    await persistStatusImmediately();
   } catch (error) {
     const servingState = await clearPendingIndexGeneration(rootDir, pendingGeneration);
     status.state = "failed";
@@ -249,7 +279,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     status.failedGeneration = pendingGeneration;
     status.completedAt = new Date().toISOString();
     status.error = error instanceof Error ? error.message : String(error);
-    await persistStatus();
+    await persistStatusImmediately();
     throw error;
   }
 

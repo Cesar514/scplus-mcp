@@ -2,6 +2,9 @@
 
 ## v1.5
 
+- [x] audit `indexCodebase()` progress callbacks and index-status writes so stage-state persistence is no longer triggered on every progress event
+- [x] keep stage-boundary and failure persistence in `executeIndexStage()` but debounce progress-driven status writes in `src/tools/index-codebase.ts`
+- [x] add a direct regression proving repeated same-phase progress bursts are coalesced while phase changes still persist immediately
 - [x] audit the unified search flow so the query embedding is computed exactly once per top-level query instead of separately in file search and hybrid retrieval
 - [x] compute the unified query embedding once in `src/tools/unified-ranking.ts` and pass the shared query vector through file ranking and hybrid retrieval reranking stages
 - [x] extend `SearchIndex.search()` and hybrid retrieval query options so semantic reranking can consume a caller-supplied query vector instead of re-embedding internally
