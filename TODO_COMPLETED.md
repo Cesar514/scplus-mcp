@@ -166,6 +166,10 @@
 - [x] finish roadmap step 20 by extending the evaluation suite to measure hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency
 - [x] verify roadmap step 20 directly with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
 - [x] commit the verified step 20 work
+- [x] re-verify roadmap step 19 against the current shipped search-routing behavior and public research guidance after later roadmap drift
+- [x] confirm `search(intent='exact')` still uses the fast substrate, `search(intent='related')` still stays on ranked discovery, and `research` remains the broad-context tool on the built server
+- [x] re-run the direct step 19 verification pass with the built-server MCP routing test, a live built-server routing probe on this repository, Context+ blast-radius/lint checks, build, the full main test suite, and the landing production build
+- [x] commit the verified step 19 follow-up work
 - [x] re-verify roadmap step 18 against the current shipped MCP surface, built exact-query runtime, and landing copies after later roadmap drift
 - [x] confirm the tiny exact-query MCP tool set still exposes `symbol`, `word`, `outline`, `deps`, `status`, and `changes` without additional public-surface drift
 - [x] re-run the direct step 18 verification pass with the built-server MCP integration test, a live built-server MCP probe on this repository, build, the full main test suite, and the landing production build
