@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 30: Documentation And Rollout Truthfulness
-
-- [ ] Update [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) so it stops overselling the current human CLI once bridge parity and operator-console work land.
-- [ ] Keep docs explicit about which surfaces are human CLI only, MCP only, or shared through the persistent backend.
-- [ ] Document active-generation serving semantics, dirty-state semantics after writes, and explicit degraded-state reporting rules.
-- [ ] Document the watcher and scheduler behavior so operators know when auto-refresh, queued jobs, or blocked states are expected.
-
 ## Later Backlog
 
 - [ ] Rename the product and commands to `context++` only after v1.5 serving correctness, no-fallback enforcement, backend unification, and operator-console work are all stable.

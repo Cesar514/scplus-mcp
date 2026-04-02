@@ -175,8 +175,8 @@ Config file locations:
 - `hubs [path] [--query=<text>] [--feature-name=<name>] [--hub-path=<file>] [--show-orphans] [--json]` - Browse hub summaries, suggestions, and hub details from the terminal.
 - `restore-points [path] [--json]` - Print restore-point history for the repository.
 - `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, Ollama, and observability report, including stage timing, cache, integrity, and scheduler metrics.
-- `bridge <subcommand>` - Machine-readable JSON output for the human CLI and automation. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
-- `bridge-serve` - Persistent JSON-line session used by `contextplus-ui`. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
+- `bridge <subcommand>` - Machine-readable JSON output for the shared local backend used by the human CLI and automation, not the full MCP catalog. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
+- `bridge-serve` - Persistent JSON-line session used by `contextplus-ui` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
 
 ### Human CLI
@@ -215,6 +215,29 @@ The dashboard includes:
 - a persistent backend session shared through `bridge-serve`
 - a backend-owned watcher that collapses bursty file changes into one pending watch plan, runs a background incremental refresh for normal code edits, escalates to a full rebuild only for dependency or tooling config changes, and surfaces the pending job kind plus changed paths through the UI and doctor output
 - a human hub-creation flow
+
+### Surface Boundaries
+
+| Surface | What it exposes | What it does not expose |
+|---------|------------------|--------------------------|
+| MCP stdio server (`contextplus`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
+| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `contextplus-ui` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
+| Human CLI (`contextplus-ui`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
+
+### Serving Contract
+
+- Prepared queries read from exactly one active sqlite generation at a time. Rebuilds write into a pending generation and switch the serving pointer only after validation succeeds, so failed rebuilds never leak partial stage output into live `symbol`, `word`, `search`, `research`, or `deps` results.
+- `checkpoint` and `restore` mutate the working tree first, then mark the active generation `dirty` and synchronously rebuild the prepared index before returning. While freshness is `dirty`, prepared-query surfaces reject instead of answering from stale filesystem truth.
+- `blocked` means the automatic post-write refresh failed. The block reason is reported through `validate-index`, `doctor`, bridge payloads, backend logs, and the human CLI. Repair requires fixing the underlying indexing problem and rerunning `repair-index --target=full` or `index --mode=full`.
+- There is no silent degraded mode. Missing, invalid, dirty, or blocked prepared state fails loudly; Context+ does not fall back to partial results, implicit background fixes, or success-shaped empty answers.
+
+### Watcher And Scheduler Semantics
+
+- `contextplus-ui` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
+- Bursty filesystem edits are deduped into one pending watch plan. If another backend job is already running, the scheduler keeps at most one queued plan and supersedes stale queued work when a newer change batch arrives.
+- Ordinary source edits schedule a background `refresh` job. Dependency or workspace configuration edits such as `package.json`, lockfiles, `pixi.toml`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `tsconfig*.json`, or `.gitignore` escalate to an `index` job with an explicit full-rebuild reason.
+- Pending paths, pending job kind, queue depth, canceled and superseded counts, and full rebuild reasons are surfaced through `doctor`, bridge payloads, backend logs, and the human CLI status and jobs panes.
+- If a watcher-triggered refresh or rebuild fails, operators should expect an explicit blocked or failed state, not a hidden retry loop or a fallback query answer.
 
 ### Codex
 
@@ -335,7 +358,7 @@ Three layers built with TypeScript over stdio using the Model Context Protocol S
 
 **Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
 
-**Project State** (`.contextplus/`) - created by `index`; stores authoritative machine state in `.contextplus/state/index.sqlite` plus generated suggested hub markdown under `.contextplus/hubs/suggested/` when full-mode hub suggestions exist. Legacy sqlite-migration directories such as `.contextplus/config/`, `.contextplus/embeddings/`, `.contextplus/checkpoints/`, and `.contextplus/derived/` are removed instead of being recreated empty. Later searches refresh only changed files before querying the prepared state.
+**Project State** (`.contextplus/`) - created by `index`; stores authoritative machine state in `.contextplus/state/index.sqlite` plus generated suggested hub markdown under `.contextplus/hubs/suggested/` when full-mode hub suggestions exist. Legacy sqlite-migration directories such as `.contextplus/config/`, `.contextplus/embeddings/`, `.contextplus/checkpoints/`, and `.contextplus/derived/` are removed instead of being recreated empty. Prepared queries read only the active validated generation in sqlite; new rebuilds write into a pending generation and only switch serving after validation, while `checkpoint` and `restore` mark freshness dirty and synchronously refresh before prepared queries resume.
 
 ## Config
 

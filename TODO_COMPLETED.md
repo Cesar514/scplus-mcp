@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 30 by making the rollout and operator documentation match the shipped serving and backend truth
+- [x] update [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) so it stops overselling the human CLI and clearly separates MCP-only, shared-backend, and human-CLI-only surfaces
+- [x] document the active-generation serving contract, dirty and blocked freshness semantics after writes, and the no-fallback degraded-state reporting rules
+- [x] document watcher and scheduler behavior so operators can see when auto-refresh, queued watch plans, full rebuild escalation, and blocked states are expected
+- [x] verify v1.5 phase 30 directly by inspecting the shipped README sections and asserting the required surface-boundary, serving-contract, and watcher-scheduler text is present
+- [x] commit the verified v1.5 phase 30 work
+
 - [x] finish v1.5 phase 29 by hardening the remaining watcher close path against repeated shutdowns
 - [x] verify that the old TODO suspicion about `contextplus-ui` double-closing a final model after `program.Run()` is stale on the current tree, then fix the real remaining risk in the Go watcher service instead
 - [x] make [cli/internal/watcher/watcher.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/watcher/watcher.go) `Close()` idempotent so repeated closes cannot panic on `close(s.stop)`
