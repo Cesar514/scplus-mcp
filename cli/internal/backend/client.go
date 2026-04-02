@@ -263,6 +263,9 @@ type DoctorReport struct {
 			DedupedPathEvents  int      `json:"dedupedPathEvents"`
 			SupersededJobs     int      `json:"supersededJobs"`
 			CanceledJobs       int      `json:"canceledJobs"`
+			PendingChangeCount int      `json:"pendingChangeCount"`
+			PendingPaths       []string `json:"pendingPaths"`
+			PendingJobKind     string   `json:"pendingJobKind"`
 			FullRebuildReasons []string `json:"fullRebuildReasons"`
 		} `json:"scheduler"`
 	} `json:"observability"`
@@ -295,30 +298,34 @@ type JobControlResult struct {
 	IndexRunning   bool     `json:"indexRunning"`
 	Queued         bool     `json:"queued"`
 	PendingPaths   []string `json:"pendingPaths"`
+	PendingJobKind string   `json:"pendingJobKind"`
 	LastWatchBatch []string `json:"lastWatchBatch"`
 	LastMode       string   `json:"lastMode"`
 }
 
 type Event struct {
-	Kind            string   `json:"kind"`
-	Root            string   `json:"root"`
-	Message         string   `json:"message"`
-	Level           string   `json:"level"`
-	Job             string   `json:"job"`
-	State           string   `json:"state"`
-	Mode            string   `json:"mode"`
-	Phase           string   `json:"phase"`
-	Source          string   `json:"source"`
-	ElapsedMs       int      `json:"elapsedMs"`
-	Pending         bool     `json:"pending"`
-	Enabled         bool     `json:"enabled"`
-	ChangedPaths    []string `json:"changedPaths"`
-	QueueDepth      int      `json:"queueDepth"`
-	RebuildReason   string   `json:"rebuildReason"`
-	ProcessedItems  int      `json:"processedItems"`
-	TotalItems      int      `json:"totalItems"`
-	PercentComplete int      `json:"percentComplete"`
-	CurrentFile     string   `json:"currentFile"`
+	Kind               string   `json:"kind"`
+	Root               string   `json:"root"`
+	Message            string   `json:"message"`
+	Level              string   `json:"level"`
+	Job                string   `json:"job"`
+	State              string   `json:"state"`
+	Mode               string   `json:"mode"`
+	Phase              string   `json:"phase"`
+	Source             string   `json:"source"`
+	ElapsedMs          int      `json:"elapsedMs"`
+	Pending            bool     `json:"pending"`
+	Enabled            bool     `json:"enabled"`
+	ChangedPaths       []string `json:"changedPaths"`
+	QueueDepth         int      `json:"queueDepth"`
+	RebuildReason      string   `json:"rebuildReason"`
+	ProcessedItems     int      `json:"processedItems"`
+	TotalItems         int      `json:"totalItems"`
+	PercentComplete    int      `json:"percentComplete"`
+	CurrentFile        string   `json:"currentFile"`
+	PendingChangeCount int      `json:"pendingChangeCount"`
+	PendingPaths       []string `json:"pendingPaths"`
+	PendingJobKind     string   `json:"pendingJobKind"`
 }
 
 type bridgeCallResult struct {

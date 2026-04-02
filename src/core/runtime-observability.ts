@@ -11,6 +11,9 @@ export interface BackendSchedulerObservability {
   dedupedPathEvents: number;
   supersededJobs: number;
   canceledJobs: number;
+  pendingChangeCount: number;
+  pendingPaths: string[];
+  pendingJobKind?: "index" | "refresh";
   fullRebuildReasons: string[];
 }
 
@@ -26,6 +29,9 @@ function buildDefaultSchedulerObservability(): BackendSchedulerObservability {
     dedupedPathEvents: 0,
     supersededJobs: 0,
     canceledJobs: 0,
+    pendingChangeCount: 0,
+    pendingPaths: [],
+    pendingJobKind: undefined,
     fullRebuildReasons: [],
   };
 }
@@ -34,6 +40,7 @@ export function getBackendSchedulerObservability(rootDir: string): BackendSchedu
   const snapshot = schedulerSnapshots.get(resolve(rootDir)) ?? buildDefaultSchedulerObservability();
   return {
     ...snapshot,
+    pendingPaths: [...snapshot.pendingPaths],
     fullRebuildReasons: [...snapshot.fullRebuildReasons],
   };
 }
@@ -49,6 +56,8 @@ export function updateBackendSchedulerObservability(
     ...next,
     queueDepth: Math.max(0, next.queueDepth),
     maxQueueDepth: Math.max(next.maxQueueDepth, next.queueDepth),
+    pendingChangeCount: Math.max(0, next.pendingChangeCount),
+    pendingPaths: [...next.pendingPaths],
     fullRebuildReasons: next.fullRebuildReasons.slice(-MAX_FULL_REBUILD_REASONS),
   };
   schedulerSnapshots.set(normalizedRootDir, normalized);

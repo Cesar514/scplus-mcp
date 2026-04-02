@@ -59,6 +59,9 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report.Observability.Scheduler.DedupedPathEvents = 3
 	report.Observability.Scheduler.CanceledJobs = 2
 	report.Observability.Scheduler.SupersededJobs = 1
+	report.Observability.Scheduler.PendingChangeCount = 2
+	report.Observability.Scheduler.PendingPaths = []string{"src/app.ts", "src/config.ts"}
+	report.Observability.Scheduler.PendingJobKind = "refresh"
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
@@ -74,7 +77,8 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 		"Stage metrics: file-search 120ms (files/s 12.50 | embeds/s 8.50)",
 		"Parse failures by language: typescript:2",
 		"Fallback markers: 0",
-		"Scheduler: queue depth 1 | max 2 | batches 5 | deduped 3 | canceled 2 | superseded 1",
+		"Scheduler: queue depth 1 | pending changes 2 | pending job refresh | max 2 | batches 5 | deduped 3 | canceled 2 | superseded 1",
+		"Pending paths: src/app.ts, src/config.ts",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in rendered doctor output: %s", needle, rendered)
@@ -111,6 +115,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		IndexValidation: backend.IndexValidationReport{OK: true},
 	}
 	model.watchEnabled = true
+	model.pendingPaths = []string{"src/cli/backend-core.ts", "src/cli/commands.ts"}
+	model.pendingJobKind = "refresh"
 	indexJob := model.job("index")
 	indexJob.State = "running"
 	indexJob.Phase = "identifier-search"
@@ -140,11 +146,14 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"Refresh data",
 		"Index running",
 		"Retry last index",
-		"Cancel pending job",
-		"Supersede pending job",
+		"Cancel pending refresh",
+		"Supersede pending refresh",
 		"Disable watcher",
+		"Changes detected (2)",
+		"pending refresh",
 		"watcher: on",
 		"stage: identifier-search",
+		"pending: 2",
 		"backend: connected",
 		"repo: /tmp/contextplus",
 		"generation: 7",
@@ -356,16 +365,17 @@ func TestJobsPanelShowsStructuredJobRows(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 144
 	model.height = 36
-	indexJob := model.job("index")
-	indexJob.State = "progress"
-	indexJob.Phase = "file-scan"
-	indexJob.Percent = intPtr(40)
-	indexJob.CurrentFile = "src/cli/backend-core.ts"
-	indexJob.ElapsedMs = 2800
-	indexJob.QueueDepth = 2
-	indexJob.Message = "file-scan | 40/100 files"
-	indexJob.RebuildReason = "watch-triggered full rebuild for src/cli/backend-core.ts"
-	indexJob.Pending = true
+	refreshJob := model.job("refresh")
+	refreshJob.State = "progress"
+	refreshJob.Phase = "structure-scan"
+	refreshJob.Percent = intPtr(82)
+	refreshJob.CurrentFile = "src/cli/backend-core.ts"
+	refreshJob.ElapsedMs = 2800
+	refreshJob.QueueDepth = 1
+	refreshJob.Message = "structure-scan | 82/100 files"
+	refreshJob.RebuildReason = "background incremental refresh for src/cli/backend-core.ts"
+	refreshJob.Pending = true
+	model.jobTable.SetCursor(1)
 	model.refreshJobTable()
 
 	rendered := model.renderJobsPanel(84, 14)
@@ -374,10 +384,10 @@ func TestJobsPanelShowsStructuredJobRows(t *testing.T) {
 		"Task",
 		"State",
 		"Current",
-		"Index",
+		"Refresh",
 		"progress",
-		"file-scan",
-		"40",
+		"structure-scan",
+		"82",
 		"src/cli/backend-core.ts",
 		"controls: i run | t retry | x cancel pending | s supersede pending",
 	} {

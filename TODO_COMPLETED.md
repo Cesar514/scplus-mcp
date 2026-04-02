@@ -2,6 +2,14 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 28 by replacing the blunt watcher-triggered full rebuild path with a real queued watch scheduler and background refresh flow
+- [x] collapse bursty filesystem edits into one pending watch plan and cancel superseded queued watch jobs before they start
+- [x] separate watch-driven incremental refresh from full rebuild so normal code edits stay in the `refresh` lane while dependency or tooling config edits escalate to `index` with an explicit rebuild reason
+- [x] surface pending changes, pending job kind, pending paths, and full rebuild reasons through backend events, doctor output, bridge payloads, and the human CLI overview/sidebar/status/jobs surfaces
+- [x] keep operator context stable while watcher-driven background refresh work runs and while newer watch batches replace stale queued work
+- [x] verify v1.5 phase 28 directly with focused persistent-bridge coverage, focused Go UI coverage, live built backend event flow, and touched-file build checks
+- [x] commit the verified v1.5 phase 28 work
+
 - [x] finish v1.5 phase 27 by exposing the full engine through dedicated human-CLI views instead of routing most operator actions into one generic results pane
 - [x] stop limiting the human CLI backend model to the original dashboard subset by wiring dedicated TUI sections for ranked `find-hub`, dependencies, search, symbol, word, outline, research, lint, blast-radius, checkpoint, status, changes, restore, tree, hubs, and cluster output
 - [x] add explicit ranking inspection for search results so operators can see rank order and score context directly in the Search section detail pane

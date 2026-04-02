@@ -18,15 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 28: Watcher And Scheduler Rework
-
-- [ ] Replace the current blunt watcher behavior in [cli/internal/watcher/watcher.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/watcher/watcher.go) and [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), where change bursts trigger loud full reindex behavior.
-- [ ] Collapse bursty filesystem events into one queued refresh job and cancel superseded jobs before they start.
-- [ ] Separate delta refresh from full rebuild and surface why a full rebuild was needed when it happens.
-- [ ] Show “changes detected” and pending-job badges in the UI instead of immediately forcing visible heavy work for each burst.
-- [ ] Add optional background incremental refresh that can run without blowing away current operator context.
-- [ ] Ensure duplicate events are collapsed and stale jobs are canceled when a newer job covers the same affected files.
-
 ## Phase 29: Watcher Double-Close Bug
 
 - [ ] Fix the likely double-close panic around the watcher: pressing `q` in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go) closes the watcher, and [cli/cmd/contextplus-ui/main.go](/home/cesar514/Documents/agent_programming/contextplus/cli/cmd/contextplus-ui/main.go) closes the final model again after `program.Run()`.

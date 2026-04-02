@@ -198,11 +198,11 @@ The dashboard includes:
 - an animated magician header
 - a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
 - a stacked vertical fallback layout for narrower terminals
-- a real bottom status line showing watcher state, current index stage, backend connectivity, active repo, active generation, and navigation-history position
+- a real bottom status line showing watcher state, current active stage, pending change count, backend connectivity, active repo, active generation, and navigation-history position
 - observability details for stage timing, vector coverage, refresh failures, lexical candidate counts, and watcher scheduler state
 - typed section navigation for overview, tree, hubs, ranked `find-hub` results, restore points, clusters, dependency browsing, search, symbol, word, outline, research, lint, blast-radius, checkpoint, status, and changes instead of a tab-only card wall
 - Bubble `list` and `table` components for operator sections instead of raw text dumps, with typed status and changes tables, ranked search inspection, ranked hub triage, and typed list renderers for tree, hubs, restore points, clusters, dependencies, and engine result views
-- a structured jobs table for index, refresh, restore, lint, and query task slots, with stage, percent, current file, elapsed time, queue depth, and pending-state context on the active index row
+- a structured jobs table for index, refresh, restore, lint, and query task slots, with stage, percent, current file, elapsed time, queue depth, and pending-state context on the active index or refresh row
 - a real scrollable log panel instead of a fixed 12-line activity buffer
 - operator controls for retrying the last index and canceling or superseding queued watch work directly from the console sidebar and jobs pane hints
 - a command palette bound to `:` or `Ctrl+P` for ranked `find-hub`, exact lookup, related search, research, exact symbol lookup, word lookup, outline, dependencies, go-to file, go-to symbol, lint, blast-radius, checkpoint-detail, restore-point, status, and changes workflows
@@ -213,7 +213,7 @@ The dashboard includes:
 - mouse focus and wheel scrolling support across sidebar, content, detail, jobs, and logs panes
 - direct diff patch preview in the Changes detail pane, restore execution from the Restore section with `u`, and dedicated dependency / hub / search ranking inspection views
 - a persistent backend session shared through `bridge-serve`
-- a backend-owned watcher that streams change batches, explicit job progress, current-file progress, and index-job control effects to the UI
+- a backend-owned watcher that collapses bursty file changes into one pending watch plan, runs a background incremental refresh for normal code edits, escalates to a full rebuild only for dependency or tooling config changes, and surfaces the pending job kind plus changed paths through the UI and doctor output
 - a human hub-creation flow
 
 ### Codex

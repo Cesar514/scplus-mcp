@@ -135,11 +135,20 @@ describe("bridge-serve", () => {
   it("keeps one backend process alive across requests and streams watcher-driven index events", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-serve-"));
     const filePath = join(cwd, "src", "app.ts");
+    const packageJsonPath = join(cwd, "package.json");
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
         filePath,
         "// Bridge serve smoke fixture for persistent backend tests\n// FEATURE: Keep one backend alive while requests and watcher events stream\n\nexport function run() {\n  return 1;\n}\n",
+      );
+      await writeFile(
+        packageJsonPath,
+        JSON.stringify({
+          name: "contextplus-bridge-serve-fixture",
+          version: "1.0.0",
+          type: "module",
+        }, null, 2) + "\n",
       );
       await git(cwd, "init");
       await git(cwd, "config", "user.email", "contextplus@example.com");
@@ -192,7 +201,7 @@ describe("bridge-serve", () => {
         const jobProgress = await session.waitForEvent((event) =>
           event.kind === "job" &&
           event.state === "progress" &&
-          event.job === "index" &&
+          event.job === "refresh" &&
           event.source === "watch" &&
           typeof event.currentFile === "string" &&
           event.currentFile.length > 0 &&
@@ -206,12 +215,12 @@ describe("bridge-serve", () => {
         const jobCompleted = await session.waitForEvent((event) =>
           event.kind === "job" &&
           event.state === "completed" &&
-          event.job === "index" &&
+          event.job === "refresh" &&
           event.source === "watch",
         );
         assert.equal(jobCompleted.root, cwd);
         assert.equal(typeof jobCompleted.queueDepth, "number");
-        assert.equal(jobCompleted.rebuildReason.includes("watch-triggered full rebuild"), true);
+        assert.equal(jobCompleted.rebuildReason.includes("background incremental refresh"), true);
 
         const indexingLog = await session.waitForEvent((event) =>
           event.kind === "log" &&
@@ -240,7 +249,40 @@ describe("bridge-serve", () => {
         assert.equal(doctorAfterWatch.indexValidation.ok, true);
         assert.equal(doctorAfterWatch.observability.scheduler.batchCount >= 1, true);
         assert.equal(typeof doctorAfterWatch.observability.scheduler.canceledJobs, "number");
-        assert.equal(doctorAfterWatch.observability.scheduler.fullRebuildReasons.some((reason) => reason.includes("watch-triggered full rebuild")), true);
+        assert.equal(doctorAfterWatch.observability.scheduler.pendingChangeCount, 0);
+        assert.deepEqual(doctorAfterWatch.observability.scheduler.pendingPaths, []);
+        assert.equal(doctorAfterWatch.observability.scheduler.pendingJobKind ?? "", "");
+        assert.equal(doctorAfterWatch.observability.scheduler.fullRebuildReasons.length, 0);
+
+        await writeFile(
+          packageJsonPath,
+          JSON.stringify({
+            name: "contextplus-bridge-serve-fixture",
+            version: "1.0.1",
+            type: "module",
+          }, null, 2) + "\n",
+        );
+
+        await session.waitForEvent((event) =>
+          event.kind === "watch-batch" &&
+          Array.isArray(event.changedPaths) &&
+          event.changedPaths.some((path) => path === "package.json"),
+        );
+        const rebuildCompleted = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "completed" &&
+          event.job === "index" &&
+          event.source === "watch" &&
+          typeof event.rebuildReason === "string" &&
+          event.rebuildReason.includes("full rebuild required after watch changes"),
+        );
+        assert.equal(rebuildCompleted.root, cwd);
+
+        const doctorAfterConfigChange = await session.request("doctor", { root: cwd });
+        assert.equal(
+          doctorAfterConfigChange.observability.scheduler.fullRebuildReasons.some((reason) => reason.includes("package.json changed dependency or workspace configuration")),
+          true,
+        );
       } finally {
         await session.close();
       }
@@ -254,10 +296,17 @@ describe("bridge-serve", () => {
     const filePath = join(cwd, "src", "app.ts");
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
-      await writeFile(
-        filePath,
-        "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function run() {\n  return 1;\n}\n",
-      );
+      const manyFiles = Array.from({ length: 240 }, (_, index) => ({
+        path: join(cwd, "src", `fixture-${index}.ts`),
+        content: `// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function fixture${index}() {\n  return ${index};\n}\n`,
+      }));
+      await Promise.all([
+        writeFile(
+          filePath,
+          "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function run() {\n  return 1;\n}\n",
+        ),
+        ...manyFiles.map((file) => writeFile(file.path, file.content)),
+      ]);
       await git(cwd, "init");
       await git(cwd, "config", "user.email", "contextplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
@@ -279,36 +328,57 @@ describe("bridge-serve", () => {
 
       const session = new BridgeSession(cwd);
       try {
-        await session.request("watch-set", { root: cwd, enabled: true, debounceMs: 500 });
+        await session.request("watch-set", { root: cwd, enabled: true, debounceMs: 100 });
         await session.waitForEvent((event) => event.kind === "watch-state" && event.enabled === true);
+
+        const manualIndexPromise = session.request("index", { root: cwd });
+        await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "running" &&
+          event.job === "index" &&
+          event.source === "manual",
+        );
 
         await writeFile(
           filePath,
           "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function rerun() {\n  return 2;\n}\n",
         );
-        await new Promise((resolve) => setTimeout(resolve, 650));
+        await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "queued" &&
+          event.job === "refresh" &&
+          event.source === "watch",
+        );
         const cancelResult = await session.request("job-control", { root: cwd, action: "cancel-pending" });
         assert.equal(cancelResult.action, "cancel-pending");
         assert.equal(cancelResult.queueDepth, 0);
         assert.equal(cancelResult.message.includes("canceled"), true);
+        assert.equal(cancelResult.pendingPaths.length >= 1, true);
 
-        await new Promise((resolve) => setTimeout(resolve, 700));
         const doctorAfterCancel = await session.request("doctor", { root: cwd });
         assert.equal(doctorAfterCancel.observability.scheduler.queueDepth, 0);
+        assert.equal(doctorAfterCancel.observability.scheduler.pendingChangeCount, 0);
 
         await writeFile(
           filePath,
           "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function rerunAgain() {\n  return 3;\n}\n",
         );
-        await new Promise((resolve) => setTimeout(resolve, 650));
+        await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "queued" &&
+          event.job === "refresh" &&
+          event.source === "watch",
+        );
         const supersedeResult = await session.request("job-control", { root: cwd, action: "supersede-pending" });
         assert.equal(supersedeResult.action, "supersede-pending");
         assert.equal(supersedeResult.message.includes("superseded"), true);
+        assert.equal(supersedeResult.pendingJobKind, "refresh");
 
+        await manualIndexPromise;
         const watchCompleted = await session.waitForEvent((event) =>
           event.kind === "job" &&
           event.state === "completed" &&
-          event.job === "index" &&
+          event.job === "refresh" &&
           event.source === "watch",
         );
         assert.equal(watchCompleted.root, cwd);

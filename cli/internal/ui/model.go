@@ -295,6 +295,8 @@ type Model struct {
 	watchEnabled   bool
 	backendOnline  bool
 	queueDepth     int
+	pendingPaths   []string
+	pendingJobKind string
 	focus          int
 	activeView     string
 	sidebarIndex   int
@@ -531,6 +533,42 @@ func (m *Model) selectedJob() *jobState {
 		cursor = len(m.jobOrder) - 1
 	}
 	return m.jobs[m.jobOrder[cursor]]
+}
+
+func (m *Model) activeStatusJob() *jobState {
+	for _, id := range []string{"index", "refresh", "restore", "lint", "query"} {
+		job := m.job(id)
+		if isActiveJobState(job.State) {
+			return job
+		}
+	}
+	return m.job("index")
+}
+
+func (m *Model) pendingChangeCount() int {
+	return len(m.pendingPaths)
+}
+
+func (m *Model) pendingJobLabel() string {
+	switch m.pendingJobKind {
+	case "index":
+		return "full rebuild"
+	case "refresh":
+		return "refresh"
+	default:
+		return "job"
+	}
+}
+
+func (m *Model) syncLiveSchedulerSnapshot() {
+	if !m.doctorLoaded {
+		return
+	}
+	m.doctor.Observability.Scheduler.WatchEnabled = m.watchEnabled
+	m.doctor.Observability.Scheduler.QueueDepth = m.queueDepth
+	m.doctor.Observability.Scheduler.PendingChangeCount = len(m.pendingPaths)
+	m.doctor.Observability.Scheduler.PendingPaths = append([]string(nil), m.pendingPaths...)
+	m.doctor.Observability.Scheduler.PendingJobKind = m.pendingJobKind
 }
 
 func (m *Model) syncLogViewport(follow bool) {
@@ -1071,6 +1109,9 @@ func (m *Model) refreshSidebar() {
 		watchLabel = "Disable watcher"
 		watchSubtitle = "Stop watcher-driven refresh jobs"
 	}
+	if m.pendingChangeCount() > 0 {
+		watchSubtitle = fmt.Sprintf("Changes detected (%d) | pending %s", m.pendingChangeCount(), m.pendingJobLabel())
+	}
 	indexJob := m.job("index")
 	indexLabel := "Run full index"
 	indexSubtitle := "Start a full engine refresh"
@@ -1080,13 +1121,19 @@ func (m *Model) refreshSidebar() {
 	}
 	cancelLabel := "Cancel pending job"
 	cancelSubtitle := "Clear queued watch work before it starts"
-	if m.queueDepth == 0 {
+	if m.pendingChangeCount() > 0 {
+		cancelLabel = "Cancel pending " + m.pendingJobLabel()
+		cancelSubtitle = fmt.Sprintf("Drop %d detected file changes before %s starts", m.pendingChangeCount(), m.pendingJobLabel())
+	} else if m.queueDepth == 0 {
 		cancelLabel = "No pending job"
 		cancelSubtitle = "Queued watch work will appear here"
 	}
 	supersedeLabel := "Supersede pending job"
 	supersedeSubtitle := "Replace stale queued work with the latest changes"
-	if m.queueDepth == 0 {
+	if m.pendingChangeCount() > 0 {
+		supersedeLabel = "Supersede pending " + m.pendingJobLabel()
+		supersedeSubtitle = fmt.Sprintf("Re-plan %d detected file changes into one %s", m.pendingChangeCount(), m.pendingJobLabel())
+	} else if m.queueDepth == 0 {
 		supersedeLabel = "No stale job"
 		supersedeSubtitle = "Supersede becomes available after queued changes"
 	}
@@ -1301,12 +1348,20 @@ func (m *Model) refreshOverviewSection() {
 			}, "\n"),
 		},
 		{
-			ID:      "scheduler",
-			Title:   "Scheduler",
-			Summary: fmt.Sprintf("queue %d | batches %d | canceled %d", m.doctor.Observability.Scheduler.QueueDepth, m.doctor.Observability.Scheduler.BatchCount, m.doctor.Observability.Scheduler.CanceledJobs),
+			ID:    "scheduler",
+			Title: "Scheduler",
+			Summary: fmt.Sprintf(
+				"changes %d | pending %s | batches %d",
+				m.doctor.Observability.Scheduler.PendingChangeCount,
+				formatBlankAsNone(m.doctor.Observability.Scheduler.PendingJobKind),
+				m.doctor.Observability.Scheduler.BatchCount,
+			),
 			Detail: strings.Join([]string{
 				fmt.Sprintf("Watcher enabled: %t", m.doctor.Observability.Scheduler.WatchEnabled),
 				fmt.Sprintf("Queue depth: %d", m.doctor.Observability.Scheduler.QueueDepth),
+				fmt.Sprintf("Pending changes: %d", m.doctor.Observability.Scheduler.PendingChangeCount),
+				fmt.Sprintf("Pending job: %s", formatBlankAsNone(m.doctor.Observability.Scheduler.PendingJobKind)),
+				fmt.Sprintf("Pending paths: %s", formatSliceOrNone(m.doctor.Observability.Scheduler.PendingPaths)),
 				fmt.Sprintf("Max queue depth: %d", m.doctor.Observability.Scheduler.MaxQueueDepth),
 				fmt.Sprintf("Batch count: %d", m.doctor.Observability.Scheduler.BatchCount),
 				fmt.Sprintf("Deduped path events: %d", m.doctor.Observability.Scheduler.DedupedPathEvents),
@@ -1484,7 +1539,12 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 			return nil
 		}
 		m.queueDepth = result.QueueDepth
+		m.pendingPaths = append([]string(nil), result.PendingPaths...)
+		m.pendingJobKind = result.PendingJobKind
+		m.syncLiveSchedulerSnapshot()
 		m.appendLog(result.Message)
+		m.refreshOverviewSection()
+		m.syncDetailViewport()
 		m.refreshSidebar()
 		return nil
 	case "supersede-pending":
@@ -1497,7 +1557,12 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 			return nil
 		}
 		m.queueDepth = result.QueueDepth
+		m.pendingPaths = append([]string(nil), result.PendingPaths...)
+		m.pendingJobKind = result.PendingJobKind
+		m.syncLiveSchedulerSnapshot()
 		m.appendLog(result.Message)
+		m.refreshOverviewSection()
+		m.syncDetailViewport()
 		m.refreshSidebar()
 		return nil
 	case "watch":
@@ -1883,7 +1948,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.doctorLoaded = true
 		m.watchEnabled = message.report.Observability.Scheduler.WatchEnabled
 		m.queueDepth = message.report.Observability.Scheduler.QueueDepth
+		m.pendingPaths = append([]string(nil), message.report.Observability.Scheduler.PendingPaths...)
+		m.pendingJobKind = message.report.Observability.Scheduler.PendingJobKind
 		m.job("index").QueueDepth = m.queueDepth
+		m.job("refresh").QueueDepth = m.queueDepth
+		m.syncLiveSchedulerSnapshot()
 		m.refreshOverviewSection()
 		m.refreshSidebar()
 		m.syncDetailViewport()
@@ -1990,40 +2059,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "watch-state":
 			m.watchEnabled = message.event.Enabled
 			m.queueDepth = message.event.QueueDepth
+			m.pendingPaths = append([]string(nil), message.event.PendingPaths...)
+			m.pendingJobKind = message.event.PendingJobKind
 			m.job("index").QueueDepth = m.queueDepth
+			m.job("refresh").QueueDepth = m.queueDepth
+			m.syncLiveSchedulerSnapshot()
 			m.refreshJobTable()
 			m.refreshSidebar()
 		case "watch-batch":
 			m.queueDepth = message.event.QueueDepth
+			m.pendingPaths = append([]string(nil), message.event.PendingPaths...)
+			m.pendingJobKind = message.event.PendingJobKind
 			m.job("index").QueueDepth = m.queueDepth
+			m.job("refresh").QueueDepth = m.queueDepth
+			if m.doctorLoaded {
+				m.doctor.Observability.Scheduler.BatchCount++
+			}
+			m.syncLiveSchedulerSnapshot()
 			m.refreshJobTable()
 			if len(message.event.ChangedPaths) > 0 {
 				m.appendLog("detected changes: " + strings.Join(message.event.ChangedPaths, ", "))
 			}
 		case "job":
-			indexJob := m.job("index")
-			indexJob.State = message.event.State
-			indexJob.Phase = message.event.Phase
-			indexJob.Message = message.event.Message
-			indexJob.RebuildReason = message.event.RebuildReason
-			indexJob.QueueDepth = message.event.QueueDepth
-			indexJob.ElapsedMs = message.event.ElapsedMs
-			indexJob.Source = message.event.Source
-			indexJob.Mode = message.event.Mode
-			indexJob.Pending = message.event.Pending
-			indexJob.CurrentFile = message.event.CurrentFile
-			if message.event.PercentComplete > 0 || message.event.TotalItems > 0 {
-				indexJob.Percent = intPtr(message.event.PercentComplete)
-			} else if message.event.State == "completed" {
-				indexJob.Percent = intPtr(100)
-			} else {
-				indexJob.Percent = nil
+			jobID := message.event.Job
+			if strings.TrimSpace(jobID) == "" {
+				jobID = "index"
 			}
-			indexJob.LastUpdatedAt = time.Now()
+			activeJob := m.job(jobID)
+			activeJob.State = message.event.State
+			activeJob.Phase = message.event.Phase
+			activeJob.Message = message.event.Message
+			activeJob.RebuildReason = message.event.RebuildReason
+			activeJob.QueueDepth = message.event.QueueDepth
+			activeJob.ElapsedMs = message.event.ElapsedMs
+			activeJob.Source = message.event.Source
+			activeJob.Mode = message.event.Mode
+			activeJob.Pending = message.event.Pending
+			activeJob.CurrentFile = message.event.CurrentFile
+			if message.event.PercentComplete > 0 || message.event.TotalItems > 0 {
+				activeJob.Percent = intPtr(message.event.PercentComplete)
+			} else if message.event.State == "completed" {
+				activeJob.Percent = intPtr(100)
+			} else {
+				activeJob.Percent = nil
+			}
+			activeJob.LastUpdatedAt = time.Now()
 			if message.event.State == "completed" {
-				indexJob.LastSuccessful = time.Now().Format(time.RFC3339)
+				activeJob.LastSuccessful = time.Now().Format(time.RFC3339)
 			}
 			m.queueDepth = message.event.QueueDepth
+			m.pendingPaths = append([]string(nil), message.event.PendingPaths...)
+			m.pendingJobKind = message.event.PendingJobKind
+			if m.doctorLoaded {
+				switch message.event.State {
+				case "canceled":
+					m.doctor.Observability.Scheduler.CanceledJobs++
+				}
+			}
+			m.syncLiveSchedulerSnapshot()
 			m.refreshJobTable()
 			m.refreshSidebar()
 		}
@@ -2461,10 +2554,10 @@ func (m Model) renderStatusLine() string {
 	if m.watchEnabled {
 		watcherState = "on"
 	}
-	indexJob := m.job("index")
-	stage := strings.TrimSpace(indexJob.Phase)
+	statusJob := m.activeStatusJob()
+	stage := strings.TrimSpace(statusJob.Phase)
 	if stage == "" {
-		stage = map[bool]string{true: "running", false: "idle"}[isActiveJobState(indexJob.State)]
+		stage = map[bool]string{true: "running", false: "idle"}[isActiveJobState(statusJob.State)]
 	}
 	backendState := "connected"
 	if !m.backendOnline {
@@ -2481,6 +2574,7 @@ func (m Model) renderStatusLine() string {
 	status := strings.Join([]string{
 		"watcher: " + watcherState,
 		"stage: " + stage,
+		"pending: " + fmt.Sprintf("%d", m.pendingChangeCount()),
 		"backend: " + backendState,
 		"repo: " + truncate(m.root, max(24, m.width/3)),
 		"generation: " + generation,
@@ -2656,14 +2750,17 @@ func RenderDoctorPlain(report backend.DoctorReport) string {
 		fmt.Sprintf("Parse failures by language: %s", formatParseFailuresByLanguage(report.Observability.Integrity.ParseFailuresByLanguage)),
 		fmt.Sprintf("Fallback markers: %d", report.Observability.Integrity.FallbackMarkerCount),
 		fmt.Sprintf(
-			"Scheduler: queue depth %d | max %d | batches %d | deduped %d | canceled %d | superseded %d",
+			"Scheduler: queue depth %d | pending changes %d | pending job %s | max %d | batches %d | deduped %d | canceled %d | superseded %d",
 			report.Observability.Scheduler.QueueDepth,
+			report.Observability.Scheduler.PendingChangeCount,
+			formatBlankAsNone(report.Observability.Scheduler.PendingJobKind),
 			report.Observability.Scheduler.MaxQueueDepth,
 			report.Observability.Scheduler.BatchCount,
 			report.Observability.Scheduler.DedupedPathEvents,
 			report.Observability.Scheduler.CanceledJobs,
 			report.Observability.Scheduler.SupersededJobs,
 		),
+		fmt.Sprintf("Pending paths: %s", formatSliceOrNone(report.Observability.Scheduler.PendingPaths)),
 	)
 	if len(report.Observability.Scheduler.FullRebuildReasons) > 0 {
 		lines = append(lines, "Recent full rebuild reasons:")
@@ -2684,6 +2781,8 @@ func RenderSnapshot(root string, client *backend.Client) (string, error) {
 	model.doctorLoaded = true
 	model.watchEnabled = report.Observability.Scheduler.WatchEnabled
 	model.queueDepth = report.Observability.Scheduler.QueueDepth
+	model.pendingPaths = append([]string(nil), report.Observability.Scheduler.PendingPaths...)
+	model.pendingJobKind = report.Observability.Scheduler.PendingJobKind
 	model.refreshOverviewSection()
 	model.logs = []string{"Snapshot rendered from live backend data."}
 	model.width = 120
@@ -3338,6 +3437,13 @@ func formatBlankAsNone(value string) string {
 		return "none"
 	}
 	return value
+}
+
+func formatSliceOrNone(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	return strings.Join(values, ", ")
 }
 
 func formatParseFailuresByLanguage(values map[string]int) string {
