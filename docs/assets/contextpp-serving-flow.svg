@@ -1,0 +1,43 @@
+<svg width="1320" height="620" viewBox="0 0 1320 620" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1320" height="620" rx="28" fill="#F7F7F2"/>
+  <rect x="28" y="28" width="1264" height="564" rx="22" fill="#FFFDF8" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="56" y="84" fill="#111111" font-size="34" font-family="ui-sans-serif, system-ui, sans-serif">context++ serving contract</text>
+  <text x="56" y="118" fill="#5B5B56" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">One active validated generation, explicit dirty and blocked freshness, no hidden fallback.</text>
+
+  <rect x="56" y="162" width="260" height="110" rx="18" fill="#FFF4D6" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="82" y="206" fill="#111111" font-size="24" font-family="ui-sans-serif, system-ui, sans-serif">Filesystem write</text>
+  <text x="82" y="236" fill="#44443E" font-size="17" font-family="ui-sans-serif, system-ui, sans-serif">checkpoint, restore, or watch batch</text>
+
+  <rect x="372" y="162" width="260" height="110" rx="18" fill="#FDE68A" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="398" y="206" fill="#111111" font-size="24" font-family="ui-sans-serif, system-ui, sans-serif">Active generation</text>
+  <text x="398" y="236" fill="#44443E" font-size="17" font-family="ui-sans-serif, system-ui, sans-serif">mark freshness = dirty</text>
+
+  <rect x="688" y="162" width="260" height="110" rx="18" fill="#DBEAFE" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="714" y="206" fill="#111111" font-size="24" font-family="ui-sans-serif, system-ui, sans-serif">Pending generation</text>
+  <text x="714" y="236" fill="#44443E" font-size="17" font-family="ui-sans-serif, system-ui, sans-serif">rebuild and validate in sqlite</text>
+
+  <rect x="1004" y="162" width="260" height="110" rx="18" fill="#DCFCE7" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="1030" y="206" fill="#111111" font-size="24" font-family="ui-sans-serif, system-ui, sans-serif">Serving switch</text>
+  <text x="1030" y="236" fill="#44443E" font-size="17" font-family="ui-sans-serif, system-ui, sans-serif">active pointer moves only on success</text>
+
+  <path d="M316 216H364" stroke="#111111" stroke-width="3" stroke-linecap="round"/>
+  <path d="M632 216H680" stroke="#111111" stroke-width="3" stroke-linecap="round"/>
+  <path d="M948 216H996" stroke="#111111" stroke-width="3" stroke-linecap="round"/>
+  <path d="M364 216L350 206V226L364 216Z" fill="#111111"/>
+  <path d="M680 216L666 206V226L680 216Z" fill="#111111"/>
+  <path d="M996 216L982 206V226L996 216Z" fill="#111111"/>
+
+  <rect x="56" y="330" width="572" height="208" rx="18" fill="#F8FAFC" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="82" y="372" fill="#111111" font-size="26" font-family="ui-sans-serif, system-ui, sans-serif">Watcher and scheduler lane</text>
+  <text x="82" y="412" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">1. Bursty edits collapse into one queued watch plan.</text>
+  <text x="82" y="444" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">2. Ordinary source edits run background refresh.</text>
+  <text x="82" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">3. package.json, lockfiles, tsconfig, go.mod, Cargo.toml,</text>
+  <text x="104" y="504" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">   pyproject.toml, and .gitignore escalate to full index.</text>
+
+  <rect x="692" y="330" width="572" height="208" rx="18" fill="#FFF1F2" stroke="#1E1E1B" stroke-width="2"/>
+  <text x="718" y="372" fill="#111111" font-size="26" font-family="ui-sans-serif, system-ui, sans-serif">Failure behavior</text>
+  <text x="718" y="412" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">If refresh or rebuild fails, freshness becomes blocked.</text>
+  <text x="718" y="444" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">Prepared queries reject instead of serving stale answers.</text>
+  <text x="718" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">doctor, bridge events, backend logs, and context++-ui show</text>
+  <text x="718" y="504" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">the blocked reason and pending paths explicitly.</text>
+</svg>

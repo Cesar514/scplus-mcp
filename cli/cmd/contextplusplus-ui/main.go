@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"contextplus/cli/internal/backend"
-	"contextplus/cli/internal/hubs"
-	"contextplus/cli/internal/ui"
+	"contextplusplus/cli/internal/backend"
+	"contextplusplus/cli/internal/hubs"
+	"contextplusplus/cli/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -141,7 +141,7 @@ func main() {
 	}()
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "--root" {
-		root, _, parseErr := parseRoot("contextplus-ui", args)
+		root, _, parseErr := parseRoot("context++-ui", args)
 		if parseErr != nil {
 			fmt.Fprintln(os.Stderr, parseErr)
 			os.Exit(1)

@@ -25,11 +25,11 @@ export default function Header({ stars }: HeaderProps) {
                 className="font-light"
                 style={{ fontSize: 22, lineHeight: "28px", color: "var(--text-primary)" }}
             >
-                Context+
+                context++
             </span>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <a
-                    href="https://www.npmjs.com/package/contextplus"
+                    href="https://www.npmjs.com/package/contextplusplus"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center"
@@ -39,7 +39,7 @@ export default function Header({ stars }: HeaderProps) {
                     </svg>
                 </a>
                 <a
-                    href="https://github.com/ForLoopCodes/contextplus"
+                    href="https://github.com/Cesar514/contextplus"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"contextplus/cli/internal/backend"
+	"contextplusplus/cli/internal/backend"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -65,7 +65,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
-		"Context+ CLI doctor for /tmp/contextplus",
+		"context++ CLI doctor for /tmp/contextplus",
 		"Branch: main",
 		"Prepared index: OK",
 		"Ollama: 1 running models",

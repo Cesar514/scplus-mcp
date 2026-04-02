@@ -353,3 +353,11 @@
 - [x] verify roadmap step 08 directly with focused canonical-search coverage and a real full-index plus canonical-search run on the repository
 - [x] finish roadmap step 09 by persisting semantic clusters, cluster labels, related-file graphs, and subsystem summaries as full-index sqlite artifacts
 - [x] verify roadmap step 09 directly with focused cluster-artifact and semantic-navigate coverage plus a real full-index and cluster render on the repository
+
+## phase 31 completed
+
+- [x] Rename the shipped product and commands from Context+ / `contextplus` / `contextplus-ui` to context++ / `context++` / `context++-ui` across package metadata, install/build entrypoints, generated config output, MCP metadata, and human CLI labels.
+- [x] Keep the repo-local machine state contract under `.contextplus/` intact while migrating only the user-facing product and command surface.
+- [x] Update the landing/docs layer so the repo stops shipping mixed Context+ and context++ branding.
+- [x] Create README-ready image artifacts that explain the context++ CLI and serving model visually.
+- [x] Generate benchmark artifacts from the real evaluation harness and use them in deeper README benchmark documentation.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Context+ MCP - Semantic codebase navigator for AI agents
-// Structural AST tree, blast radius, semantic search, commit gatekeeper
+// context++ MCP entrypoint for semantic repository navigation and repair.
+// FEATURE: Registers public tools and starts the stdio server.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -44,7 +44,7 @@ const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
   : process.cwd();
 const INSTRUCTIONS_SOURCE_URL = "https://contextplus.vercel.app/api/instructions";
-const INSTRUCTIONS_RESOURCE_URI = "contextplus://instructions";
+const INSTRUCTIONS_RESOURCE_URI = "context++://instructions";
 
 let noteServerActivity = () => { };
 let ensureTrackerRunning = () => { };
@@ -66,14 +66,14 @@ function withRequestActivity<TArgs, TResult>(
 }
 
 const server = new McpServer({
-  name: "contextplus",
+  name: "context++",
   version: "1.0.0",
 }, {
   capabilities: { logging: {} },
 });
 
 server.resource(
-  "contextplus_instructions",
+  "context++_instructions",
   INSTRUCTIONS_RESOURCE_URI,
   withRequestActivity(async (uri) => {
     const response = await fetch(INSTRUCTIONS_SOURCE_URL);
@@ -89,7 +89,7 @@ server.resource(
 
 server.tool(
   "index",
-  "Create or refresh the .contextplus project state for this repo. Builds the repo-local Context+ layout, " +
+  "Create or refresh the .contextplus project state for this repo. Builds the repo-local context++ layout, " +
   "writes project config plus a context-tree snapshot into the durable sqlite substrate at .contextplus/state/index.sqlite, " +
   "persists stage state, indexing status, embedding caches, restore points, and file/identifier indexes there, " +
   "and in full mode also persists chunk and code-structure artifacts with explicit contract metadata and no JSON mirrors.",
@@ -509,7 +509,7 @@ async function main() {
   const shutdown = async (reason: string, exitCode: number = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.error(`Context+ MCP shutdown requested: ${reason}`);
+    console.error(`context++ MCP shutdown requested: ${reason}`);
     await backendCore.close();
     await runCleanup({
       cancelEmbeddings: cancelAllEmbeddings,
@@ -555,7 +555,7 @@ async function main() {
   });
 
   noteServerActivity();
-  console.error(`Context+ MCP server running on stdio | root: ${ROOT_DIR}`);
+  console.error(`context++ MCP server running on stdio | root: ${ROOT_DIR}`);
 }
 
 main().catch((error) => {

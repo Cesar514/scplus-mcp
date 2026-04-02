@@ -1,14 +1,14 @@
-// Instructions section mirrors repo-local Context+ guidance for landing readers directly
+// Instructions section mirrors repo-local context++ guidance for landing readers directly
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 "use client";
 
 import { useState } from "react";
 
-const INSTRUCTIONS = `# Context+ MCP - Agent Instructions
+const INSTRUCTIONS = `# context++ MCP - Agent Instructions
 
 ## Purpose
 
-You are equipped with the Context+ MCP server. It gives you structural awareness of the entire codebase without reading every file. Follow this workflow strictly to conserve context and maximize accuracy.
+You are equipped with the context++ MCP server. It gives you structural awareness of the entire codebase without reading every file. Follow this workflow strictly to conserve context and maximize accuracy.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 - \`semantic-identifiers.ts\` - Identifier-level semantic search returning ranked definitions + call chains with line numbers and dedicated definition/callsite vector collections.
 - \`semantic-navigate.ts\` - Browse-by-meaning navigation backed by persisted semantic clusters.
 - \`blast-radius.ts\` - Symbol usage tracer across the entire codebase.
-- \`static-analysis.ts\` - Native linter runner plus repo/file scoring from Context+ rule findings.
+- \`static-analysis.ts\` - Native linter runner plus repo/file scoring from context++ rule findings.
 - \`propose-commit.ts\` - Code gatekeeper validating headers, FEATURE tag, nesting, and file length.
 - \`feature-hub.ts\` - Obsidian-style feature hub navigator with bundled skeleton views.
 
@@ -146,7 +146,7 @@ Strict order within every file:
 | \`changes\`              | Use for changed-file summaries and line-range hunks, optionally scoped to one file. |
 | \`search\`               | Route repository search by explicit intent. Use \`intent\` = \`exact\` for deterministic fast-substrate answers and \`intent\` = \`related\` for ranked discovery. \`search_type\` stays \`file\`, \`symbol\`, or \`mixed\`, and related search also accepts \`retrieval_mode\` = \`semantic\`, \`keyword\`, or \`both\`. |
 | \`research\`             | Use only for broad subsystem understanding after exact lookup and related-item search are no longer enough. |
-| \`evaluate\`            | Run the built-in real benchmark harness for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
+| \`evaluate\`            | Run the built-in real benchmark harness across small, medium, monorepo, polyglot, ignored-tree, broken-state, and rename-freshness scenarios. Reports golden-query accuracy, validation rates, freshness reliability, and p50/p95/p99 query latency. |
 | \`blast_radius\`         | Before deleting or modifying any symbol.                |
 | \`lint\`                 | After writing code. Catch dead code deterministically.  |
 | \`checkpoint\`           | The ONLY way to save files. Validates before writing.   |
@@ -265,7 +265,7 @@ export default function InstructionsSection() {
           >
             Copy the instruction file into your project root to teach your agent
             structural search, blast radius analysis, and lean context
-            discipline. Or don&apos;t, Context+ already includes the
+            discipline. Or don&apos;t, context++ already includes the
             instructions in the new versions.
           </p>
 

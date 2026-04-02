@@ -20,7 +20,6 @@
 
 ## Later Backlog
 
-- [ ] Rename the product and commands to `context++` only after v1.5 serving correctness, no-fallback enforcement, backend unification, and operator-console work are all stable.
 - [ ] Audit tool and parameter sprawl after v1.5 and remove overengineered surfaces that do not materially improve agent context quality.
 - [ ] Remove remaining embedding-provider spam and make background embedding maintenance an explicit observable service responsibility instead of an ad hoc hot-path cost.
 - [ ] Add any net-new `researchplus` features only after the v1.5 performance, correctness, and operator-console gaps above are closed.

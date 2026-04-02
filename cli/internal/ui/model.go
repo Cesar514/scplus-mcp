@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"contextplus/cli/internal/backend"
-	"contextplus/cli/internal/hubs"
+	"contextplusplus/cli/internal/backend"
+	"contextplusplus/cli/internal/hubs"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -337,7 +337,7 @@ func NewModel(root string, client *backend.Client) Model {
 		height:        38,
 		detail:        detail,
 		logViewport:   logViewport,
-		logs:          []string{"Context+ CLI started."},
+		logs:          []string{"context++ CLI started."},
 		wizard:        newWizardState(),
 		backendOnline: true,
 		activeView:    viewOverview,
@@ -2400,7 +2400,7 @@ func (m Model) renderHeader() string {
 		lipgloss.Top,
 		magician,
 		lipgloss.NewStyle().MarginLeft(2).Render(
-			titleStyle.Render("Context+ Human CLI")+"\n"+
+			titleStyle.Render("context++ Human CLI")+"\n"+
 				subtitleStyle.Render(subtitle),
 		),
 	)
@@ -2711,7 +2711,7 @@ func (m Model) Close() error {
 func RenderDoctorPlain(report backend.DoctorReport) string {
 	stageMetrics := formatStageMetrics(report.Observability.Indexing.Stages)
 	lines := []string{
-		fmt.Sprintf("Context+ CLI doctor for %s", report.Root),
+		fmt.Sprintf("context++ CLI doctor for %s", report.Root),
 		fmt.Sprintf("Branch: %s", report.RepoStatus.Branch),
 		fmt.Sprintf("Unstaged: %d | Untracked: %d", report.RepoStatus.UnstagedCount, report.RepoStatus.UntrackedCount),
 		fmt.Sprintf("Active generation: %d", report.Serving.ActiveGeneration),

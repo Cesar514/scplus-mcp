@@ -1,17 +1,30 @@
-# Context+
+# context++
 
-Semantic Intelligence for Large-Scale Engineering.
+Semantic intelligence for large-scale engineering.
 
-Context+ is an MCP server designed for developers who demand 99% accuracy. By combining Tree-sitter AST, Spectral Clustering, and Obsidian-style linking, Context+ turns a massive codebase into a searchable, hierarchical feature graph.
+context++ is the renamed public surface for the Context+ engine: the MCP server is exposed as `context++`, the Bubble Tea operator console is exposed as `context++-ui`, and the npm package name is `contextplusplus`. The repo-local machine state and runtime environment variables keep the stable `.contextplus/` and `CONTEXTPLUS_` prefixes for now.
 
-https://github.com/user-attachments/assets/a97a451f-c9b4-468d-b036-15b65fc13e79
+The current committed benchmark artifact reports `22` golden operator questions, `0` stale-after-write failures, `0` restore failures, `3.14ms` exact p50 latency, `55.95ms` related-search p50 latency, and `63.52ms` research p50 latency. See [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md) and [latest.json](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.json).
+
+![context++ operator console](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-cli-console.svg)
+
+![context++ serving contract](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-serving-flow.svg)
+
+## Naming
+
+- Public npm package: `contextplusplus`
+- Public MCP command: `context++`
+- Public human CLI command: `context++-ui`
+- Stable repo-local state directory: `.contextplus/`
+- Stable runtime env prefix: `CONTEXTPLUS_`
+- Existing repo and infrastructure identifiers may still use `contextplus` where external URLs or provisioned services must stay stable.
 
 ## Local Install
 
-For local development, install the linked `contextplus` CLI with:
+For local development, install the linked `context++` CLI with:
 
 ```bash
-./install-contextplus.sh
+./install-context++.sh
 ```
 
 What it does:
@@ -20,8 +33,8 @@ What it does:
 - runs `npm run build`
 - runs `npm run build:cli`
 - runs `npm link`
-- verifies the linked `contextplus` command resolves to this checkout
-- verifies the linked `contextplus-ui` command resolves to this checkout
+- verifies the linked `context++` command resolves to this checkout
+- verifies the linked `context++-ui` command resolves to this checkout
 
 After editing this repo, rebuild the linked CLI with:
 
@@ -31,16 +44,18 @@ npm run build:all
 
 The human CLI is built with Bubble Tea in Go and uses a project-local Go toolchain through Pixi. `pixi` must be installed before running the install script.
 
-Because `npm link` points `contextplus` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `contextplus-ui` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
+Because `npm link` points `context++` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `context++-ui` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
 
-To add it to Codex, put this in `~/.codex/config.toml` as a separate manual step:
+The renamed operator console snapshot used for the image above is committed in [cli-snapshot.txt](/home/cesar514/Documents/agent_programming/contextplus/docs/artifacts/cli-snapshot.txt).
+
+To add the locally linked command to Codex, put this in `~/.codex/config.toml` as a separate manual step:
 
 ```toml
-[mcp_servers.contextplus]
-command = "contextplus"
+[mcp_servers."context++"]
+command = "context++"
 args = []
 
-[mcp_servers.contextplus.env]
+[mcp_servers."context++".env]
 OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
 CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
@@ -74,7 +89,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | Tool                  | Description                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `blast_radius`        | Trace every file and line where a symbol is imported or used. Prevents orphaned references.                                   |
-| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go, and now reports a repo score plus lowest-scoring files from Context+ repo-rule findings. |
+| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go, and now reports a repo score plus lowest-scoring files from context++ repo-rule findings. |
 
 ### Code Ops
 
@@ -94,16 +109,16 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 
 ### Quick Start (npx / bunx)
 
-No installation needed. Add Context+ to your IDE MCP config.
+No installation needed. Add context++ to your IDE MCP config.
 
 For Claude Code, Cursor, and Windsurf, use `mcpServers`:
 
 ```json
 {
   "mcpServers": {
-    "contextplus": {
+    "context++": {
       "command": "bunx",
-      "args": ["contextplus"],
+      "args": ["contextplusplus"],
       "env": {
         "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
         "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
@@ -119,10 +134,10 @@ For VS Code (`.vscode/mcp.json`), use `servers` and `inputs`:
 ```json
 {
   "servers": {
-    "contextplus": {
+    "context++": {
       "type": "stdio",
       "command": "bunx",
-      "args": ["contextplus"],
+      "args": ["contextplusplus"],
       "env": {
         "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
         "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
@@ -137,15 +152,15 @@ For VS Code (`.vscode/mcp.json`), use `servers` and `inputs`:
 If you prefer `npx`, use:
 
 - `"command": "npx"`
-- `"args": ["-y", "contextplus"]`
+- `"args": ["-y", "contextplusplus"]`
 
 Or generate the MCP config file directly in your current directory:
 
 ```bash
-npx -y contextplus init claude
-bunx contextplus init cursor
-npx -y contextplus init opencode
-bunx contextplus init codex
+npx -y contextplusplus init claude
+bunx contextplusplus init cursor
+npx -y contextplusplus init opencode
+bunx contextplusplus init codex
 ```
 
 Supported coding agent names: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`.
@@ -176,22 +191,22 @@ Config file locations:
 - `restore-points [path] [--json]` - Print restore-point history for the repository.
 - `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, Ollama, and observability report, including stage timing, cache, integrity, and scheduler metrics.
 - `bridge <subcommand>` - Machine-readable JSON output for the shared local backend used by the human CLI and automation, not the full MCP catalog. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
-- `bridge-serve` - Persistent JSON-line session used by `contextplus-ui` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
+- `bridge-serve` - Persistent JSON-line session used by `context++-ui` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
 
 ### Human CLI
 
-The Bubble Tea terminal app is exposed as `contextplus-ui`.
+The Bubble Tea terminal app is exposed as `context++-ui`.
 
-- `contextplus-ui` - Launch the interactive dashboard.
-- `contextplus-ui snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
-- `contextplus-ui doctor --root .` - Print a concise health summary from the human CLI.
-- `contextplus-ui index --root .` - Trigger a full index run through the backend.
-- `contextplus-ui tree --root .`
-- `contextplus-ui hubs --root .`
-- `contextplus-ui cluster --root .`
-- `contextplus-ui restore-points --root .`
-- `contextplus-ui hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
+- `context++-ui` - Launch the interactive dashboard.
+- `context++-ui snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
+- `context++-ui doctor --root .` - Print a concise health summary from the human CLI.
+- `context++-ui index --root .` - Trigger a full index run through the backend.
+- `context++-ui tree --root .`
+- `context++-ui hubs --root .`
+- `context++-ui cluster --root .`
+- `context++-ui restore-points --root .`
+- `context++-ui hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
 
 The dashboard includes:
 
@@ -220,35 +235,92 @@ The dashboard includes:
 
 | Surface | What it exposes | What it does not expose |
 |---------|------------------|--------------------------|
-| MCP stdio server (`contextplus`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
-| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `contextplus-ui` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
-| Human CLI (`contextplus-ui`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
+| MCP stdio server (`context++`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
+| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `context++-ui` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
+| Human CLI (`context++-ui`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
 
 ### Serving Contract
 
 - Prepared queries read from exactly one active sqlite generation at a time. Rebuilds write into a pending generation and switch the serving pointer only after validation succeeds, so failed rebuilds never leak partial stage output into live `symbol`, `word`, `search`, `research`, or `deps` results.
 - `checkpoint` and `restore` mutate the working tree first, then mark the active generation `dirty` and synchronously rebuild the prepared index before returning. While freshness is `dirty`, prepared-query surfaces reject instead of answering from stale filesystem truth.
 - `blocked` means the automatic post-write refresh failed. The block reason is reported through `validate-index`, `doctor`, bridge payloads, backend logs, and the human CLI. Repair requires fixing the underlying indexing problem and rerunning `repair-index --target=full` or `index --mode=full`.
-- There is no silent degraded mode. Missing, invalid, dirty, or blocked prepared state fails loudly; Context+ does not fall back to partial results, implicit background fixes, or success-shaped empty answers.
+- There is no silent degraded mode. Missing, invalid, dirty, or blocked prepared state fails loudly; context++ does not fall back to partial results, implicit background fixes, or success-shaped empty answers.
 
 ### Watcher And Scheduler Semantics
 
-- `contextplus-ui` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
+- `context++-ui` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
 - Bursty filesystem edits are deduped into one pending watch plan. If another backend job is already running, the scheduler keeps at most one queued plan and supersedes stale queued work when a newer change batch arrives.
 - Ordinary source edits schedule a background `refresh` job. Dependency or workspace configuration edits such as `package.json`, lockfiles, `pixi.toml`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `tsconfig*.json`, or `.gitignore` escalate to an `index` job with an explicit full-rebuild reason.
 - Pending paths, pending job kind, queue depth, canceled and superseded counts, and full rebuild reasons are surfaced through `doctor`, bridge payloads, backend logs, and the human CLI status and jobs panes.
 - If a watcher-triggered refresh or rebuild fails, operators should expect an explicit blocked or failed state, not a hidden retry loop or a fallback query answer.
+
+### CLI Walkthrough
+
+- `Navigation` holds the typed sections and operator actions. It is not a cosmetic sidebar; it is the durable index of every shared-backend view the human CLI can open.
+- `Overview` is the operator health summary. It surfaces repository status, active and pending generation state, current freshness, stage timings, and runtime observability without requiring a separate doctor call.
+- `Detail` is the export-ready pane. It shows repository detail, selected result detail, diff patches, restore-point context, or ranked result explanation depending on the active section.
+- `Jobs` and `Logs` are first-class panes, not a footer. The jobs table exposes index and refresh progress, queue depth, current file, and operator controls; the logs pane streams backend-owned events over `bridge-serve`.
+- `:` and `Ctrl+P` open the command palette, `/` narrows the current typed section, `b` and `f` walk history, and `e` exports the current pane or detail view into `.contextplus/exports/`.
+
+### Benchmarks
+
+The committed benchmark artifacts are produced by the real evaluation harness, not a README-only sample:
+
+- Human-readable summary: [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md)
+- Machine-readable report: [latest.json](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.json)
+
+![context++ benchmark overview](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-benchmark-overview.svg)
+
+Current committed numbers from [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md):
+
+| Lane | Samples | p50 ms | p95 ms | p99 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Exact | 5 | 3.14 | 4.07 | 4.07 |
+| Related | 7 | 55.95 | 57.64 | 57.64 |
+| Research | 3 | 63.52 | 64.23 | 64.23 |
+
+| Quality category | Passed | Total |
+| --- | ---: | ---: |
+| Scenario coverage | 10 | 10 |
+| Exact lookup accuracy | 5 | 5 |
+| Related-search relevance | 4 | 4 |
+| Symbol resolution accuracy | 3 | 3 |
+| Dependency graph accuracy | 3 | 3 |
+| Hub suggestion quality | 4 | 4 |
+| Research quality | 3 | 3 |
+
+The latest committed run also recorded `0/4` stale-after-write failures, `0/2` restore failures, `251` Tree-sitter parses, and `247` parser reuses across the benchmark scenarios.
+
+What the harness proves:
+
+- Prepared-query latency is measured separately for exact, related, and research lanes instead of being collapsed into one average.
+- The suite checks both healthy repositories and hostile states such as broken prepared artifacts and post-rename freshness.
+- Validation quality is part of the contract: the benchmark fails if broken-state repos are treated as healthy or healthy repos are treated as broken.
+- Freshness is exercised through real `checkpoint` and `restore` writes so the serving pointer contract is covered, not just initial indexing.
+
+To regenerate the committed artifacts after a build:
+
+```bash
+node --input-type=module <<'EOF'
+import { writeFile } from "node:fs/promises";
+import { runEvaluationSuite, formatEvaluationReport } from "./build/tools/evaluation.js";
+
+const report = await runEvaluationSuite();
+await writeFile("docs/benchmarks/latest.json", JSON.stringify(report, null, 2));
+await writeFile("docs/benchmarks/latest.md", formatEvaluationReport(report) + "\n");
+EOF
+```
 
 ### Codex
 
 Codex uses project-scoped TOML configuration in `.codex/config.toml`:
 
 ```toml
-[mcp_servers.contextplus]
+[mcp_servers."context++"]
 command = "bunx"
-args = ["contextplus"]
+args = ["contextplusplus"]
 
-[mcp_servers.contextplus.env]
+[mcp_servers."context++".env]
 OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
 OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
@@ -265,7 +337,7 @@ npm run build
 
 ## Embedding Providers
 
-Context+ supports two embedding backends controlled by `CONTEXTPLUS_EMBED_PROVIDER`:
+context++ supports two embedding backends controlled by `CONTEXTPLUS_EMBED_PROVIDER`:
 
 | Provider | Value | Requires | Best For |
 |----------|-------|----------|----------|
@@ -289,9 +361,9 @@ Full Claude Code `.mcp.json` example:
 ```json
 {
   "mcpServers": {
-    "contextplus": {
+    "context++": {
       "command": "npx",
-      "args": ["-y", "contextplus"],
+      "args": ["-y", "contextplusplus"],
       "env": {
         "CONTEXTPLUS_EMBED_PROVIDER": "openai",
         "CONTEXTPLUS_OPENAI_API_KEY": "YOUR_GEMINI_API_KEY",
@@ -310,9 +382,9 @@ Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
 ```json
 {
   "mcpServers": {
-    "contextplus": {
+    "context++": {
       "command": "npx",
-      "args": ["-y", "contextplus"],
+      "args": ["-y", "contextplusplus"],
       "env": {
         "CONTEXTPLUS_EMBED_PROVIDER": "openai",
         "OPENAI_API_KEY": "sk-...",
@@ -330,9 +402,9 @@ Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.co
 ```json
 {
   "mcpServers": {
-    "contextplus": {
+    "context++": {
       "command": "npx",
-      "args": ["-y", "contextplus"],
+      "args": ["-y", "contextplusplus"],
       "env": {
         "CONTEXTPLUS_EMBED_PROVIDER": "openai",
         "CONTEXTPLUS_OPENAI_API_KEY": "YOUR_KEY",

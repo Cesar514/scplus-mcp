@@ -1,4 +1,4 @@
-// Tool diagram presents current Context+ tool groups on the landing
+// Tool diagram presents current context++ tool groups on the landing
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 "use client";
 
@@ -164,7 +164,7 @@ export default function ToolDiagram() {
             whiteSpace: "nowrap",
           }}
         >
-          Context+ MCP
+          context++ MCP
         </span>
         <div
           style={{

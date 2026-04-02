@@ -1,5 +1,5 @@
 // Human CLI command router for backend actions and bridge payloads
-// FEATURE: Human terminal interface subcommands for Context+ backend workflows
+// FEATURE: Human terminal interface subcommands for context++ backend workflows
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -134,11 +134,11 @@ function parseRunner(args: string[]): "npx" | "bunx" {
 }
 
 function buildMcpConfig(runner: "npx" | "bunx"): string {
-  const commandArgs = runner === "npx" ? ["-y", "contextplus"] : ["contextplus"];
+  const commandArgs = runner === "npx" ? ["-y", "contextplusplus"] : ["contextplusplus"];
   return JSON.stringify(
     {
       mcpServers: {
-        contextplus: {
+        "context++": {
           command: runner,
           args: commandArgs,
           env: {
@@ -157,12 +157,12 @@ function buildMcpConfig(runner: "npx" | "bunx"): string {
 }
 
 function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
-  const command = runner === "npx" ? ["npx", "-y", "contextplus"] : ["bunx", "contextplus"];
+  const command = runner === "npx" ? ["npx", "-y", "contextplusplus"] : ["bunx", "contextplusplus"];
   return JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
       mcp: {
-        contextplus: {
+        "context++": {
           type: "local",
           command,
           enabled: true,
@@ -183,13 +183,13 @@ function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
 
 function buildCodexConfig(runner: "npx" | "bunx"): string {
   const command = runner;
-  const args = runner === "npx" ? ["-y", "contextplus"] : ["contextplus"];
+  const args = runner === "npx" ? ["-y", "contextplusplus"] : ["contextplusplus"];
   return [
-    "[mcp_servers.contextplus]",
+    '[mcp_servers."context++"]',
     `command = ${JSON.stringify(command)}`,
     `args = ${JSON.stringify(args)}`,
     "",
-    "[mcp_servers.contextplus.env]",
+    '[mcp_servers."context++".env]',
     'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
     'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
     'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
@@ -363,7 +363,7 @@ async function runInitCommand(args: string[]): Promise<void> {
       : buildMcpConfig(runner);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${content}\n`, "utf8");
-  console.error(`Context+ initialized for ${target} using ${runner}.`);
+  console.error(`context++ initialized for ${target} using ${runner}.`);
   console.error(`Wrote MCP config: ${outputPath}`);
 }
 

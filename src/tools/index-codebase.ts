@@ -467,7 +467,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
   return [
     `Indexed ${config.projectName}`,
     `Root: ${runtime.rootDir}`,
-    `Context+ root: ${relative(rootDir, layout.root) || ".contextplus"}`,
+    `context++ root: ${relative(rootDir, layout.root) || ".contextplus"}`,
     `Mode: ${mode}`,
     `Files: ${status.bootstrap?.files ?? 0}`,
     `Directories: ${status.bootstrap?.directories ?? 0}`,

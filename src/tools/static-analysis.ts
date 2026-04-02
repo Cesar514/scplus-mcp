@@ -300,7 +300,7 @@ export function formatStaticAnalysisReport(report: StaticAnalysisReport): string
   }
 
   if (report.ruleFindings.length > 0) {
-    lines.push("", "Context+ rule findings:");
+    lines.push("", "context++ rule findings:");
     lines.push(...formatFindings(report.ruleFindings));
   }
 

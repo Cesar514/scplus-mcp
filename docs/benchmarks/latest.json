@@ -1,0 +1,510 @@
+{
+  "suite": "real-benchmark",
+  "generatedAt": "2026-04-02T14:20:47.846Z",
+  "ok": true,
+  "goldenQuestionCount": 22,
+  "scenarios": [
+    {
+      "name": "small-smoke",
+      "kind": "small-smoke",
+      "fileCount": 5,
+      "languages": [
+        "markdown",
+        "typescript"
+      ],
+      "indexMs": 2087.27,
+      "validationOk": true,
+      "notes": [
+        "tiny synthetic repo kept only as smoke test"
+      ]
+    },
+    {
+      "name": "medium",
+      "kind": "medium",
+      "fileCount": 8,
+      "languages": [
+        "markdown",
+        "typescript"
+      ],
+      "indexMs": 644.88,
+      "validationOk": true,
+      "notes": [
+        "multi-feature TypeScript service repo"
+      ]
+    },
+    {
+      "name": "large-monorepo",
+      "kind": "large-monorepo",
+      "fileCount": 22,
+      "languages": [
+        "markdown",
+        "typescript"
+      ],
+      "indexMs": 1463.97,
+      "validationOk": true,
+      "notes": [
+        "multi-app monorepo with shared packages and suggested hubs"
+      ]
+    },
+    {
+      "name": "polyglot",
+      "kind": "polyglot",
+      "fileCount": 5,
+      "languages": [
+        "go",
+        "markdown",
+        "python",
+        "rust",
+        "typescript"
+      ],
+      "indexMs": 644.53,
+      "validationOk": true,
+      "notes": [
+        "TypeScript, Python, Rust, Go, and Markdown indexed together"
+      ]
+    },
+    {
+      "name": "ignored-generated",
+      "kind": "ignored-generated",
+      "fileCount": 2,
+      "languages": [
+        "typescript"
+      ],
+      "indexMs": 482.1,
+      "validationOk": true,
+      "notes": [
+        "generated/ is ignored through .gitignore",
+        "generated/ excluded from file manifest"
+      ]
+    },
+    {
+      "name": "broken-state",
+      "kind": "broken-state",
+      "fileCount": 2,
+      "languages": [
+        "typescript"
+      ],
+      "indexMs": 456.29,
+      "validationOk": false,
+      "notes": [
+        "delete query-explanation-index after indexing"
+      ]
+    },
+    {
+      "name": "rename-freshness",
+      "kind": "rename-freshness",
+      "fileCount": 2,
+      "languages": [
+        "typescript"
+      ],
+      "indexMs": 455.16,
+      "validationOk": true,
+      "notes": [
+        "renamed billing/invoice.ts to billing/pricing.ts",
+        "mutated pricing symbol through checkpoint",
+        "restored latest checkpoint state"
+      ]
+    }
+  ],
+  "scenarioCoverage": {
+    "passed": 10,
+    "total": 10,
+    "checks": [
+      {
+        "name": "scenario small-smoke is present",
+        "passed": true,
+        "details": "5 files | validation=true"
+      },
+      {
+        "name": "scenario medium is present",
+        "passed": true,
+        "details": "8 files | validation=true"
+      },
+      {
+        "name": "scenario large-monorepo is present",
+        "passed": true,
+        "details": "22 files | validation=true"
+      },
+      {
+        "name": "scenario polyglot is present",
+        "passed": true,
+        "details": "5 files | validation=true"
+      },
+      {
+        "name": "scenario ignored-generated is present",
+        "passed": true,
+        "details": "2 files | validation=true"
+      },
+      {
+        "name": "scenario broken-state is present",
+        "passed": true,
+        "details": "2 files | validation=false"
+      },
+      {
+        "name": "scenario rename-freshness is present",
+        "passed": true,
+        "details": "2 files | validation=true"
+      },
+      {
+        "name": "ignored-generated scenario excludes generated files from the prepared manifest",
+        "passed": true,
+        "details": "src/runtime/handler.ts, src/runtime/router.ts"
+      },
+      {
+        "name": "broken-state validation reports invalid prepared state",
+        "passed": true,
+        "details": "issues=1"
+      },
+      {
+        "name": "broken-state research fails loudly",
+        "passed": true,
+        "details": "research requires a valid prepared full index."
+      }
+    ]
+  },
+  "smokeTest": {
+    "passed": 3,
+    "total": 3,
+    "checks": [
+      {
+        "name": "small smoke repo validates",
+        "passed": true,
+        "details": "issues=0"
+      },
+      {
+        "name": "small smoke repo indexes auth files",
+        "passed": true,
+        "details": "fileCount=5"
+      },
+      {
+        "name": "small smoke repo stays small",
+        "passed": true,
+        "details": "fileCount=5"
+      }
+    ]
+  },
+  "exactLookupAccuracy": {
+    "passed": 5,
+    "total": 5,
+    "checks": [
+      {
+        "name": "small smoke exact symbol resolves verifyToken",
+        "passed": true,
+        "details": "Exact symbol matches for \"verifyToken\" (1) | - src/auth/jwt.ts:4-6 | function | function verifyToken(token: string): string {"
+      },
+      {
+        "name": "medium exact symbol resolves calculateInvoiceTotal",
+        "passed": true,
+        "details": "Exact symbol matches for \"calculateInvoiceTotal\" (1) | - src/billing/invoice.ts:4-6 | function | function calculateInvoiceTotal(subtotal: number, taxRate: number): number {"
+      },
+      {
+        "name": "large monorepo exact symbol resolves buildSessionToken",
+        "passed": true,
+        "details": "Exact symbol matches for \"buildSessionToken\" (1) | - packages/session/src/token.ts:8-10 | function | function buildSessionToken(token: string): string {"
+      },
+      {
+        "name": "polyglot exact symbol resolves sign_payload",
+        "passed": true,
+        "details": "Exact symbol matches for \"sign_payload\" (1) | - rust/crypto/src/lib.rs:4-6 | function | pub fn sign_payload(payload: &str) -> String {"
+      },
+      {
+        "name": "ignored-generated exact symbol resolves runtime handler instead of generated noise",
+        "passed": true,
+        "details": "Exact symbol matches for \"handleRuntimeEvent\" (1) | - src/runtime/handler.ts:4-6 | function | function handleRuntimeEvent(eventName: string): string {"
+      }
+    ]
+  },
+  "relatedSearchRelevance": {
+    "passed": 4,
+    "total": 4,
+    "checks": [
+      {
+        "name": "medium related search finds checkout orchestration",
+        "passed": true,
+        "details": "src/orders/checkout.ts :: src/orders/checkout.ts"
+      },
+      {
+        "name": "large monorepo related search finds session token helpers",
+        "passed": true,
+        "details": "packages/session/src/token.ts :: packages/session/src/token.ts"
+      },
+      {
+        "name": "polyglot related search finds rust signing implementation",
+        "passed": true,
+        "details": "rust/crypto/src/lib.rs :: rust/crypto/src/lib.rs"
+      },
+      {
+        "name": "ignored-generated related search stays on runtime router instead of ignored bundle",
+        "passed": true,
+        "details": "src/runtime/router.ts :: src/runtime/router.ts"
+      }
+    ]
+  },
+  "symbolResolutionAccuracy": {
+    "passed": 3,
+    "total": 3,
+    "checks": [
+      {
+        "name": "medium symbol resolution finds calculateInvoiceTotal from natural language",
+        "passed": true,
+        "details": "src/billing/invoice.ts :: calculateInvoiceTotal"
+      },
+      {
+        "name": "large monorepo symbol resolution finds verifyAccessToken",
+        "passed": true,
+        "details": "services/auth/src/verify.ts :: verifyAccessToken"
+      },
+      {
+        "name": "polyglot symbol resolution finds reconcile_invoices",
+        "passed": true,
+        "details": "python/jobs/reconcile.py :: reconcile_invoices"
+      }
+    ]
+  },
+  "dependencyGraphAccuracy": {
+    "passed": 3,
+    "total": 3,
+    "checks": [
+      {
+        "name": "medium dependency graph keeps checkout imports accurate",
+        "passed": true,
+        "details": "direct=src/billing/invoice.ts, src/catalog/search.ts, src/orders/cart.ts | reverse=none"
+      },
+      {
+        "name": "large monorepo dependency graph keeps web login imports accurate",
+        "passed": true,
+        "details": "direct=packages/session/src/token.ts, packages/ui/src/button.ts | reverse=none"
+      },
+      {
+        "name": "small smoke reverse dependencies include session.ts for jwt.ts",
+        "passed": true,
+        "details": "direct=none | reverse=src/auth/session.ts"
+      }
+    ]
+  },
+  "hubSuggestionQuality": {
+    "passed": 4,
+    "total": 4,
+    "checks": [
+      {
+        "name": "small smoke manual auth hub resolves by feature name",
+        "passed": true,
+        "details": "Hub: Authentication | Path: docs/authentication.md | Links: 2 |  | ---"
+      },
+      {
+        "name": "medium manual billing hub resolves by feature name",
+        "passed": true,
+        "details": "Hub: Billing | Path: docs/billing.md | Links: 2 |  | ---"
+      },
+      {
+        "name": "large monorepo suggested analytics hub resolves by feature name",
+        "passed": true,
+        "details": "Hub: Analytics | Path: .contextplus/hubs/suggested/analytics.md | Links: 11 | Cross-links: Billing | "
+      },
+      {
+        "name": "polyglot crypto hub ranks correctly for query mode",
+        "passed": true,
+        "details": "Ranked hubs for: \"crypto signing payload gateway\" | Ranking mode: both | Candidates: 6 |  | 1. docs/crypto.md [manual] score=0.687"
+      }
+    ]
+  },
+  "researchQuality": {
+    "passed": 3,
+    "total": 3,
+    "checks": [
+      {
+        "name": "medium research joins checkout and billing context",
+        "passed": true,
+        "details": "src/orders/checkout.ts, src/billing/invoice.ts, src/orders/cart.ts, src/catalog/search.ts, docs/billing.md"
+      },
+      {
+        "name": "large monorepo research joins login, verify, and session packages",
+        "passed": true,
+        "details": "apps/web/src/auth/login.ts, packages/session/src/token.ts, docs/auth-console.md, services/auth/src/verify.ts, packages/ui/src/button.ts, packages/session/src/audit.ts"
+      },
+      {
+        "name": "polyglot research joins signing and gateway flow",
+        "passed": true,
+        "details": "go/gateway/main.go, rust/crypto/src/lib.rs, docs/crypto.md, python/jobs/reconcile.py, src/web/auth.ts"
+      }
+    ]
+  },
+  "freshnessReliability": {
+    "staleAfterWriteAttempts": 4,
+    "staleAfterWriteFailures": 0,
+    "staleAfterWriteFailureRate": 0,
+    "restoreAttempts": 2,
+    "restoreFailures": 0,
+    "restoreFailureRate": 0,
+    "checks": [
+      {
+        "name": "renamed symbol becomes searchable after reindex",
+        "passed": true,
+        "details": "Exact symbol matches for \"calculatePricingPlan\" (1) | - src/billing/pricing.ts:4-6 | function | function calculatePricingPlan(subtotal: number, taxRate: number): number {"
+      },
+      {
+        "name": "old renamed symbol disappears after reindex",
+        "passed": true,
+        "details": "No exact symbol matches for \"calculateInvoiceTotal\". | Next step: rerun search with intent=\"related\" for related items and patterns, or use research for broader subsystem understanding."
+      },
+      {
+        "name": "checkpoint mutation becomes searchable immediately",
+        "passed": true,
+        "details": "Exact symbol matches for \"buildPricingPlan\" (1) | - src/billing/pricing.ts:4-6 | function | function buildPricingPlan(subtotal: number, taxRate: number): number {"
+      },
+      {
+        "name": "replaced pricing symbol disappears after checkpoint mutation",
+        "passed": true,
+        "details": "No exact symbol matches for \"calculatePricingPlan\". | Next step: rerun search with intent=\"related\" for related items and patterns, or use research for broader subsystem understanding."
+      },
+      {
+        "name": "restore reintroduces the pre-checkpoint pricing symbol",
+        "passed": true,
+        "details": "Exact symbol matches for \"calculatePricingPlan\" (1) | - src/billing/pricing.ts:4-6 | function | function calculatePricingPlan(subtotal: number, taxRate: number): number {"
+      },
+      {
+        "name": "restore resets file content to the last known good pricing implementation",
+        "passed": true,
+        "details": "// Pricing helpers for freshness benchmark after rename | // FEATURE: Billing |  | export function calculatePricingPlan(subtotal: number, taxRate: number): number {"
+      }
+    ]
+  },
+  "validationQuality": {
+    "truePositives": 9,
+    "trueNegatives": 1,
+    "falsePositives": 0,
+    "falseNegatives": 0,
+    "falsePositiveRate": 0,
+    "falseNegativeRate": 0,
+    "checks": [
+      {
+        "name": "small smoke validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "medium validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "large monorepo validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "polyglot validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "ignored-generated validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "broken-state validation detects missing query explanation index",
+        "passed": true,
+        "details": "expected=invalid actual=invalid issues=1"
+      },
+      {
+        "name": "rename-freshness initial validation stays valid",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "rename-freshness validation stays valid after file rename",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "rename-freshness validation stays valid after checkpoint write",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      },
+      {
+        "name": "rename-freshness validation stays valid after restore",
+        "passed": true,
+        "details": "expected=valid actual=valid issues=0"
+      }
+    ]
+  },
+  "latencies": {
+    "exact": {
+      "sampleCount": 5,
+      "p50Ms": 3.14,
+      "p95Ms": 4.07,
+      "p99Ms": 4.07,
+      "maxMs": 4.07
+    },
+    "related": {
+      "sampleCount": 7,
+      "p50Ms": 55.95,
+      "p95Ms": 57.64,
+      "p99Ms": 57.64,
+      "maxMs": 57.64
+    },
+    "research": {
+      "sampleCount": 3,
+      "p50Ms": 63.52,
+      "p95Ms": 64.23,
+      "p99Ms": 64.23,
+      "maxMs": 64.23
+    }
+  },
+  "clusteringBenchmarks": {
+    "medium": {
+      "vectorCount": 400,
+      "clusterCount": 12,
+      "durationMs": 1.13
+    },
+    "large": {
+      "vectorCount": 2400,
+      "clusterCount": 20,
+      "durationMs": 17.7
+    }
+  },
+  "treeSitter": {
+    "totalParseCalls": 251,
+    "totalParsersCreated": 4,
+    "totalParserReuses": 247,
+    "totalGrammarLoads": 4,
+    "totalGrammarLoadFailures": 0,
+    "totalParseFailures": 0,
+    "languages": {
+      "typescript": {
+        "parseCalls": 236,
+        "parsersCreated": 1,
+        "parserReuses": 235,
+        "grammarLoads": 1,
+        "grammarLoadFailures": 0,
+        "parseFailures": 0
+      },
+      "go": {
+        "parseCalls": 5,
+        "parsersCreated": 1,
+        "parserReuses": 4,
+        "grammarLoads": 1,
+        "grammarLoadFailures": 0,
+        "parseFailures": 0
+      },
+      "python": {
+        "parseCalls": 5,
+        "parsersCreated": 1,
+        "parserReuses": 4,
+        "grammarLoads": 1,
+        "grammarLoadFailures": 0,
+        "parseFailures": 0
+      },
+      "rust": {
+        "parseCalls": 5,
+        "parsersCreated": 1,
+        "parserReuses": 4,
+        "grammarLoads": 1,
+        "grammarLoadFailures": 0,
+        "parseFailures": 0
+      }
+    },
+    "recentFailures": []
+  }
+}

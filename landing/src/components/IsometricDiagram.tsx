@@ -1,4 +1,4 @@
-// Isometric diagram cycles through current Context+ tools on landing surfaces
+// Isometric diagram cycles through current context++ tools on landing surfaces
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 "use client";
 

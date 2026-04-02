@@ -1,0 +1,109 @@
+   /\_    context++ Human CLI                                                                                           
+ _( o.o)  Operator console with navigation history, command palette, and export layers                                  
+  > ^ <                                                                                                                 
+ /|_|_\                                                                                                                 
+  / \                                                                                                                   
+                                                                                                                        
+╭──────────────────────────╮╭────────────────────────────────────────╮╭──────────────────────────────────────────────╮  
+│ Navigation               ││ Overview                               ││ Detail                                       │  
+│                          ││ Operator health and observability      ││ Preview, export target, and command context  │  
+│    Overview              ││ summary                                ││                                              │  
+│   Health, serving, and   ││ Selected 1/8 | filter=none             ││ Repository                                   │  
+│ observability            ││                                        ││                                              │  
+│    Tree                  ││ │ Repository                           ││ branch main | changed 24 | untracked 2       │  
+│   Prepared tree and file ││ │ branch main | changed 24 | untrac…   ││                                              │  
+│ topology                 ││                                        ││ Root: .                                      │  
+│    Hubs                  ││   Worktree                             ││ Branch: main                                 │  
+│   Manual and suggested   ││   ahead 5 | behind 0 | staged 0 | c…   ││ Changed files: 24                            │  
+│ hub views                ││                                        ││ Untracked files: 2                           │  
+│    Find hub              ││   Serving generation                   ││ Backend connectivity: connected              │  
+│   Ranked hub discovery   ││   active 3 | pending none | freshne…   ││                                              │  
+│ and triage               ││                                        ││                                              │  
+│    Restore               ││   Runtime                              ││                                              │  
+│   Checkpoint history and ││   generated 2026-04-02T13:45:43.582…   ││                                              │  
+│ recovery                 ││                                        ││                                              │  
+│    Cluster               ││   Index stages                         ││                                              │  
+│   Cluster and subsystem  ││   bootstrap 2133ms (files/s 67.51) …   ││                                              │  
+│ summaries                ││                                        ││                                              │  
+│    Dependencies          ││                                        ││                                              │  
+│   Direct and reverse     │╰────────────────────────────────────────╯╰──────────────────────────────────────────────╯  
+│ dependency browsing      │                                                                                            
+│    Status                │                                                                                            
+│   Git worktree status    │                                                                                            
+│ table                    │                                                                                            
+│    Changes               │                                                                                            
+│   Changed-file ranges    │                                                                                            
+│ and stats                │                                                                                            
+│    Search                │                                                                                            
+│   Exact and related      │                                                                                            
+│ ranked search results    │                                                                                            
+│    Symbol                │                                                                                            
+│   Exact symbol lookup    │                                                                                            
+│ results                  │                                                                                            
+│    Word                  │                                                                                            
+│   Exact word lookup      │                                                                                            
+│ results                  │                                                                                            
+│    Outline               │                                                                                            
+│   Prepared file outline  │                                                                                            
+│ output                   │                                                                                            
+│    Research              │                                                                                            
+│   Broad explanation-     │                                                                                            
+│ backed reports           │                                                                                            
+│    Lint                  │                                                                                            
+│   Native lint            │                                                                                            
+│ diagnostics              │                                                                                            
+│    Blast radius          │                                                                                            
+│   Symbol usage graph and │                                                                                            
+│ blast radius             │                                                                                            
+│    Checkpoint            │                                                                                            
+│   Checkpoint write       │                                                                                            
+│ results                  │                                                                                            
+│  > Refresh data          │                                                                                            
+│   Reload backend         │                                                                                            
+│ snapshots                │                                                                                            
+│  > Run full index        │                                                                                            
+│   Start a full engine    │                                                                                            
+│ refresh                  │                                                                                            
+│  > Retry last index      │                                                                                            
+│   Re-run the last index  │                                                                                            
+│ mode through the backend │                                                                                            
+│  > No pending job        │                                                                                            
+│   Queued watch work will │                                                                                            
+│ appear here              │                                                                                            
+│  > No stale job          │                                                                                            
+│   Supersede becomes      │                                                                                            
+│ available after queued   │                                                                                            
+│ changes                  │                                                                                            
+│  > Enable watcher        │                                                                                            
+│   Watch for file changes │                                                                                            
+│ and queue refresh work   │                                                                                            
+│  > New hub               │                                                                                            
+│   Create a manual        │                                                                                            
+│ feature hub              │                                                                                            
+│  > Command palette       │                                                                                            
+│   Search backend         │                                                                                            
+│ actions, exact lookups,  │                                                                                            
+│ and exports              │                                                                                            
+│  > Help                  │                                                                                            
+│   Show keybindings,      │                                                                                            
+│ filters, exports, and    │                                                                                            
+│ mouse usage              │                                                                                            
+╰──────────────────────────╯                                                                                            
+╭────────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────╮
+│ Jobs                                                       ││ Logs                                                   │
+│ Structured backend and operator task state                 ││ Scrollable backend log stream (1 lines)                │
+│                                                            ││                                                        │
+│  Task        State        Phase               %            ││ Snapshot rendered from live backend data.              │
+│ Current                     Elapsed    Q                   ││                                                        │
+│  Index       idle         none                --    none   ││                                                        │
+│ --         0                                               ││                                                        │
+│  Refresh     idle         none                --    none   ││                                                        │
+│                                                            ││                                                        │
+│ Index | phase=none | percent=-- | queue=0 | file=none      │╰────────────────────────────────────────────────────────╯
+│ none                                                       │                                                          
+│ controls: i run | t retry | x cancel pending | s supersede │                                                          
+│ pending                                                    │                                                          
+╰────────────────────────────────────────────────────────────╯                                                          
+                                                                                                                        
+ watcher: off | stage: idle | pending: 0 | backend: connected | repo: . | generation: 3 | history: 1/1                  
+Up/Down move | Tab focus | Enter detail/action | : palette | / filter | b/f history | e export | ? help | q quit        

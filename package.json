@@ -1,11 +1,11 @@
 {
-  "name": "contextplus",
+  "name": "contextplusplus",
   "version": "1.0.9",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "contextplus": "./build/index.js",
-    "contextplus-ui": "./build/cli-launcher.js"
+    "context++": "./build/index.js",
+    "context++-ui": "./build/cli-launcher.js"
   },
   "scripts": {
     "build": "tsc",

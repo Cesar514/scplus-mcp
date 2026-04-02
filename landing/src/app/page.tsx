@@ -1,4 +1,4 @@
-// Landing page showcases Context+ tools and current public product surface
+// Landing page showcases context++ tools and current public product surface
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 import Background from "../components/Background";
 import Header from "../components/Header";
@@ -15,7 +15,7 @@ const toolRefRows = [
     desc: "Create or refresh repo-local .contextplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\ncontext++ root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
   },
   {
     name: "validate_index",
@@ -106,10 +106,10 @@ const toolRefRows = [
   },
   {
     name: "evaluate",
-    desc: "Run the built-in real benchmark harness for retrieval quality, navigation quality, reindex speed, hot-query latency, token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality.",
+    desc: "Run the built-in real benchmark harness across small, medium, monorepo, polyglot, ignored-tree, broken-state, and rename-freshness scenarios, then report quality, validation, and p50/p95/p99 latencies.",
     input: "{}",
     output:
-      '"Evaluation suite: default\nOverall: PASS\nValidation: initial=ok | refresh=ok\nTimings: initialIndexMs=2104.19 | refreshIndexMs=511.71 | hotExactSearchMs=2.27 | relatedSearchMs=127.15 | broadResearchMs=143.84\nToken cost: exact=31 (123 chars) | related=323 (1292 chars) | research=952 (3806 chars)\n\nRetrieval quality: 3/3\nNavigation quality: 3/3\nAnswer quality: 4/4\nHybrid efficiency: 4/4\nArtifact freshness: 3/3"',
+      '"Evaluation suite: real-benchmark\nOverall: PASS\nGolden operator questions: 22\nValidation rates: falsePositiveRate=0.0000 | falseNegativeRate=0.0000\nFreshness rates: staleAfterWriteFailures=0/4 | restoreFailures=0/2\nExact latency: samples=5 | p50=3.14ms | p95=4.07ms\nRelated latency: samples=7 | p50=55.95ms | p95=57.64ms\nResearch latency: samples=3 | p50=63.52ms | p95=64.23ms"',
   },
   {
     name: "blast_radius",
@@ -163,19 +163,18 @@ const toolRefRows = [
 ];
 
 async function getStars(): Promise<number> {
-  try {
-    const res = await fetch(
-      "https://api.github.com/repos/ForLoopCodes/contextplus",
-      { cache: "no-store" },
-    );
-    if (!res.ok) {
-      return 0;
-    }
-    const data = await res.json();
-    return data.stargazers_count ?? 0;
-  } catch {
-    return 0;
+  const res = await fetch(
+    "https://api.github.com/repos/Cesar514/contextplus",
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to load GitHub stars: ${res.status} ${res.statusText}`);
   }
+  const data = await res.json();
+  if (typeof data.stargazers_count !== "number") {
+    throw new Error("GitHub stars payload missing stargazers_count");
+  }
+  return data.stargazers_count;
 }
 
 export default async function Home() {
@@ -230,9 +229,9 @@ export default async function Home() {
               backgroundClip: "text",
             }}
           >
-            Context+ is an MCP server designed for developers who demand 99%
+            context++ is an MCP server designed for developers who demand 99%
             accuracy. By combining Treesitter AST & Spectral
-            Clustering, Context+ turns a massive codebase into a searchable,
+            Clustering, context++ turns a massive codebase into a searchable,
             hierarchical graph.
           </p>
         </section>
@@ -291,7 +290,7 @@ export default async function Home() {
             marginBottom: 40,
           }}
         >
-          Context+ guarantees minimal context bloat. It gives your agent deep
+          context++ guarantees minimal context bloat. It gives your agent deep
           semantic understanding of your codebase, from AST parsing and symbol
           navigation to blast radius analysis and commit validation.
         </p>
@@ -495,11 +494,11 @@ export default async function Home() {
             color: "var(--text-primary)",
           }}
         >
-          Context+
+          context++
         </span>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <a
-            href="https://www.npmjs.com/package/contextplus"
+            href="https://www.npmjs.com/package/contextplusplus"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center"
@@ -514,7 +513,7 @@ export default async function Home() {
             </svg>
           </a>
           <a
-            href="https://github.com/ForLoopCodes/contextplus"
+            href="https://github.com/Cesar514/contextplus"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center"
