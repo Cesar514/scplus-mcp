@@ -32,6 +32,7 @@ export type IndexArtifactKey =
   | "code-structure-index"
   | "semantic-cluster-index"
   | "hub-suggestion-index"
+  | "query-explanation-index"
   | "full-index-manifest"
   | "restore-points"
   | `embedding-cache:${string}`;

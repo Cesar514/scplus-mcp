@@ -12,7 +12,8 @@ process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
 describe("research", () => {
   it("aggregates ranked code hits with related files, subsystem context, and hubs", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
-    const { runResearch } = await import("../../build/tools/research.js");
+    const { runResearch, buildResearchReport } = await import("../../build/tools/research.js");
+    const { loadQueryExplanationState } = await import("../../build/tools/query-engine.js");
     const rootDir = await mkdtemp(join(tmpdir(), "contextplus-research-"));
     try {
       await mkdir(join(rootDir, "src", "auth"), { recursive: true });
@@ -53,14 +54,32 @@ describe("research", () => {
       );
 
       await indexCodebase({ rootDir, mode: "full" });
+      const explanationState = await loadQueryExplanationState(rootDir);
+      assert.equal(typeof explanationState.fileCards["src/auth/jwt.ts"].purposeSummary, "string");
+      assert.equal(explanationState.fileCards["src/auth/jwt.ts"].publicApiCard.includes("verifyToken"), true);
+      assert.equal(explanationState.moduleCards["src/auth"].purposeSummary.includes("src/auth"), true);
+
+      const report = await buildResearchReport({
+        rootDir,
+        query: "auth token session verification",
+        topK: 4,
+      });
       const output = await runResearch({
         rootDir,
         query: "auth token session verification",
         topK: 4,
       });
 
+      assert.equal(report.fileCards.length >= 1, true);
+      assert.equal(report.moduleCards.length >= 1, true);
+      assert.equal(report.layers.explanation.artifactKeys.includes("query-explanation-index"), true);
       assert.match(output, /^Research: "auth token session verification"/);
       assert.match(output, /Code hits:/);
+      assert.match(output, /Explanation context:/);
+      assert.match(output, /Module context:/);
+      assert.match(output, /Purpose:/);
+      assert.match(output, /Public API:/);
+      assert.match(output, /Change risk:/);
       assert.match(output, /src\/auth\/jwt\.ts/);
       assert.match(output, /src\/auth\/session\.ts/);
       assert.match(output, /Related context:/);

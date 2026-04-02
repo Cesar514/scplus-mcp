@@ -59,6 +59,13 @@ export interface HybridRetrievalIndexStatus {
   uniqueTerms: number;
 }
 
+export interface QueryExplanationIndexStatus {
+  fileCardCount: number;
+  moduleCardCount: number;
+  subsystemCardCount: number;
+  hubCardCount: number;
+}
+
 export interface IndexStatus {
   state: "running" | "completed" | "failed";
   phase: IndexPhase;
@@ -91,6 +98,7 @@ export interface IndexStatus {
     structureIndex?: Partial<StructureIndexStatus>;
     hybridChunkIndex?: Partial<HybridRetrievalIndexStatus>;
     hybridIdentifierIndex?: Partial<HybridRetrievalIndexStatus>;
+    queryExplanationIndex?: Partial<QueryExplanationIndexStatus>;
   };
   stages: PersistedIndexStageState["stages"];
   error?: string;
@@ -418,7 +426,7 @@ export async function executeIndexStage(options: ExecuteIndexStageOptions): Prom
       status.identifierSearch = result.stats;
     } else {
       const result = await ensureFullIndexArtifacts({ rootDir: runtime.rootDir }, onFullProgress);
-      status.phase = "structure-scan";
+      status.phase = "explanation-scan";
       status.fullIndex = result.stats;
     }
 

@@ -1,23 +1,22 @@
-// Unified research surface over code, structure, clusters, and hubs
-// FEATURE: Aggregated repository research from persisted full-engine artifacts
+// Unified research surface over persisted candidate and explanation artifacts.
+// FEATURE: Explanation-backed repository research from the layered query engine.
 
-import { discoverHubs, parseHubFile } from "../core/hub.js";
-import { loadIndexArtifact } from "../core/index-database.js";
-import { loadSemanticClusterState, type PersistedSemanticClusterState, type SubsystemSummary } from "./cluster-artifacts.js";
-import { loadHubSuggestionState, type HubSuggestion, type PersistedHubSuggestionState } from "./hub-suggestions.js";
 import { assertValidPreparedIndex } from "./index-reliability.js";
-import { rankUnifiedSearch, formatUnifiedSearchResults, type UnifiedRankedHit } from "./unified-ranking.js";
-
-interface StructureArtifact {
-  path: string;
-  header: string;
-  modulePath: string;
-  dependencyPaths: string[];
-}
-
-interface PersistedStructureIndexState {
-  files: Record<string, { artifact: StructureArtifact }>;
-}
+import {
+  loadQueryExplanationState,
+  type FileExplanationCard,
+  type HubExplanationCard,
+  type ModuleExplanationCard,
+  type PersistedQueryExplanationState,
+  type QueryEngineContract,
+  type SubsystemExplanationCard,
+} from "./query-engine.js";
+import {
+  buildUnifiedSearchReport,
+  formatUnifiedSearchResults,
+  type UnifiedRankedHit,
+  type UnifiedSearchDiagnostics,
+} from "./unified-ranking.js";
 
 export interface ResearchOptions {
   rootDir: string;
@@ -33,26 +32,38 @@ interface ResearchRelatedHit {
   path: string;
   score: number;
   reason: string;
-  source: "cluster" | "dependency";
+  source: "cluster" | "dependency" | "reverse-dependency" | "module-peer";
 }
 
 interface ResearchSubsystemHit {
-  summary: SubsystemSummary;
+  card: SubsystemExplanationCard;
   score: number;
 }
 
 interface ResearchHubHit {
-  kind: "manual" | "suggested";
-  label: string;
+  card: HubExplanationCard;
+  score: number;
+}
+
+interface ResearchFileCardHit {
   path: string;
   score: number;
-  linkedPaths: string[];
-  rationale?: string;
+  card: FileExplanationCard;
+}
+
+interface ResearchModuleCardHit {
+  modulePath: string;
+  score: number;
+  card: ModuleExplanationCard;
 }
 
 export interface ResearchReport {
   query: string;
+  layers: QueryEngineContract;
+  searchDiagnostics: UnifiedSearchDiagnostics;
   codeHits: UnifiedRankedHit[];
+  fileCards: ResearchFileCardHit[];
+  moduleCards: ResearchModuleCardHit[];
   relatedHits: ResearchRelatedHit[];
   subsystemHits: ResearchSubsystemHit[];
   hubHits: ResearchHubHit[];
@@ -89,145 +100,119 @@ function computeCoverageScore(queryTerms: string[], text: string): { score: numb
   };
 }
 
-async function loadStructureState(rootDir: string): Promise<PersistedStructureIndexState> {
-  return loadIndexArtifact(rootDir, "code-structure-index", () => ({
-    files: {},
-  }));
-}
-
-function scoreSubsystem(
-  queryTerms: string[],
-  topPaths: Set<string>,
-  subsystem: SubsystemSummary,
-): ResearchSubsystemHit | null {
-  const coverage = computeCoverageScore(
-    queryTerms,
-    [
-      subsystem.label,
-      subsystem.overarchingTheme,
-      subsystem.distinguishingFeature,
-      subsystem.pathPattern ?? "",
-      subsystem.filePaths.join(" "),
-    ].join(" "),
-  );
-  const overlapCount = subsystem.filePaths.filter((filePath) => topPaths.has(filePath)).length;
-  const overlapBoost = topPaths.size > 0 ? overlapCount / topPaths.size : 0;
-  const score = clamp01(coverage.score * 0.7 + overlapBoost * 0.3);
-  if (score <= 0) return null;
-  return { summary: subsystem, score };
-}
-
-function scoreSuggestedHub(
-  queryTerms: string[],
-  topPaths: Set<string>,
-  suggestion: HubSuggestion,
-): ResearchHubHit | null {
-  const coverage = computeCoverageScore(
-    queryTerms,
-    [
-      suggestion.label,
-      suggestion.summary,
-      suggestion.rationale,
-      suggestion.pathPattern ?? "",
-      suggestion.featureTags.join(" "),
-      suggestion.filePaths.join(" "),
-    ].join(" "),
-  );
-  const overlapCount = suggestion.filePaths.filter((filePath) => topPaths.has(filePath)).length;
-  const overlapBoost = topPaths.size > 0 ? overlapCount / topPaths.size : 0;
-  const score = clamp01(coverage.score * 0.6 + overlapBoost * 0.4);
-  if (score <= 0) return null;
-  return {
-    kind: "suggested",
-    label: suggestion.label,
-    path: suggestion.markdownPath,
-    score,
-    linkedPaths: suggestion.filePaths.slice(0, 6),
-    rationale: suggestion.rationale,
-  };
-}
-
-async function collectManualHubHits(
-  rootDir: string,
-  queryTerms: string[],
-  topPaths: Set<string>,
-): Promise<ResearchHubHit[]> {
-  const hubs = await discoverHubs(rootDir);
-  const results: ResearchHubHit[] = [];
-  for (const hubPath of hubs) {
-    const hub = await parseHubFile(`${rootDir}/${hubPath}`);
-    const linkedPaths = hub.links.map((link) => link.target);
-    const coverage = computeCoverageScore(
-      queryTerms,
-      [
-        hub.title,
-        hub.hubPath,
-        hub.links.map((link) => `${link.target} ${link.description ?? ""}`).join(" "),
-        hub.crossLinks.map((link) => link.hubName).join(" "),
-      ].join(" "),
-    );
-    const overlapCount = linkedPaths.filter((filePath) => topPaths.has(filePath)).length;
-    const overlapBoost = topPaths.size > 0 ? overlapCount / topPaths.size : 0;
-    const score = clamp01(coverage.score * 0.55 + overlapBoost * 0.45);
-    if (score <= 0) continue;
-    results.push({
-      kind: "manual",
-      label: hub.title,
-      path: hubPath,
-      score,
-      linkedPaths: linkedPaths.slice(0, 6),
-    });
-  }
-  return results;
-}
-
 function collectRelatedHits(
   codeHits: UnifiedRankedHit[],
-  clusterState: PersistedSemanticClusterState,
-  structureState: PersistedStructureIndexState,
+  explanationState: PersistedQueryExplanationState,
   maxRelated: number,
 ): ResearchRelatedHit[] {
+  const topPaths = new Set(codeHits.map((hit) => hit.path));
   const related = new Map<string, ResearchRelatedHit>();
-  const topPaths = Array.from(new Set(codeHits.map((hit) => hit.path)));
-
   for (const path of topPaths) {
-    for (const edge of clusterState.relatedFiles[path] ?? []) {
-      if (topPaths.includes(edge.path)) continue;
-      const current = related.get(edge.path);
-      if (!current || edge.score > current.score) {
-        related.set(edge.path, {
-          path: edge.path,
-          score: clamp01(edge.score),
-          reason: edge.reason,
-          source: "cluster",
-        });
-      }
-    }
-
-    for (const dependencyPath of structureState.files[path]?.artifact.dependencyPaths ?? []) {
-      if (topPaths.includes(dependencyPath)) continue;
-      const current = related.get(dependencyPath);
-      const score = 0.72;
-      if (!current || score > current.score) {
-        related.set(dependencyPath, {
-          path: dependencyPath,
-          score,
-          reason: `Imported by ${path}`,
-          source: "dependency",
+    const fileCard = explanationState.fileCards[path];
+    if (!fileCard) continue;
+    for (const context of fileCard.relatedContexts) {
+      if (topPaths.has(context.path)) continue;
+      const current = related.get(context.path);
+      if (!current || context.score > current.score) {
+        related.set(context.path, {
+          path: context.path,
+          score: clamp01(context.score),
+          reason: context.reason,
+          source: context.source,
         });
       }
     }
   }
-
   return Array.from(related.values())
     .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
     .slice(0, maxRelated);
 }
 
+function collectFileCardHits(codeHits: UnifiedRankedHit[], explanationState: PersistedQueryExplanationState): ResearchFileCardHit[] {
+  const seen = new Set<string>();
+  const hits: ResearchFileCardHit[] = [];
+  for (const hit of codeHits) {
+    if (seen.has(hit.path)) continue;
+    seen.add(hit.path);
+    const card = explanationState.fileCards[hit.path];
+    if (!card) continue;
+    hits.push({
+      path: hit.path,
+      score: hit.score,
+      card,
+    });
+  }
+  return hits;
+}
+
+function collectModuleCardHits(
+  fileCards: ResearchFileCardHit[],
+  explanationState: PersistedQueryExplanationState,
+): ResearchModuleCardHit[] {
+  const moduleScores = new Map<string, number>();
+  for (const hit of fileCards) {
+    const current = moduleScores.get(hit.card.modulePath) ?? 0;
+    moduleScores.set(hit.card.modulePath, Math.max(current, hit.score));
+  }
+  return Array.from(moduleScores.entries())
+    .map(([modulePath, score]) => {
+      const card = explanationState.moduleCards[modulePath];
+      return card ? { modulePath, score, card } : null;
+    })
+    .filter((value): value is ResearchModuleCardHit => Boolean(value))
+    .sort((left, right) => right.score - left.score || left.modulePath.localeCompare(right.modulePath));
+}
+
+function scoreSubsystem(
+  queryTerms: string[],
+  topPaths: Set<string>,
+  card: SubsystemExplanationCard,
+): ResearchSubsystemHit | null {
+  const coverage = computeCoverageScore(
+    queryTerms,
+    [
+      card.label,
+      card.overview,
+      card.rationale,
+      card.pathPattern ?? "",
+      card.filePaths.join(" "),
+      card.modulePaths.join(" "),
+    ].join(" "),
+  );
+  const overlapCount = card.filePaths.filter((filePath) => topPaths.has(filePath)).length;
+  const overlapBoost = topPaths.size > 0 ? overlapCount / topPaths.size : 0;
+  const score = clamp01(coverage.score * 0.7 + overlapBoost * 0.3);
+  if (score <= 0) return null;
+  return { card, score };
+}
+
+function scoreHub(
+  queryTerms: string[],
+  topPaths: Set<string>,
+  card: HubExplanationCard,
+): ResearchHubHit | null {
+  const coverage = computeCoverageScore(
+    queryTerms,
+    [
+      card.label,
+      card.overview,
+      card.rationale,
+      card.linkedPaths.join(" "),
+      card.modulePaths.join(" "),
+      card.featureTags.join(" "),
+    ].join(" "),
+  );
+  const overlapCount = card.linkedPaths.filter((filePath) => topPaths.has(filePath)).length;
+  const overlapBoost = topPaths.size > 0 ? overlapCount / topPaths.size : 0;
+  const score = clamp01(coverage.score * 0.6 + overlapBoost * 0.4);
+  if (score <= 0) return null;
+  return { card, score };
+}
+
 function dedupeHubHits(hits: ResearchHubHit[]): ResearchHubHit[] {
   const deduped = new Map<string, ResearchHubHit>();
   for (const hit of hits) {
-    const key = `${hit.kind}:${hit.path}`;
+    const key = `${hit.card.kind}:${hit.card.path}`;
     const current = deduped.get(key);
     if (!current || hit.score > current.score) deduped.set(key, hit);
   }
@@ -246,38 +231,41 @@ export async function buildResearchReport(options: ResearchOptions): Promise<Res
   const maxSubsystems = normalizeTopK(options.maxSubsystems, 3);
   const maxHubs = normalizeTopK(options.maxHubs, 4);
 
-  const [codeHits, clusterState, structureState, hubSuggestionState] = await Promise.all([
-    rankUnifiedSearch({
+  const [unifiedReport, explanationState] = await Promise.all([
+    buildUnifiedSearchReport({
       rootDir: options.rootDir,
       query: options.query,
       topK,
       entityTypes: ["file", "symbol"],
       includeKinds: options.includeKinds,
     }),
-    loadSemanticClusterState(options.rootDir),
-    loadStructureState(options.rootDir),
-    loadHubSuggestionState(options.rootDir),
+    loadQueryExplanationState(options.rootDir),
   ]);
 
+  const codeHits = unifiedReport.hits;
   const topPaths = new Set(codeHits.map((hit) => hit.path));
-  const relatedHits = collectRelatedHits(codeHits, clusterState, structureState, maxRelated);
-  const subsystemHits = Object.values(clusterState.subsystemSummaries)
-    .map((summary) => scoreSubsystem(queryTerms, topPaths, summary))
+  const fileCards = collectFileCardHits(codeHits, explanationState);
+  const moduleCards = collectModuleCardHits(fileCards, explanationState);
+  const relatedHits = collectRelatedHits(codeHits, explanationState, maxRelated);
+  const subsystemHits = Object.values(explanationState.subsystemCards)
+    .map((card) => scoreSubsystem(queryTerms, topPaths, card))
     .filter((value): value is ResearchSubsystemHit => Boolean(value))
-    .sort((left, right) => right.score - left.score || left.summary.label.localeCompare(right.summary.label))
+    .sort((left, right) => right.score - left.score || left.card.label.localeCompare(right.card.label))
     .slice(0, maxSubsystems);
-
-  const suggestedHubHits = Object.values(hubSuggestionState.suggestions)
-    .map((suggestion) => scoreSuggestedHub(queryTerms, topPaths, suggestion))
-    .filter((value): value is ResearchHubHit => Boolean(value));
-  const manualHubHits = await collectManualHubHits(options.rootDir, queryTerms, topPaths);
-  const hubHits = dedupeHubHits([...manualHubHits, ...suggestedHubHits])
-    .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+  const hubHits = dedupeHubHits(Object.values(explanationState.hubCards)
+    .map((card) => scoreHub(queryTerms, topPaths, card))
+    .filter((value): value is ResearchHubHit => Boolean(value))
+  )
+    .sort((left, right) => right.score - left.score || left.card.path.localeCompare(right.card.path))
     .slice(0, maxHubs);
 
   return {
     query: options.query,
+    layers: explanationState.queryEngine,
+    searchDiagnostics: unifiedReport.diagnostics,
     codeHits,
+    fileCards,
+    moduleCards,
     relatedHits,
     subsystemHits,
     hubHits,
@@ -294,7 +282,37 @@ export function formatResearchReport(report: ResearchReport): string {
   if (report.codeHits.length === 0) {
     lines.push("  No ranked code hits found in the prepared full-engine artifacts.");
   } else {
-    lines.push(formatUnifiedSearchResults(report.query, ["file", "symbol"], report.codeHits, "both"));
+    lines.push(formatUnifiedSearchResults(report.query, ["file", "symbol"], report.codeHits, "both", report.searchDiagnostics));
+  }
+
+  lines.push("");
+  lines.push("Explanation context:");
+  if (report.fileCards.length === 0) {
+    lines.push("  No explanation cards matched the ranked file set.");
+  } else {
+    for (const hit of report.fileCards) {
+      lines.push(`  [${hit.path}] score=${hit.score.toFixed(2)} | ${hit.card.purposeSummary}`);
+      lines.push(`    ${hit.card.publicApiCard}`);
+      lines.push(`    ${hit.card.dependencyNeighborhoodSummary}`);
+      lines.push(`    ${hit.card.hotPathSummary}`);
+      lines.push(`    ${hit.card.ownershipSummary}`);
+      lines.push(`    ${hit.card.changeRiskNote}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("Module context:");
+  if (report.moduleCards.length === 0) {
+    lines.push("  No module explanation cards matched the ranked file set.");
+  } else {
+    for (const hit of report.moduleCards) {
+      lines.push(`  [${hit.modulePath}] score=${hit.score.toFixed(2)} | ${hit.card.purposeSummary}`);
+      lines.push(`    ${hit.card.publicApiCard}`);
+      lines.push(`    ${hit.card.dependencyNeighborhoodSummary}`);
+      lines.push(`    ${hit.card.hotPathSummary}`);
+      lines.push(`    ${hit.card.ownershipSummary}`);
+      lines.push(`    ${hit.card.changeRiskNote}`);
+    }
   }
 
   lines.push("");
@@ -313,9 +331,12 @@ export function formatResearchReport(report: ResearchReport): string {
     lines.push("  No matching subsystem summaries found.");
   } else {
     for (const hit of report.subsystemHits) {
-      lines.push(`  [${hit.summary.label}] score=${hit.score.toFixed(2)} | ${hit.summary.overarchingTheme}`);
-      lines.push(`    ${hit.summary.distinguishingFeature}`);
-      lines.push(`    files: ${hit.summary.filePaths.slice(0, 4).join(", ")}`);
+      lines.push(`  [${hit.card.label}] score=${hit.score.toFixed(2)} | ${hit.card.overview}`);
+      lines.push(`    ${hit.card.rationale}`);
+      lines.push(`    files: ${hit.card.filePaths.slice(0, 4).join(", ")}`);
+      if (hit.card.modulePaths.length > 0) {
+        lines.push(`    modules: ${hit.card.modulePaths.slice(0, 4).join(", ")}`);
+      }
     }
   }
 
@@ -325,9 +346,11 @@ export function formatResearchReport(report: ResearchReport): string {
     lines.push("  No relevant manual or suggested hubs found.");
   } else {
     for (const hit of report.hubHits) {
-      lines.push(`  [${hit.kind}] ${hit.path} | ${hit.label} | score=${hit.score.toFixed(2)}`);
-      if (hit.linkedPaths.length > 0) lines.push(`    linked files: ${hit.linkedPaths.join(", ")}`);
-      if (hit.rationale) lines.push(`    rationale: ${hit.rationale}`);
+      lines.push(`  [${hit.card.kind}] ${hit.card.path} | ${hit.card.label} | score=${hit.score.toFixed(2)}`);
+      lines.push(`    ${hit.card.overview}`);
+      lines.push(`    rationale: ${hit.card.rationale}`);
+      if (hit.card.linkedPaths.length > 0) lines.push(`    linked files: ${hit.card.linkedPaths.join(", ")}`);
+      if (hit.card.modulePaths.length > 0) lines.push(`    modules: ${hit.card.modulePaths.join(", ")}`);
     }
   }
 

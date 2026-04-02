@@ -2,6 +2,11 @@
 
 ## v1.5
 
+- [x] formalize a three-layer query architecture for v1.5 with an explicit Layer A exact substrate, Layer B candidate substrate, and Layer C explanation substrate
+- [x] keep `symbol`, `word`, `outline`, `deps`, `status`, and `changes` as the exact deterministic first path while exposing that layer explicitly in the persisted query-engine contract
+- [x] keep lexical, semantic, structural, cluster, and hub-prior candidate generation in the prepared retrieval stack and make the layered contract point at those persisted artifacts
+- [x] add a persisted `query-explanation-index` artifact with per-file purpose summaries, public API cards, dependency-neighborhood summaries, hot-path summaries, ownership summaries, module cards, subsystem cards, hub rationale, and change-risk notes
+- [x] make `research` and bridge-facing rich operator views consume the explanation substrate instead of reconstructing subsystem and hub summaries on demand
 - [x] change `searchHybridState()` in `src/tools/hybrid-retrieval.ts` so missing rerank vectors are no longer silently converted into `semanticScore = 0`
 - [x] add an explicit `HybridVectorIntegrityError` and fail loudly when hybrid semantic or mixed retrieval encounters stale, corrupt, or refresh-incomplete vector state
 - [x] make keyword-only continuation explicit by reporting `explicit-lexical-only` vector coverage instead of silently treating missing vectors as acceptable

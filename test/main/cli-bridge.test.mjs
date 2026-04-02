@@ -109,7 +109,12 @@ describe("cli bridge", () => {
 
       const researchPayload = await execBridge(cwd, "research", "app entrypoint flow");
       assert.equal(researchPayload.report.codeHits.length >= 1, true);
+      assert.equal(researchPayload.report.fileCards.length >= 1, true);
+      assert.equal(researchPayload.report.moduleCards.length >= 1, true);
+      assert.equal(researchPayload.report.layers.explanation.artifactKeys.includes("query-explanation-index"), true);
       assert.equal(researchPayload.text.includes(researchPayload.report.codeHits[0].path), true);
+      assert.equal(researchPayload.text.includes("Explanation context:"), true);
+      assert.equal(researchPayload.text.includes("Change risk:"), true);
 
       const lintPayload = await execBridge(cwd, "lint");
       assert.equal(lintPayload.report.filesInspected >= 2, true);

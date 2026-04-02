@@ -75,7 +75,11 @@ function formatIdentifierProgress(progress: IdentifierIndexProgress): string {
 }
 
 function formatFullProgress(progress: FullIndexProgress): string {
-  const unit = progress.phase === "chunk-embeddings" ? "chunks" : "files";
+  const unit = progress.phase === "chunk-embeddings"
+    ? "chunks"
+    : progress.phase === "explanation-scan"
+      ? "cards"
+      : "files";
   return [
     progress.phase,
     `${progress.processedFiles}/${progress.totalFiles} ${unit}`,
@@ -85,6 +89,7 @@ function formatFullProgress(progress: FullIndexProgress): string {
     `${progress.indexedStructures} indexed structures`,
     `${progress.indexedHybridChunks} hybrid chunk docs`,
     `${progress.indexedHybridIdentifiers} hybrid identifier docs`,
+    `${progress.indexedQueryExplanations} explanation cards`,
   ].join(" | ");
 }
 
@@ -234,6 +239,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
               ...(status.fullIndex?.hybridIdentifierIndex ?? {}),
               indexedDocuments: progress.indexedHybridIdentifiers,
             },
+            queryExplanationIndex: {
+              ...(status.fullIndex?.queryExplanationIndex ?? {}),
+              fileCardCount: progress.indexedQueryExplanations,
+            },
           };
           appendProgress(formatFullProgress(progress));
           await progressPersistence.persist(status.phase);
@@ -244,7 +253,8 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           `${status.fullIndex?.structureIndex?.indexedStructures ?? 0} structures | ` +
           `${status.fullIndex?.chunkIndex?.embeddedChunks ?? 0} chunk embeddings | ` +
           `${status.fullIndex?.hybridChunkIndex?.indexedDocuments ?? 0} hybrid chunk docs | ` +
-          `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs`,
+          `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs | ` +
+          `${status.fullIndex?.queryExplanationIndex?.fileCardCount ?? 0} explanation cards`,
         );
       });
     }

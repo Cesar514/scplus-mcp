@@ -70,8 +70,8 @@ describe("hybrid-retrieval", () => {
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 
-      assert.equal(hybridChunk.state.artifactVersion, 15);
-      assert.equal(hybridChunk.state.contractVersion, 12);
+      assert.equal(hybridChunk.state.artifactVersion, 16);
+      assert.equal(hybridChunk.state.contractVersion, 13);
       assert.equal(hybridChunk.state.source, "chunk");
       assert.equal(hybridChunk.stats.indexedDocuments >= 2, true);
       assert.equal(hybridChunk.stats.uniqueTerms >= 4, true);
@@ -80,8 +80,8 @@ describe("hybrid-retrieval", () => {
       assert.equal(dbHybridChunk.lexicalIndex.documentCount, hybridChunk.stats.indexedDocuments);
       assert.equal(Object.values(dbHybridChunk.documents).every((document) => document.entityType === "file" || document.entityType === "symbol"), true);
 
-      assert.equal(hybridIdentifier.state.artifactVersion, 15);
-      assert.equal(hybridIdentifier.state.contractVersion, 12);
+      assert.equal(hybridIdentifier.state.artifactVersion, 16);
+      assert.equal(hybridIdentifier.state.contractVersion, 13);
       assert.equal(hybridIdentifier.state.source, "identifier");
       assert.equal(hybridIdentifier.stats.indexedDocuments >= 2, true);
       assert.equal(hybridIdentifier.stats.uniqueTerms >= 4, true);

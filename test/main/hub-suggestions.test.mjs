@@ -77,8 +77,8 @@ describe("hub suggestions", () => {
       const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
       const state = readArtifact(dbPath, "hub-suggestion-index");
       assert.ok(state);
-      assert.equal(state.artifactVersion, 15);
-      assert.equal(state.contractVersion, 12);
+      assert.equal(state.artifactVersion, 16);
+      assert.equal(state.contractVersion, 13);
       assert.equal(Object.keys(state.suggestions).length >= 1, true);
       assert.equal(Object.keys(state.featureGroups).length >= 1, true);
 

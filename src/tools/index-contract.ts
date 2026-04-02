@@ -22,6 +22,7 @@ export type IndexPhase =
   | "structure-scan"
   | "cluster-scan"
   | "hub-scan"
+  | "explanation-scan"
   | "completed"
   | "failed";
 
@@ -125,12 +126,14 @@ export interface FullArtifactManifest {
   structureIndexPath: string;
   semanticClusterIndexPath: string;
   hubSuggestionIndexPath: string;
+  queryExplanationIndexPath: string;
   chunkCount: number;
   hybridChunkCount: number;
   hybridIdentifierCount: number;
   structureCount: number;
   semanticClusterCount: number;
   hubSuggestionCount: number;
+  queryExplanationCount: number;
   featureGroupCount: number;
   contract: IndexContractMetadata;
   stats: {
@@ -173,11 +176,17 @@ export interface FullArtifactManifest {
       featureGroupCount: number;
       generatedMarkdownCount: number;
     };
+    queryExplanationIndex: {
+      fileCardCount: number;
+      moduleCardCount: number;
+      subsystemCardCount: number;
+      hubCardCount: number;
+    };
   };
 }
 
-export const INDEX_CONTRACT_VERSION = 12;
-export const INDEX_ARTIFACT_VERSION = 15;
+export const INDEX_CONTRACT_VERSION = 13;
+export const INDEX_ARTIFACT_VERSION = 16;
 export const DEFAULT_INDEX_MODE = "full" as const satisfies IndexMode;
 export const INDEX_STATUS_FILE = "index-status.json";
 export const INDEX_STAGE_STATE_FILE = "index-stages.json";
@@ -194,6 +203,7 @@ export const INDEX_STAGE_ORDER: IndexPhase[] = [
   "structure-scan",
   "cluster-scan",
   "hub-scan",
+  "explanation-scan",
   "completed",
   "failed",
 ];
@@ -282,7 +292,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
     },
     "full-artifacts": {
       name: "full-artifacts",
-      phases: ["chunk-scan", "chunk-embeddings", "hybrid-chunk-scan", "hybrid-identifier-scan", "structure-scan", "cluster-scan", "hub-scan"],
+      phases: ["chunk-scan", "chunk-embeddings", "hybrid-chunk-scan", "hybrid-identifier-scan", "structure-scan", "cluster-scan", "hub-scan", "explanation-scan"],
       dependencies: ["bootstrap", "file-search", "identifier-search"],
       modes: ["full"],
       outputs: [
@@ -292,6 +302,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
         "sqlite:index_artifacts/code-structure-index",
         "sqlite:index_artifacts/semantic-cluster-index",
         "sqlite:index_artifacts/hub-suggestion-index",
+        "sqlite:index_artifacts/query-explanation-index",
         "sqlite:index_artifacts/full-index-manifest",
         "sqlite:vector_collections/chunk-search",
       ],

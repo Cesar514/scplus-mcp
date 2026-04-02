@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 19: Query Engine Stack
-
-- [ ] Formalize a three-layer query architecture for v1.5 and wire the code to match it.
-- [ ] Layer A: keep the exact deterministic substrate for `symbol`, `word`, `outline`, `deps`, `status`, and `changes` as the first and cheapest path.
-- [ ] Layer B: build the real candidate-generation substrate for lexical retrieval, semantic retrieval, structural neighborhood retrieval, and hub or cluster priors.
-- [ ] Layer C: precompute agent-ready explanation artifacts such as per-file purpose summaries, public API cards, per-module summaries, dependency neighborhood summaries, hot-path summaries, ownership summaries, hub candidate rationale, and change-risk notes.
-- [ ] Make `research` and rich operator views consume the explanation substrate instead of reconstructing high-level summaries on demand.
-
 ## Phase 20: Real Benchmark Harness
 
 - [ ] Replace the current synthetic-only benchmark in [src/tools/evaluation.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/evaluation.ts), where `writeFixtureRepo()` creates only a small toy repo under `src/auth`, `src/ui`, `src/api`, and `docs`.
