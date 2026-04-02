@@ -129,7 +129,6 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	model.refreshSidebar()
 	model.syncDetailViewport()
 	model.appendLog("observability indexing: identifier-search 62%")
-	model.commandBar.SetValue("/ov")
 
 	rendered := model.View()
 	for _, needle := range []string{
@@ -137,8 +136,7 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"/\\_",
 		"Activity",
 		"Slash-command console",
-		"/overview",
-		"/index",
+		"Type /overview, /index, /status, /search, /help, or /exit",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -183,6 +181,20 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
 		}
+	}
+}
+
+func TestActivityShellHidesCommandsUntilSlashTyped(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 24
+
+	rendered := model.View()
+	if strings.Contains(rendered, "Commands") {
+		t.Fatalf("expected activity shell to stay minimal until slash is typed: %s", rendered)
+	}
+	if strings.Contains(rendered, "/overview\n") {
+		t.Fatalf("expected command suggestions to stay hidden until slash is typed: %s", rendered)
 	}
 }
 
@@ -454,13 +466,13 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
+		"/back",
+		"/forward",
 		"/overview",
 		"/tree",
 		"/search",
 		"/symbol",
 		"/index",
-		"/refresh",
-		"/watch",
 		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -577,6 +589,37 @@ func TestActivityCommandBarAllowsRemovingSlash(t *testing.T) {
 	next := updated.(Model)
 	if next.commandBar.Value() != "" {
 		t.Fatalf("expected backspace to remove the slash, got %q", next.commandBar.Value())
+	}
+}
+
+func TestActivityCommandBarKeepsPlainLettersTyped(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("e")},
+		{Type: tea.KeyRunes, Runes: []rune("q")},
+		{Type: tea.KeyRunes, Runes: []rune("?")},
+	} {
+		updated, _ := model.Update(key)
+		model = updated.(Model)
+	}
+	if model.commandBar.Value() != "eq?" {
+		t.Fatalf("expected plain letters to remain editable input, got %q", model.commandBar.Value())
+	}
+}
+
+func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 100
+	model.height = 22
+	model.commandBar.SetValue("/")
+	model.commandSelect = 10
+
+	rendered := model.View()
+	if !strings.Contains(rendered, "earlier commands hidden") {
+		t.Fatalf("expected scroll marker for hidden earlier commands: %s", rendered)
+	}
+	if !strings.Contains(rendered, "more commands hidden") {
+		t.Fatalf("expected scroll marker for hidden later commands: %s", rendered)
 	}
 }
 
@@ -731,7 +774,7 @@ func TestFindHubItemsPreserveSuggestedBadge(t *testing.T) {
 	}
 }
 
-func TestRestoreShortcutRunsSelectedPointFromRestoreView(t *testing.T) {
+func TestRestoreLetterShortcutIsDisabled(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.setRestorePoints([]backend.RestorePoint{
 		{ID: "rp-123", Timestamp: 1, Message: "before refactor", Files: []string{"src/index.ts"}},
@@ -741,12 +784,12 @@ func TestRestoreShortcutRunsSelectedPointFromRestoreView(t *testing.T) {
 	model.client = nil
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
-	if cmd == nil {
-		t.Fatalf("expected restore shortcut to dispatch a restore command")
+	if cmd != nil {
+		t.Fatalf("expected plain letter restore shortcut to stay disabled, got command %v", cmd)
 	}
 	next := updated.(Model)
-	if next.job("restore").Phase != "restore" {
-		t.Fatalf("expected restore job to enter restore phase, got %#v", next.job("restore"))
+	if next.job("restore").Phase == "restore" {
+		t.Fatalf("expected restore job to remain idle without a slash command, got %#v", next.job("restore"))
 	}
 }
 

@@ -315,6 +315,7 @@ type Model struct {
 	lastView       navigationSnapshot
 	hasLastView    bool
 	commandBar     textinput.Model
+	commandSelect  int
 }
 
 func NewModel(root string, client *backend.Client) Model {
@@ -458,6 +459,8 @@ func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{ID: "exit", Title: "/exit", Subtitle: "Quit the human CLI", Action: "exit"},
 		{ID: "activity", Title: "/activity", Subtitle: "Return to the main command surface", Action: "open-activity"},
+		{ID: "back", Title: "/back", Subtitle: "Move backward through navigation history", Action: "history-back"},
+		{ID: "forward", Title: "/forward", Subtitle: "Move forward through navigation history", Action: "history-forward"},
 		{ID: "open-overview", Title: "/overview", Subtitle: "Open the operator health and observability window", Action: "open-overview"},
 		{ID: "open-tree", Title: "/tree", Subtitle: "Open the prepared tree window", Action: "open-tree"},
 		{ID: "open-hubs", Title: "/hubs", Subtitle: "Open manual and suggested hubs", Action: "open-hubs"},
@@ -468,8 +471,13 @@ func paletteCommands() []paletteCommand {
 		{ID: "open-search", Title: "/search", Subtitle: "Open the ranked search results window", Action: "open-search"},
 		{ID: "open-symbol", Title: "/symbol", Subtitle: "Open the exact symbol results window", Action: "open-symbol"},
 		{ID: "index", Title: "/index", Subtitle: "Run a full index refresh", Action: "index"},
+		{ID: "retry-index", Title: "/retry-index", Subtitle: "Re-run the last queued or failed index action", Action: "retry-index"},
 		{ID: "refresh", Title: "/refresh", Subtitle: "Reload backend snapshots", Action: "refresh"},
+		{ID: "cancel-pending", Title: "/cancel-pending", Subtitle: "Drop queued watch work before it starts", Action: "cancel-pending"},
+		{ID: "supersede-pending", Title: "/supersede-pending", Subtitle: "Replace stale queued work with the latest changes", Action: "supersede-pending"},
 		{ID: "watch", Title: "/watch", Subtitle: "Toggle watcher-driven refresh jobs", Action: "watch"},
+		{ID: "new-hub", Title: "/new-hub", Subtitle: "Create a manual feature hub", Action: "hub-create"},
+		{ID: "export", Title: "/export", Subtitle: "Export the current view content to .contextplus/exports", Action: "export"},
 		{ID: "help", Title: "/help", Subtitle: "Show keybindings and command help", Action: "help"},
 		{ID: "find-hub", Title: "/find-hub", Subtitle: "Rank hubs by keyword and semantic relevance", Action: "find-hub", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
 		{ID: "exact-lookup", Title: "/exact", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
@@ -1042,6 +1050,14 @@ func filterPaletteCommands(commands []paletteCommand, rawQuery string) []palette
 
 func (m *Model) filteredPaletteCommands() []paletteCommand {
 	return filterPaletteCommands(m.overlay.Commands, m.overlay.Input.Value())
+}
+
+func (m *Model) activityCommandSuggestions() []paletteCommand {
+	query := strings.TrimSpace(m.commandBar.Value())
+	if !strings.HasPrefix(query, "/") {
+		return nil
+	}
+	return filterPaletteCommands(paletteCommands(), query)
 }
 
 func (m *Model) activePaletteCommand() (paletteCommand, bool) {
@@ -1860,6 +1876,12 @@ func (m *Model) executePaletteAction(action string) tea.Cmd {
 		m.commandBar.SetValue("")
 		m.recordNavigation()
 		return nil
+	case "history-back":
+		m.navigateHistory(-1)
+		return nil
+	case "history-forward":
+		m.navigateHistory(1)
+		return nil
 	case "open-overview":
 		m.setActiveView(viewOverview)
 		m.focus = focusContent
@@ -1908,12 +1930,26 @@ func (m *Model) executePaletteAction(action string) tea.Cmd {
 	case "index":
 		m.sidebarIndex = m.findSidebarAction("index")
 		return m.executeSidebarSelection()
+	case "retry-index":
+		m.sidebarIndex = m.findSidebarAction("retry-index")
+		return m.executeSidebarSelection()
 	case "refresh":
 		m.sidebarIndex = m.findSidebarAction("refresh")
+		return m.executeSidebarSelection()
+	case "cancel-pending":
+		m.sidebarIndex = m.findSidebarAction("cancel-pending")
+		return m.executeSidebarSelection()
+	case "supersede-pending":
+		m.sidebarIndex = m.findSidebarAction("supersede-pending")
 		return m.executeSidebarSelection()
 	case "watch":
 		m.sidebarIndex = m.findSidebarAction("watch")
 		return m.executeSidebarSelection()
+	case "hub-create":
+		m.sidebarIndex = m.findSidebarAction("hub-create")
+		return m.executeSidebarSelection()
+	case "export":
+		return m.exportActiveContent()
 	case "help":
 		m.openHelpOverlay()
 		return nil
@@ -1924,17 +1960,27 @@ func (m *Model) executePaletteAction(action string) tea.Cmd {
 
 func (m *Model) submitCommandBar() tea.Cmd {
 	query := strings.TrimSpace(m.commandBar.Value())
-	if query == "" || query == "/" {
-		m.openPaletteWithValue("/")
+	if query == "" {
 		return nil
 	}
-	commands := filterPaletteCommands(paletteCommands(), query)
+	if !strings.HasPrefix(query, "/") {
+		m.setError(fmt.Errorf("slash commands must start with /"))
+		return nil
+	}
+	commands := m.activityCommandSuggestions()
 	if len(commands) == 0 {
 		m.setError(fmt.Errorf("unknown slash command %q", query))
 		return nil
 	}
-	command := commands[0]
+	if m.commandSelect >= len(commands) {
+		m.commandSelect = len(commands) - 1
+	}
+	if m.commandSelect < 0 {
+		m.commandSelect = 0
+	}
+	command := commands[m.commandSelect]
 	m.commandBar.SetValue("")
+	m.commandSelect = 0
 	if command.RequiresInput {
 		m.openPromptOverlay(command)
 		return nil
@@ -2372,17 +2418,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.openSectionSearchOverlay()
 				return m, nil
 			}
-		case "?":
-			m.openHelpOverlay()
-			return m, nil
-		case "e":
-			return m, m.exportActiveContent()
-		case "b":
-			m.navigateHistory(-1)
-			return m, nil
-		case "f":
-			m.navigateHistory(1)
-			return m, nil
 		case "shift+tab":
 			m.cycleFocus(-1)
 			return m, nil
@@ -2410,6 +2445,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recordNavigation()
 			return m, nil
 		case "up", "k":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				commands := m.activityCommandSuggestions()
+				if len(commands) > 0 {
+					m.commandSelect--
+					if m.commandSelect < 0 {
+						m.commandSelect = len(commands) - 1
+					}
+					return m, nil
+				}
+			}
 			if m.focus == focusDetail {
 				m.detail.LineUp(1)
 				return m, nil
@@ -2432,6 +2477,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "down", "j":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				commands := m.activityCommandSuggestions()
+				if len(commands) > 0 {
+					m.commandSelect++
+					if m.commandSelect >= len(commands) {
+						m.commandSelect = 0
+					}
+					return m, nil
+				}
+			}
 			if m.focus == focusDetail {
 				m.detail.LineDown(1)
 				return m, nil
@@ -2455,6 +2510,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "pgup", "ctrl+b":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				commands := m.activityCommandSuggestions()
+				if len(commands) > 0 {
+					step := max(1, visibleContentCount(m.height))
+					m.commandSelect -= step
+					if m.commandSelect < 0 {
+						m.commandSelect = 0
+					}
+					return m, nil
+				}
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.moveSidebarPage(-1)
@@ -2469,6 +2535,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "pgdown":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				commands := m.activityCommandSuggestions()
+				if len(commands) > 0 {
+					step := max(1, visibleContentCount(m.height))
+					m.commandSelect += step
+					if m.commandSelect >= len(commands) {
+						m.commandSelect = len(commands) - 1
+					}
+					return m, nil
+				}
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.moveSidebarPage(1)
@@ -2483,6 +2560,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "home":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				if len(m.activityCommandSuggestions()) > 0 {
+					m.commandSelect = 0
+					return m, nil
+				}
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.sidebarIndex = 0
@@ -2502,6 +2585,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recordNavigation()
 			return m, nil
 		case "end":
+			if m.activeView == viewActivity && m.focus == focusContent {
+				commands := m.activityCommandSuggestions()
+				if len(commands) > 0 {
+					m.commandSelect = len(commands) - 1
+					return m, nil
+				}
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.sidebarIndex = max(0, len(m.sidebar)-1)
@@ -2542,81 +2632,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, nil
-		case "x":
-			m.sidebarIndex = m.findSidebarAction("cancel-pending")
-			return m, m.executeSidebarSelection()
-		case "s":
-			m.sidebarIndex = m.findSidebarAction("supersede-pending")
-			return m, m.executeSidebarSelection()
-		case "t":
-			m.sidebarIndex = m.findSidebarAction("retry-index")
-			return m, m.executeSidebarSelection()
-		case "i":
-			m.sidebarIndex = m.findSidebarAction("index")
-			return m, m.executeSidebarSelection()
-		case "r":
-			m.sidebarIndex = m.findSidebarAction("refresh")
-			return m, m.executeSidebarSelection()
-		case "w":
-			m.sidebarIndex = m.findSidebarAction("watch")
-			return m, m.executeSidebarSelection()
-		case "n":
-			m.sidebarIndex = m.findSidebarAction("hub-create")
-			return m, m.executeSidebarSelection()
-		case "u":
-			if m.focus == focusContent && m.activeView == viewRestore {
-				section := m.activeSection()
-				if len(section.Items) == 0 {
-					return m, nil
-				}
-				pointID := strings.TrimSpace(section.Items[section.Selected].ID)
-				if pointID == "" {
-					return m, nil
-				}
-				m.startOperatorJob("restore", "restore", "restore requested", pointID)
-				return m, runTextCommandCmd("restore", "", "Restore", fmt.Sprintf("Restored point %s", pointID), true, func() (backend.TextPayload, error) {
-					return m.client.Restore(context.Background(), m.root, pointID)
-				})
-			}
-		case "1":
-			m.setActiveView(viewOverview)
-			m.focus = focusContent
-			return m, nil
-		case "2":
-			m.setActiveView(viewTree)
-			m.focus = focusContent
-			return m, nil
-		case "3":
-			m.setActiveView(viewHubs)
-			m.focus = focusContent
-			return m, nil
-		case "4":
-			m.setActiveView(viewRestore)
-			m.focus = focusContent
-			return m, nil
-		case "5":
-			m.setActiveView(viewCluster)
-			m.focus = focusContent
-			return m, nil
-		case "6":
-			m.setActiveView(viewStatus)
-			m.focus = focusContent
-			return m, nil
-		case "7":
-			m.setActiveView(viewChanges)
-			m.focus = focusContent
-			return m, nil
-		case "8":
-			m.setActiveView(viewSearch)
-			m.focus = focusContent
-			return m, nil
-		case "9":
-			m.setActiveView(viewSymbol)
-			m.focus = focusContent
-			return m, nil
 		}
 		if m.activeView == viewActivity && m.focus == focusContent {
 			m.commandBar, cmd = m.commandBar.Update(message)
+			m.commandSelect = 0
 			return m, cmd
 		}
 		if m.focus == focusDetail {
@@ -2842,6 +2861,7 @@ func (m *Model) renderSectionTable(section *sectionState, width int, height int)
 func (m Model) renderActivityShell(width int, height int) string {
 	bar := m.commandBar
 	bar.Width = max(24, width-8)
+	query := strings.TrimSpace(bar.Value())
 	magician := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(magicianFrames[m.magicianFrame])
 	activeJob := m.activeStatusJob()
 	lines := []string{
@@ -2870,27 +2890,41 @@ func (m Model) renderActivityShell(width int, height int) string {
 	if len(m.logs) > 0 {
 		lines = append(lines, "", subtitleStyle.Render("Latest log: "+truncate(m.logs[len(m.logs)-1], max(24, width-16))))
 	}
-	commands := filterPaletteCommands(paletteCommands(), m.commandBar.Value())
-	lines = append(lines, "")
-	if len(commands) == 0 {
-		lines = append(lines, "No commands match the current input.")
+	if !strings.HasPrefix(query, "/") {
 		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 	}
-	lines = append(lines, subtitleStyle.Render("Commands"))
-	limit := min(len(commands), max(6, height-len(lines)-4))
-	for index := 0; index < limit; index++ {
+	commands := m.activityCommandSuggestions()
+	if len(commands) == 0 {
+		if strings.HasPrefix(query, "/") {
+			lines = append(lines, "", "No commands match the current input.")
+		}
+		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	}
+	if m.commandSelect >= len(commands) {
+		m.commandSelect = len(commands) - 1
+	}
+	if m.commandSelect < 0 {
+		m.commandSelect = 0
+	}
+	lines = append(lines, "", subtitleStyle.Render("Commands"))
+	windowSize := min(len(commands), max(4, height-len(lines)-4))
+	start, end := visibleRange(len(commands), m.commandSelect, windowSize)
+	if start > 0 {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier commands hidden", start)))
+	}
+	for index := start; index < end; index++ {
 		command := commands[index]
 		prefix := "  "
 		style := contentIdle
-		if index == 0 {
+		if index == m.commandSelect {
 			prefix = "> "
 			style = contentSelected
 		}
 		lines = append(lines, style.Render(prefix+command.Title))
 		lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
 	}
-	if limit < len(commands) {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more commands hidden", len(commands)-limit)))
+	if end < len(commands) {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more commands hidden", len(commands)-end)))
 	}
 	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 }
@@ -3042,19 +3076,17 @@ func (m Model) renderOverlayCard(width int) string {
 			"  Tab / Shift+Tab toggle between the current list and detail view",
 			"  Up/Down move the selected row",
 			"  Enter opens detail for the current item",
-			"  b / f walk back and forward through navigation history",
+			"  Use /back and /forward to walk navigation history",
 			"",
 			"Commands",
 			"  /, :, or Ctrl+P opens the command palette",
-			"  1-9 jump directly to overview, tree, hubs, restore, cluster, status, changes, search, and symbol",
-			"  i/t/x/s/r/w keep the existing index, retry, cancel, supersede, refresh, and watcher actions",
-			"  u restores the selected restore point from the Restore section",
+			"  Slash commands are the primary action surface: /overview, /index, /refresh, /status, /search, /help, /exit",
 			"  Esc returns from detail or jumps back to the previous view",
 			"",
 			"Search and export",
 			"  Ctrl+F searches the current section in place",
 			"  PageUp/PageDown/Home/End move quickly through the current content",
-			"  e exports the current view into .contextplus/exports/",
+			"  Use /export to write the current view into .contextplus/exports/",
 		)
 	case overlayPalette:
 		lines = append(lines, m.overlay.Input.View(), "")

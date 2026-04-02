@@ -390,3 +390,10 @@
 - [x] Make slash commands the primary navigation surface with explicit entries like `/overview` and `/index`, and keep the slash editable instead of hard-coding it as an unremovable prompt.
 - [x] Keep the magician pet visible inside the main activity shell while preserving direct detail/back navigation for content windows.
 - [x] Verify the updated slash-command flow directly with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.
+
+## slash-only interaction refinement completed
+
+- [x] Remove the remaining plain-letter action bindings from the human CLI so normal typing no longer triggers hidden tasks.
+- [x] Move the remaining operator actions onto slash commands instead of single-letter shortcuts.
+- [x] Keep command suggestions hidden until the input starts with `/`, make the suggestion list scrollable/selectable, and preserve narrow-window rendering.
+- [x] Verify directly that letters like `e`, `q`, and related keys remain normal input with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.
