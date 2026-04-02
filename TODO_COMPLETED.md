@@ -397,3 +397,11 @@
 - [x] Move the remaining operator actions onto slash commands instead of single-letter shortcuts.
 - [x] Keep command suggestions hidden until the input starts with `/`, make the suggestion list scrollable/selectable, and preserve narrow-window rendering.
 - [x] Verify directly that letters like `e`, `q`, and related keys remain normal input with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.
+
+## activity shell polish completed
+
+- [x] Remove the duplicate top cat/header clutter from the human CLI and leave a single pet inside the activity window.
+- [x] Move `contextplusplus-cli` into the activity title line and remove the extra explanatory header and activity filler text.
+- [x] Keep right-arrow from jumping into an empty detail state on the activity screen when there is no actionable command context.
+- [x] Wrap long current-status text within the activity shell instead of letting it run past the usable pane width.
+- [x] Verify the activity shell directly with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.

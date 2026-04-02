@@ -369,7 +369,7 @@ func NewModel(root string, client *backend.Client) Model {
 			viewCheckpoint: newListSection(viewCheckpoint, "Checkpoint", "Checkpoint write and restore-save output", "Run a checkpoint command to load results."),
 		},
 	}
-	model.commandBar = newOverlayInput("", "Type /overview, /index, /status, /search, /help, or /exit")
+	model.commandBar = newOverlayInput("", "Type /command")
 	model.commandBar.Focus()
 	model.overlay = newOverlayState()
 	model.seedJobs()
@@ -2435,6 +2435,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recordNavigation()
 			return m, nil
 		case "right":
+			if m.activeView == viewActivity {
+				return m, nil
+			}
 			if m.focus == focusSidebar {
 				m.focus = focusContent
 			} else if m.focus == focusContent {
@@ -2740,27 +2743,7 @@ func (m Model) renderWizardDetail() string {
 }
 
 func (m Model) renderHeader() string {
-	magician := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(magicianFrames[m.magicianFrame])
-	subtitle := "Operator console with navigation history, command palette, and export layers"
-	if m.useStackedLayout() {
-		subtitle = "Stacked operator console for narrow terminals"
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			magician,
-			lipgloss.NewStyle().MarginTop(1).Render(
-				titleStyle.Render("contextplusplus-cli")+"\n"+
-					subtitleStyle.Render(subtitle),
-			),
-		)
-	}
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		magician,
-		lipgloss.NewStyle().MarginLeft(2).Render(
-			titleStyle.Render("contextplusplus-cli")+"\n"+
-				subtitleStyle.Render(subtitle),
-		),
-	)
+	return ""
 }
 
 func visibleSidebarCount(height int) int {
@@ -2864,16 +2847,15 @@ func (m Model) renderActivityShell(width int, height int) string {
 	query := strings.TrimSpace(bar.Value())
 	magician := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(magicianFrames[m.magicianFrame])
 	activeJob := m.activeStatusJob()
+	wrapWidth := max(24, int(float64(width)*0.7))
 	lines := []string{
-		renderPaneTitle("Activity", m.focus == focusContent),
-		subtitleStyle.Render("Slash-command console. Type a command, press Enter, or start with / to filter."),
+		renderPaneTitle("Activity | contextplusplus-cli", m.focus == focusContent),
 		"",
 		magician,
 		"",
 		bar.View(),
-		subtitleStyle.Render("Examples: /overview  /index  /status  /search  /help  /exit"),
 		"",
-		subtitleStyle.Render(fmt.Sprintf(
+		subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
 			"Current status: %s | state=%s | phase=%s | pending=%d",
 			activeJob.Title,
 			jobStateLabel(activeJob),
@@ -2882,13 +2864,13 @@ func (m Model) renderActivityShell(width int, height int) string {
 		)),
 	}
 	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, truncate(activeJob.Message, max(24, width-6)))
+		lines = append(lines, subtitleStyle.Width(wrapWidth).Render(activeJob.Message))
 	}
 	if strings.TrimSpace(m.lastError) != "" {
-		lines = append(lines, "", errorStyle.Render("Last error: "+truncate(m.lastError, max(24, width-18))))
+		lines = append(lines, "", errorStyle.Width(wrapWidth).Render("Last error: "+m.lastError))
 	}
 	if len(m.logs) > 0 {
-		lines = append(lines, "", subtitleStyle.Render("Latest log: "+truncate(m.logs[len(m.logs)-1], max(24, width-16))))
+		lines = append(lines, "", subtitleStyle.Width(wrapWidth).Render("Latest log: "+m.logs[len(m.logs)-1]))
 	}
 	if !strings.HasPrefix(query, "/") {
 		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
@@ -3136,7 +3118,7 @@ func (m Model) View() string {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, "", m.renderOverlayCard(max(48, m.width-4)))
 	}
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Type /command | Enter run/detail | / commands | Ctrl+F search | Esc back | e export | ? help | Ctrl+C quit")
+	footer := footerStyle.Render("Type /command | Enter run/detail | / commands | Ctrl+F search | Esc back | Ctrl+C quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
 	} else if m.overlay.Mode == overlayPalette {
@@ -3150,17 +3132,13 @@ func (m Model) View() string {
 	} else if m.activeView == viewActivity {
 		footer = footerStyle.Render("Activity: type /overview, /index, /status, /search, /help, or /exit | Enter run | Ctrl+C quit")
 	} else if m.activeView == viewRestore && m.focus == focusContent {
-		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | Ctrl+F search | Esc back | e export | Ctrl+C quit")
+		footer = footerStyle.Render("Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | /restore-point | /export | Ctrl+C quit")
 	}
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		"",
-		body,
-		"",
-		status,
-		footer,
-	)
+	parts := []string{body, "", status, footer}
+	if strings.TrimSpace(header) != "" {
+		parts = append([]string{header, ""}, parts...)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m Model) Close() error {

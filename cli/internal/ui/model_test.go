@@ -132,11 +132,9 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Operator console with navigation history, command palette, and export layers",
+		"Activity | contextplusplus-cli",
 		"/\\_",
-		"Activity",
-		"Slash-command console",
-		"Type /overview, /index, /status, /search, /help, or /exit",
+		"Type /command",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -151,6 +149,18 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in operator console view: %s", needle, rendered)
 		}
+	}
+	for _, needle := range []string{
+		"Operator console with navigation history, command palette, and export layers",
+		"Slash-command console",
+		"Examples:",
+	} {
+		if strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q to be absent from activity shell: %s", needle, rendered)
+		}
+	}
+	if count := strings.Count(rendered, "/\\_"); count != 1 {
+		t.Fatalf("expected exactly one visible cat in the activity shell, got %d: %s", count, rendered)
 	}
 }
 
@@ -174,12 +184,20 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Stacked operator console for narrow terminals",
-		"Activity",
-		"/overview",
+		"Activity | contextplusplus-cli",
+		"Type /command",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
+		}
+	}
+	for _, needle := range []string{
+		"Stacked operator console for narrow terminals",
+		"Examples:",
+		"Slash-command console",
+	} {
+		if strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q to be absent from stacked activity shell: %s", needle, rendered)
 		}
 	}
 }
@@ -620,6 +638,50 @@ func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "more commands hidden") {
 		t.Fatalf("expected scroll marker for hidden later commands: %s", rendered)
+	}
+}
+
+func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 72
+	model.height = 18
+	indexJob := model.job("index")
+	indexJob.State = "running"
+	indexJob.Phase = "identifier-search"
+	indexJob.Message = "this is a deliberately long indexing status message that should wrap inside the activity pane instead of running out of bounds"
+	model.pendingPaths = []string{"src/one.ts", "src/two.ts", "src/three.ts", "src/four.ts"}
+	model.lastError = "this is a deliberately long backend error message that should also wrap inside the activity pane instead of overflowing past the right edge"
+
+	rendered := model.renderActivityShell(60, 18)
+	if !strings.Contains(rendered, "Current status: Index | state=running |") {
+		t.Fatalf("expected current status line in wrapped activity shell: %s", rendered)
+	}
+	if !strings.Contains(rendered, "phase=identifier-search |") {
+		t.Fatalf("expected wrapped status to keep the phase content visible: %s", rendered)
+	}
+	if !strings.Contains(rendered, "pending=4") {
+		t.Fatalf("expected wrapped status to keep the pending count visible: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Last error: this is a deliberately") {
+		t.Fatalf("expected wrapped error output in activity shell: %s", rendered)
+	}
+}
+
+func TestRightArrowDoesNothingInActivityShell(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.focus = focusContent
+	model.commandBar.SetValue("")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if cmd != nil {
+		t.Fatalf("expected right arrow to stay inert in activity shell")
+	}
+	next := updated.(Model)
+	if next.focus != focusContent {
+		t.Fatalf("expected focus to stay on activity content, got %d", next.focus)
+	}
+	if next.commandBar.Value() != "" {
+		t.Fatalf("expected right arrow to avoid mutating the command bar, got %q", next.commandBar.Value())
 	}
 }
 
