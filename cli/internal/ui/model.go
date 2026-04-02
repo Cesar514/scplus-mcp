@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +30,7 @@ const (
 	viewCluster  = "cluster"
 	viewStatus   = "status"
 	viewChanges  = "changes"
+	viewResults  = "results"
 )
 
 const (
@@ -37,6 +40,7 @@ const (
 	focusJobs
 	focusLogs
 	focusWizard
+	focusOverlay
 )
 
 const (
@@ -121,6 +125,22 @@ type hubCreatedMsg struct {
 	err  error
 }
 
+type commandLoadedMsg struct {
+	jobID       string
+	title       string
+	subtitle    string
+	rawText     string
+	items       []contentItem
+	logMessage  string
+	refreshData bool
+	err         error
+}
+
+type exportFinishedMsg struct {
+	path string
+	err  error
+}
+
 type frameMsg time.Time
 
 type backendEventMsg struct {
@@ -151,6 +171,53 @@ type contentItem struct {
 	Badge   string
 }
 
+type navigationSnapshot struct {
+	ActiveView     string
+	Focus          int
+	SidebarIndex   int
+	SectionSelect  map[string]int
+	SectionFilters map[string]string
+}
+
+type overlayMode string
+
+const (
+	overlayNone    overlayMode = ""
+	overlayHelp    overlayMode = "help"
+	overlayPalette overlayMode = "palette"
+	overlayPrompt  overlayMode = "prompt"
+	overlayFilter  overlayMode = "filter"
+)
+
+type paletteCommand struct {
+	ID                   string
+	Title                string
+	Subtitle             string
+	Action               string
+	JobID                string
+	InputLabel           string
+	InputPlaceholder     string
+	SecondaryLabel       string
+	SecondaryPlaceholder string
+	RequiresInput        bool
+	RequiresSecondary    bool
+}
+
+type overlayState struct {
+	Mode             overlayMode
+	Title            string
+	Subtitle         string
+	Message          string
+	Input            textinput.Model
+	Secondary        textinput.Model
+	Commands         []paletteCommand
+	Selected         int
+	Command          paletteCommand
+	TargetSectionID  string
+	PreviousFocus    int
+	SecondaryEnabled bool
+}
+
 type sectionKind int
 
 const (
@@ -173,7 +240,11 @@ type sectionState struct {
 	Title        string
 	Subtitle     string
 	Kind         sectionKind
+	BaseItems    []contentItem
 	Items        []contentItem
+	BaseRows     []table.Row
+	RawText      string
+	FilterQuery  string
 	List         list.Model
 	Table        table.Model
 	Selected     int
@@ -224,6 +295,10 @@ type Model struct {
 	jobTable       table.Model
 	refreshPending int
 	wizard         wizardState
+	overlay        overlayState
+	history        []navigationSnapshot
+	historyIndex   int
+	historyPaused  bool
 }
 
 func NewModel(root string, client *backend.Client) Model {
@@ -264,12 +339,15 @@ func NewModel(root string, client *backend.Client) Model {
 			viewCluster:  newListSection(viewCluster, "Cluster", "Persisted semantic cluster summaries", "Loading cluster view..."),
 			viewStatus:   newTableSection(viewStatus, "Status", "Git worktree status table", "Loading repo status...", []table.Column{{Title: "Path", Width: 32}, {Title: "Index", Width: 8}, {Title: "Worktree", Width: 10}}),
 			viewChanges:  newTableSection(viewChanges, "Changes", "Git change summary table", "Loading repo changes...", []table.Column{{Title: "Path", Width: 30}, {Title: "+/-", Width: 12}, {Title: "State", Width: 18}}),
+			viewResults:  newListSection(viewResults, "Results", "Palette-driven query and operator output", "Run a palette command to load results."),
 		},
 	}
+	model.overlay = newOverlayState()
 	model.seedJobs()
 	model.refreshSidebar()
 	model.syncDetailViewport()
 	model.syncLogViewport(true)
+	model.recordNavigation()
 	return model
 }
 
@@ -331,6 +409,39 @@ func newWizardState() wizardState {
 	files.Prompt = "Files: "
 	return wizardState{
 		inputs: []textinput.Model{title, summary, files},
+	}
+}
+
+func newOverlayInput(prompt string, placeholder string) textinput.Model {
+	input := textinput.New()
+	input.Prompt = prompt
+	input.Placeholder = placeholder
+	return input
+}
+
+func newOverlayState() overlayState {
+	return overlayState{
+		Input:     newOverlayInput("> ", "Type to filter commands"),
+		Secondary: newOverlayInput("> ", ""),
+	}
+}
+
+func paletteCommands() []paletteCommand {
+	return []paletteCommand{
+		{ID: "open-status", Title: "Open status", Subtitle: "Jump to the git worktree status table", Action: "open-status"},
+		{ID: "open-changes", Title: "Open changes", Subtitle: "Jump to changed-file stats and ranges", Action: "open-changes"},
+		{ID: "exact-lookup", Title: "Exact lookup", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "search-related", Title: "Search related", Subtitle: "Run related discovery over prepared ranked results", Action: "search-related", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
+		{ID: "research", Title: "Research", Subtitle: "Build the broad explanation-backed research report", Action: "research", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "operator console architecture"},
+		{ID: "go-file", Title: "Go to file", Subtitle: "Find an exact file/path hit and open it in Results", Action: "go-file", JobID: "query", RequiresInput: true, InputLabel: "File query: ", InputPlaceholder: "cli/internal/ui/model.go"},
+		{ID: "go-symbol", Title: "Go to symbol", Subtitle: "Find an exact symbol hit and open it in Results", Action: "go-symbol", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "word-lookup", Title: "Word lookup", Subtitle: "Scan exact word hits in the prepared fast cache", Action: "word-lookup", JobID: "query", RequiresInput: true, InputLabel: "Word: ", InputPlaceholder: "watcher"},
+		{ID: "outline-file", Title: "Outline file", Subtitle: "Load the prepared file outline for one file", Action: "outline-file", JobID: "query", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "src/tools/query-intent.ts"},
+		{ID: "deps-file", Title: "Dependencies", Subtitle: "Load direct and reverse deps for one file", Action: "deps-file", JobID: "query", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "src/tools/query-intent.ts"},
+		{ID: "lint", Title: "Lint", Subtitle: "Run the native linter for the repo or one target path", Action: "lint", JobID: "lint", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "leave blank for full repo"},
+		{ID: "blast-radius", Title: "Blast radius", Subtitle: "Trace where one symbol is used across the repo", Action: "blast-radius", JobID: "query", RequiresInput: true, RequiresSecondary: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent", SecondaryLabel: "File context: ", SecondaryPlaceholder: "optional defining file"},
+		{ID: "checkpoint-detail", Title: "Checkpoint detail", Subtitle: "Save the selected detail content to a repo file", Action: "checkpoint-detail", JobID: "restore", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "notes/operator-snapshot.txt"},
+		{ID: "restore-point", Title: "Restore point", Subtitle: "Restore one recorded checkpoint by id", Action: "restore-point", JobID: "restore", RequiresInput: true, InputLabel: "Restore id: ", InputPlaceholder: "rp-..."},
 	}
 }
 
@@ -589,6 +700,322 @@ func (m *Model) setError(err error) {
 	m.appendLog("ERROR: " + err.Error())
 }
 
+func (m *Model) captureNavigationSnapshot() navigationSnapshot {
+	sectionSelect := make(map[string]int, len(m.sections))
+	sectionFilters := make(map[string]string, len(m.sections))
+	for id, section := range m.sections {
+		sectionSelect[id] = section.Selected
+		sectionFilters[id] = section.FilterQuery
+	}
+	return navigationSnapshot{
+		ActiveView:     m.activeView,
+		Focus:          m.focus,
+		SidebarIndex:   m.sidebarIndex,
+		SectionSelect:  sectionSelect,
+		SectionFilters: sectionFilters,
+	}
+}
+
+func sameNavigationSnapshot(left navigationSnapshot, right navigationSnapshot) bool {
+	if left.ActiveView != right.ActiveView || left.Focus != right.Focus || left.SidebarIndex != right.SidebarIndex {
+		return false
+	}
+	if len(left.SectionSelect) != len(right.SectionSelect) || len(left.SectionFilters) != len(right.SectionFilters) {
+		return false
+	}
+	for key, value := range left.SectionSelect {
+		if right.SectionSelect[key] != value {
+			return false
+		}
+	}
+	for key, value := range left.SectionFilters {
+		if right.SectionFilters[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Model) restoreNavigationSnapshot(snapshot navigationSnapshot) {
+	m.historyPaused = true
+	defer func() {
+		m.historyPaused = false
+	}()
+	m.activeView = snapshot.ActiveView
+	m.focus = snapshot.Focus
+	m.sidebarIndex = snapshot.SidebarIndex
+	for id, selected := range snapshot.SectionSelect {
+		section := m.sections[id]
+		if section == nil {
+			continue
+		}
+		section.Selected = selected
+	}
+	for id, filterQuery := range snapshot.SectionFilters {
+		section := m.sections[id]
+		if section == nil {
+			continue
+		}
+		section.FilterQuery = filterQuery
+		m.applySectionFilter(section)
+	}
+	m.refreshSidebar()
+	m.ensureSectionSelection(m.activeSection())
+	m.syncDetailViewport()
+}
+
+func (m *Model) recordNavigation() {
+	if m.historyPaused || m.overlay.Mode != overlayNone {
+		return
+	}
+	snapshot := m.captureNavigationSnapshot()
+	if len(m.history) > 0 && sameNavigationSnapshot(m.history[m.historyIndex], snapshot) {
+		return
+	}
+	if m.historyIndex < len(m.history)-1 {
+		m.history = append([]navigationSnapshot{}, m.history[:m.historyIndex+1]...)
+	}
+	m.history = append(m.history, snapshot)
+	m.historyIndex = len(m.history) - 1
+}
+
+func (m *Model) navigateHistory(delta int) {
+	if len(m.history) == 0 {
+		return
+	}
+	next := m.historyIndex + delta
+	if next < 0 || next >= len(m.history) {
+		return
+	}
+	m.historyIndex = next
+	m.restoreNavigationSnapshot(m.history[m.historyIndex])
+}
+
+func (m *Model) applySectionFilter(section *sectionState) {
+	if section == nil {
+		return
+	}
+	query := strings.ToLower(strings.TrimSpace(section.FilterQuery))
+	if query == "" {
+		section.Items = append([]contentItem{}, section.BaseItems...)
+		if section.Kind == sectionTable {
+			section.Table.SetRows(append([]table.Row{}, section.BaseRows...))
+		} else {
+			listItems := make([]list.Item, 0, len(section.Items))
+			for _, item := range section.Items {
+				listItems = append(listItems, contentListItem{item: item})
+			}
+			section.List.SetItems(listItems)
+		}
+		m.ensureSectionSelection(section)
+		return
+	}
+	filteredItems := make([]contentItem, 0, len(section.BaseItems))
+	filteredRows := make([]table.Row, 0, len(section.BaseRows))
+	for index, item := range section.BaseItems {
+		haystack := strings.ToLower(strings.Join([]string{item.Title, item.Summary, item.Detail, item.Badge}, "\n"))
+		if !strings.Contains(haystack, query) {
+			continue
+		}
+		filteredItems = append(filteredItems, item)
+		if section.Kind == sectionTable && index < len(section.BaseRows) {
+			filteredRows = append(filteredRows, section.BaseRows[index])
+		}
+	}
+	section.Items = filteredItems
+	if section.Kind == sectionTable {
+		section.Table.SetRows(filteredRows)
+	} else {
+		listItems := make([]list.Item, 0, len(filteredItems))
+		for _, item := range filteredItems {
+			listItems = append(listItems, contentListItem{item: item})
+		}
+		section.List.SetItems(listItems)
+	}
+	m.ensureSectionSelection(section)
+}
+
+func (m *Model) openHelpOverlay() {
+	m.overlay = newOverlayState()
+	m.overlay.Mode = overlayHelp
+	m.overlay.Title = "Help"
+	m.overlay.Subtitle = "Navigation, command, filter, export, and mouse bindings"
+	m.overlay.PreviousFocus = m.focus
+	m.focus = focusOverlay
+}
+
+func (m *Model) openPalette() {
+	m.overlay = newOverlayState()
+	m.overlay.Mode = overlayPalette
+	m.overlay.Title = "Command palette"
+	m.overlay.Subtitle = "Search commands, run backend actions, and jump to exact results"
+	m.overlay.PreviousFocus = m.focus
+	m.overlay.Commands = paletteCommands()
+	m.overlay.Input.Focus()
+	m.focus = focusOverlay
+}
+
+func (m *Model) openFilterOverlay() {
+	section := m.activeSection()
+	m.overlay = newOverlayState()
+	m.overlay.Mode = overlayFilter
+	m.overlay.Title = "Filter section"
+	m.overlay.Subtitle = fmt.Sprintf("Filter %s items in-place", section.Title)
+	m.overlay.PreviousFocus = m.focus
+	m.overlay.TargetSectionID = section.ID
+	m.overlay.Input = newOverlayInput("Filter: ", "type to narrow the current section")
+	m.overlay.Input.SetValue(section.FilterQuery)
+	m.overlay.Input.Focus()
+	m.focus = focusOverlay
+}
+
+func (m *Model) openPromptOverlay(command paletteCommand) {
+	m.overlay = newOverlayState()
+	m.overlay.Mode = overlayPrompt
+	m.overlay.Title = command.Title
+	m.overlay.Subtitle = command.Subtitle
+	m.overlay.Command = command
+	m.overlay.PreviousFocus = m.focus
+	m.overlay.Input = newOverlayInput(command.InputLabel, command.InputPlaceholder)
+	m.overlay.Input.Focus()
+	m.overlay.SecondaryEnabled = command.RequiresSecondary
+	if command.RequiresSecondary {
+		m.overlay.Secondary = newOverlayInput(command.SecondaryLabel, command.SecondaryPlaceholder)
+	}
+	m.focus = focusOverlay
+}
+
+func (m *Model) closeOverlay() {
+	previousFocus := m.overlay.PreviousFocus
+	m.overlay = newOverlayState()
+	if previousFocus == focusOverlay {
+		previousFocus = focusContent
+	}
+	m.focus = previousFocus
+	m.syncDetailViewport()
+}
+
+func (m *Model) filteredPaletteCommands() []paletteCommand {
+	commands := m.overlay.Commands
+	query := strings.ToLower(strings.TrimSpace(m.overlay.Input.Value()))
+	if query == "" {
+		return commands
+	}
+	filtered := make([]paletteCommand, 0, len(commands))
+	for _, command := range commands {
+		haystack := strings.ToLower(strings.Join([]string{command.Title, command.Subtitle, command.Action}, "\n"))
+		if strings.Contains(haystack, query) {
+			filtered = append(filtered, command)
+		}
+	}
+	return filtered
+}
+
+func (m *Model) activePaletteCommand() (paletteCommand, bool) {
+	commands := m.filteredPaletteCommands()
+	if len(commands) == 0 {
+		return paletteCommand{}, false
+	}
+	if m.overlay.Selected >= len(commands) {
+		m.overlay.Selected = len(commands) - 1
+	}
+	if m.overlay.Selected < 0 {
+		m.overlay.Selected = 0
+	}
+	return commands[m.overlay.Selected], true
+}
+
+func (m *Model) showResults(title string, subtitle string, items []contentItem, rawText string) {
+	section := m.sections[viewResults]
+	if section == nil {
+		return
+	}
+	section.Title = title
+	section.Subtitle = subtitle
+	section.EmptyMessage = "No results returned."
+	section.RawText = rawText
+	m.setListSectionItems(viewResults, items)
+	m.setActiveView(viewResults)
+	m.focus = focusContent
+	m.refreshSidebar()
+	m.recordNavigation()
+}
+
+func (m *Model) startOperatorJob(jobID string, phase string, message string, currentFile string) {
+	job := m.job(jobID)
+	job.State = "running"
+	job.Phase = phase
+	job.Message = message
+	job.CurrentFile = currentFile
+	job.ElapsedMs = 0
+	job.Percent = nil
+	job.LastUpdatedAt = time.Now()
+	m.refreshJobTable()
+}
+
+func (m *Model) finishOperatorJob(jobID string, state string, message string) {
+	job := m.job(jobID)
+	job.State = state
+	job.Message = message
+	job.LastUpdatedAt = time.Now()
+	if state == "completed" {
+		job.LastSuccessful = time.Now().Format(time.RFC3339)
+	}
+	m.refreshJobTable()
+}
+
+func runSearchCommandCmd(client *backend.Client, root string, query string, intent string, searchType string, title string, subtitle string) tea.Cmd {
+	return func() tea.Msg {
+		payload, err := client.Search(context.Background(), root, query, intent, searchType, 8)
+		if err != nil {
+			return commandLoadedMsg{jobID: "query", err: err}
+		}
+		return commandLoadedMsg{
+			jobID:      "query",
+			title:      title,
+			subtitle:   subtitle,
+			rawText:    payload.Text,
+			items:      buildSearchItems(payload),
+			logMessage: fmt.Sprintf("%s completed for %q", title, query),
+		}
+	}
+}
+
+func runTextCommandCmd(jobID string, title string, subtitle string, refreshData bool, loader func() (backend.TextPayload, error)) tea.Cmd {
+	return func() tea.Msg {
+		payload, err := loader()
+		if err != nil {
+			return commandLoadedMsg{jobID: jobID, err: err}
+		}
+		return commandLoadedMsg{
+			jobID:       jobID,
+			title:       title,
+			subtitle:    subtitle,
+			rawText:     payload.Text,
+			items:       buildTextFallbackItems(title, payload.Text),
+			logMessage:  title + " completed",
+			refreshData: refreshData,
+		}
+	}
+}
+
+func exportContentCmd(root string, name string, content string) tea.Cmd {
+	return func() tea.Msg {
+		if strings.TrimSpace(content) == "" {
+			return exportFinishedMsg{err: errors.New("no exportable content is selected")}
+		}
+		exportDir := filepath.Join(root, ".contextplus", "exports")
+		if err := os.MkdirAll(exportDir, 0o755); err != nil {
+			return exportFinishedMsg{err: err}
+		}
+		filePath := filepath.Join(exportDir, fmt.Sprintf("%s-%s.txt", time.Now().Format("20060102-150405"), slugify(name)))
+		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+			return exportFinishedMsg{err: err}
+		}
+		return exportFinishedMsg{path: filePath}
+	}
+}
+
 func (m *Model) refreshSidebar() {
 	watchLabel := "Enable watcher"
 	watchSubtitle := "Watch for file changes and queue refresh work"
@@ -623,6 +1050,7 @@ func (m *Model) refreshSidebar() {
 		{ID: viewCluster, Title: "Cluster", Subtitle: "Cluster and subsystem summaries"},
 		{ID: viewStatus, Title: "Status", Subtitle: "Git worktree status table"},
 		{ID: viewChanges, Title: "Changes", Subtitle: "Changed-file ranges and stats"},
+		{ID: viewResults, Title: "Results", Subtitle: "Palette query, lookup, lint, and restore output"},
 		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload backend snapshots", IsAction: true, Action: "refresh"},
 		{ID: "index", Title: indexLabel, Subtitle: indexSubtitle, IsAction: true, Action: "index"},
 		{ID: "retry-index", Title: "Retry last index", Subtitle: "Re-run the last index mode through the backend", IsAction: true, Action: "retry-index"},
@@ -630,6 +1058,8 @@ func (m *Model) refreshSidebar() {
 		{ID: "supersede-pending", Title: supersedeLabel, Subtitle: supersedeSubtitle, IsAction: true, Action: "supersede-pending"},
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
 		{ID: "hub-create", Title: "New hub", Subtitle: "Create a manual feature hub", IsAction: true, Action: "hub-create"},
+		{ID: "palette", Title: "Command palette", Subtitle: "Search backend actions, exact lookups, and exports", IsAction: true, Action: "palette"},
+		{ID: "help", Title: "Help", Subtitle: "Show keybindings, filters, exports, and mouse usage", IsAction: true, Action: "help"},
 	}
 	if m.sidebarIndex >= len(m.sidebar) {
 		m.sidebarIndex = max(0, len(m.sidebar)-1)
@@ -651,6 +1081,7 @@ func (m *Model) setActiveView(viewID string) {
 	m.activeView = viewID
 	m.ensureSectionSelection(m.activeSection())
 	m.syncDetailViewport()
+	m.recordNavigation()
 }
 
 func (m *Model) syncDetailViewport() {
@@ -697,13 +1128,8 @@ func (m *Model) setListSectionItems(kind string, items []contentItem) {
 	if section == nil {
 		return
 	}
-	section.Items = items
-	listItems := make([]list.Item, 0, len(items))
-	for _, item := range items {
-		listItems = append(listItems, contentListItem{item: item})
-	}
-	section.List.SetItems(listItems)
-	m.ensureSectionSelection(section)
+	section.BaseItems = append([]contentItem{}, items...)
+	m.applySectionFilter(section)
 }
 
 func (m *Model) setTableSectionRows(kind string, items []contentItem, rows []table.Row) {
@@ -711,9 +1137,9 @@ func (m *Model) setTableSectionRows(kind string, items []contentItem, rows []tab
 	if section == nil {
 		return
 	}
-	section.Items = items
-	section.Table.SetRows(rows)
-	m.ensureSectionSelection(section)
+	section.BaseItems = append([]contentItem{}, items...)
+	section.BaseRows = append([]table.Row{}, rows...)
+	m.applySectionFilter(section)
 }
 
 func (m Model) useStackedLayout() bool {
@@ -838,6 +1264,10 @@ func (m *Model) refreshOverviewSection() {
 }
 
 func (m *Model) setTextSection(kind string, text string) {
+	section := m.sections[kind]
+	if section != nil {
+		section.RawText = text
+	}
 	switch kind {
 	case viewTree:
 		m.setListSectionItems(kind, buildTreeItems(text))
@@ -852,6 +1282,10 @@ func (m *Model) setTextSection(kind string, text string) {
 
 func (m *Model) setRestorePoints(points []backend.RestorePoint) {
 	m.restorePoints = points
+	section := m.sections[viewRestore]
+	if section != nil {
+		section.RawText = renderRestorePoints(points)
+	}
 	m.setListSectionItems(viewRestore, buildRestoreItems(points))
 }
 
@@ -860,6 +1294,12 @@ func (m *Model) setStatusSummary(summary backend.RepoStatusSummary) {
 	section := m.sections[viewStatus]
 	if section != nil {
 		section.EmptyMessage = "Worktree clean."
+		section.RawText = strings.TrimSpace(strings.Join([]string{
+			fmt.Sprintf("Branch: %s", summary.Branch),
+			fmt.Sprintf("Staged: %d", summary.StagedCount),
+			fmt.Sprintf("Unstaged: %d", summary.UnstagedCount),
+			fmt.Sprintf("Untracked: %d", summary.UntrackedCount),
+		}, "\n"))
 	}
 	m.setTableSectionRows(viewStatus, items, rows)
 }
@@ -869,6 +1309,7 @@ func (m *Model) setChangesSummary(summary backend.RepoChangesSummary) {
 	section := m.sections[viewChanges]
 	if section != nil {
 		section.EmptyMessage = "No changed files."
+		section.RawText = fmt.Sprintf("Changed files: %d\nStaged files: %d\nUnstaged files: %d\nUntracked files: %d", summary.ChangedFiles, summary.StagedFiles, summary.UnstagedFiles, summary.UntrackedFiles)
 	}
 	m.setTableSectionRows(viewChanges, items, rows)
 }
@@ -885,6 +1326,7 @@ func (m *Model) moveSidebar(delta int) {
 		next = 0
 	}
 	m.sidebarIndex = next
+	m.recordNavigation()
 }
 
 func (m *Model) moveContent(delta int) {
@@ -902,9 +1344,13 @@ func (m *Model) moveContent(delta int) {
 	section.Selected = next
 	m.ensureSectionSelection(section)
 	m.syncDetailViewport()
+	m.recordNavigation()
 }
 
 func (m *Model) cycleFocus(delta int) {
+	if m.overlay.Mode != overlayNone {
+		return
+	}
 	order := []int{focusSidebar, focusContent, focusDetail, focusJobs, focusLogs}
 	if m.wizard.active {
 		order = append(order, focusWizard)
@@ -924,6 +1370,7 @@ func (m *Model) cycleFocus(delta int) {
 		next = 0
 	}
 	m.focus = order[next]
+	m.recordNavigation()
 }
 
 func (m *Model) executeSidebarSelection() tea.Cmd {
@@ -934,6 +1381,7 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 	if !entry.IsAction {
 		m.setActiveView(entry.ID)
 		m.focus = focusContent
+		m.recordNavigation()
 		return nil
 	}
 	switch entry.Action {
@@ -1003,6 +1451,13 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 		m.focus = focusWizard
 		m.setActiveView(viewHubs)
 		m.syncDetailViewport()
+		m.recordNavigation()
+		return nil
+	case "palette":
+		m.openPalette()
+		return nil
+	case "help":
+		m.openHelpOverlay()
 		return nil
 	default:
 		return nil
@@ -1021,6 +1476,324 @@ func (m *Model) toggleWatcher() tea.Cmd {
 		m.appendLog("watcher enabled")
 	} else {
 		m.appendLog("watcher disabled")
+	}
+	return nil
+}
+
+func (m *Model) exportActiveContent() tea.Cmd {
+	name := "detail"
+	content := m.buildDetailContent()
+	switch {
+	case m.focus == focusLogs:
+		name = "logs"
+		content = strings.Join(m.logs, "\n")
+	case m.activeView == viewResults:
+		name = "results"
+		if section := m.sections[viewResults]; section != nil && strings.TrimSpace(section.RawText) != "" {
+			content = section.RawText
+		}
+	case m.focus == focusContent:
+		name = m.activeView
+		if section := m.activeSection(); section != nil && strings.TrimSpace(section.RawText) != "" {
+			content = section.RawText
+		}
+	}
+	return exportContentCmd(m.root, name, content)
+}
+
+func (m *Model) executePromptCommand(command paletteCommand, primary string, secondary string) tea.Cmd {
+	primary = strings.TrimSpace(primary)
+	secondary = strings.TrimSpace(secondary)
+	if command.RequiresInput && primary == "" && command.Action != "lint" {
+		m.setError(fmt.Errorf("%s requires input", command.Title))
+		return nil
+	}
+	switch command.Action {
+	case "exact-lookup":
+		m.startOperatorJob("query", "exact", "exact lookup requested", primary)
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "mixed", "Exact lookup", fmt.Sprintf("Exact mixed lookup for %q", primary))
+	case "search-related":
+		m.startOperatorJob("query", "related", "related search requested", primary)
+		return runSearchCommandCmd(m.client, m.root, primary, "related", "mixed", "Related search", fmt.Sprintf("Related ranked search for %q", primary))
+	case "research":
+		m.startOperatorJob("query", "research", "research requested", primary)
+		return runTextCommandCmd("query", "Research", fmt.Sprintf("Broad research report for %q", primary), false, func() (backend.TextPayload, error) {
+			return m.client.Research(context.Background(), m.root, primary)
+		})
+	case "go-file":
+		m.startOperatorJob("query", "go-file", "file lookup requested", primary)
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "file", "Go to file", fmt.Sprintf("Exact file lookup for %q", primary))
+	case "go-symbol":
+		m.startOperatorJob("query", "go-symbol", "symbol lookup requested", primary)
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "symbol", "Go to symbol", fmt.Sprintf("Exact symbol lookup for %q", primary))
+	case "word-lookup":
+		m.startOperatorJob("query", "word", "word lookup requested", primary)
+		return runTextCommandCmd("query", "Word lookup", fmt.Sprintf("Word hits for %q", primary), false, func() (backend.TextPayload, error) {
+			return m.client.Word(context.Background(), m.root, primary, 8)
+		})
+	case "outline-file":
+		m.startOperatorJob("query", "outline", "outline requested", primary)
+		return runTextCommandCmd("query", "Outline", fmt.Sprintf("Prepared outline for %s", primary), false, func() (backend.TextPayload, error) {
+			return m.client.Outline(context.Background(), m.root, primary)
+		})
+	case "deps-file":
+		m.startOperatorJob("query", "deps", "dependency info requested", primary)
+		return runTextCommandCmd("query", "Dependencies", fmt.Sprintf("Dependency graph for %s", primary), false, func() (backend.TextPayload, error) {
+			return m.client.Deps(context.Background(), m.root, primary)
+		})
+	case "lint":
+		m.startOperatorJob("lint", "lint", "lint requested", formatBlankAsNone(primary))
+		return runTextCommandCmd("lint", "Lint", fmt.Sprintf("Native lint report for %s", formatBlankAsNone(primary)), false, func() (backend.TextPayload, error) {
+			return m.client.Lint(context.Background(), m.root, primary)
+		})
+	case "blast-radius":
+		m.startOperatorJob("query", "blast-radius", "blast radius requested", primary)
+		return runTextCommandCmd("query", "Blast radius", fmt.Sprintf("Blast radius for %s", primary), false, func() (backend.TextPayload, error) {
+			return m.client.BlastRadius(context.Background(), m.root, primary, secondary)
+		})
+	case "checkpoint-detail":
+		detailContent := strings.TrimSpace(m.buildDetailContent())
+		if detailContent == "" {
+			m.setError(errors.New("no detail content is available to checkpoint"))
+			return nil
+		}
+		m.startOperatorJob("restore", "checkpoint", "checkpoint requested", primary)
+		return runTextCommandCmd("restore", "Checkpoint", fmt.Sprintf("Checkpointed detail into %s", primary), true, func() (backend.TextPayload, error) {
+			return m.client.Checkpoint(context.Background(), m.root, primary, detailContent)
+		})
+	case "restore-point":
+		m.startOperatorJob("restore", "restore", "restore requested", primary)
+		return runTextCommandCmd("restore", "Restore", fmt.Sprintf("Restored point %s", primary), true, func() (backend.TextPayload, error) {
+			return m.client.Restore(context.Background(), m.root, primary)
+		})
+	default:
+		return nil
+	}
+}
+
+func (m *Model) submitPaletteSelection() tea.Cmd {
+	command, ok := m.activePaletteCommand()
+	if !ok {
+		m.setError(errors.New("no palette command matches the current filter"))
+		return nil
+	}
+	m.closeOverlay()
+	if command.RequiresInput {
+		m.openPromptOverlay(command)
+		return nil
+	}
+	switch command.Action {
+	case "open-status":
+		m.setActiveView(viewStatus)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-changes":
+		m.setActiveView(viewChanges)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (m *Model) updateOverlay(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.overlay.Mode {
+	case overlayHelp:
+		switch key.String() {
+		case "esc", "?", "enter":
+			m.closeOverlay()
+		}
+		return m, nil
+	case overlayPalette:
+		switch key.String() {
+		case "esc":
+			m.closeOverlay()
+			return m, nil
+		case "up", "k":
+			m.overlay.Selected--
+			if m.overlay.Selected < 0 {
+				m.overlay.Selected = max(0, len(m.filteredPaletteCommands())-1)
+			}
+			return m, nil
+		case "down", "j":
+			m.overlay.Selected++
+			if commands := m.filteredPaletteCommands(); len(commands) > 0 && m.overlay.Selected >= len(commands) {
+				m.overlay.Selected = 0
+			}
+			return m, nil
+		case "enter":
+			return m, m.submitPaletteSelection()
+		default:
+			var cmd tea.Cmd
+			m.overlay.Input, cmd = m.overlay.Input.Update(key)
+			m.overlay.Selected = 0
+			return m, cmd
+		}
+	case overlayFilter:
+		switch key.String() {
+		case "esc":
+			m.closeOverlay()
+			return m, nil
+		case "enter":
+			section := m.sections[m.overlay.TargetSectionID]
+			if section == nil {
+				m.closeOverlay()
+				return m, nil
+			}
+			section.FilterQuery = strings.TrimSpace(m.overlay.Input.Value())
+			m.applySectionFilter(section)
+			m.closeOverlay()
+			m.syncDetailViewport()
+			m.recordNavigation()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.overlay.Input, cmd = m.overlay.Input.Update(key)
+			return m, cmd
+		}
+	case overlayPrompt:
+		switch key.String() {
+		case "esc":
+			m.closeOverlay()
+			return m, nil
+		case "shift+tab":
+			if m.overlay.SecondaryEnabled && m.overlay.Secondary.Focused() {
+				m.overlay.Secondary.Blur()
+				m.overlay.Input.Focus()
+			}
+			return m, nil
+		case "tab":
+			if m.overlay.SecondaryEnabled && m.overlay.Input.Focused() {
+				m.overlay.Input.Blur()
+				m.overlay.Secondary.Focus()
+			}
+			return m, nil
+		case "enter":
+			if m.overlay.SecondaryEnabled && m.overlay.Input.Focused() {
+				m.overlay.Input.Blur()
+				m.overlay.Secondary.Focus()
+				return m, nil
+			}
+			command := m.overlay.Command
+			primary := m.overlay.Input.Value()
+			secondary := m.overlay.Secondary.Value()
+			m.closeOverlay()
+			return m, m.executePromptCommand(command, primary, secondary)
+		default:
+			if m.overlay.SecondaryEnabled && m.overlay.Secondary.Focused() {
+				var cmd tea.Cmd
+				m.overlay.Secondary, cmd = m.overlay.Secondary.Update(key)
+				return m, cmd
+			}
+			var cmd tea.Cmd
+			m.overlay.Input, cmd = m.overlay.Input.Update(key)
+			return m, cmd
+		}
+	default:
+		return m, nil
+	}
+}
+
+func (m *Model) handleMouse(message tea.MouseMsg) tea.Cmd {
+	switch message.Action {
+	case tea.MouseActionRelease:
+		return nil
+	case tea.MouseActionPress:
+		if message.Button == tea.MouseButtonWheelUp {
+			if m.focus == focusLogs {
+				m.logViewport.LineUp(3)
+				return nil
+			}
+			if m.focus == focusDetail {
+				m.detail.LineUp(3)
+				return nil
+			}
+			if m.focus == focusJobs {
+				m.jobTable.SetCursor(max(0, m.jobTable.Cursor()-1))
+				return nil
+			}
+			if m.focus == focusContent {
+				m.moveContent(-1)
+				return nil
+			}
+		}
+		if message.Button == tea.MouseButtonWheelDown {
+			if m.focus == focusLogs {
+				m.logViewport.LineDown(3)
+				return nil
+			}
+			if m.focus == focusDetail {
+				m.detail.LineDown(3)
+				return nil
+			}
+			if m.focus == focusJobs {
+				m.jobTable.SetCursor(min(max(0, len(m.jobOrder)-1), m.jobTable.Cursor()+1))
+				return nil
+			}
+			if m.focus == focusContent {
+				m.moveContent(1)
+				return nil
+			}
+		}
+		if message.Button != tea.MouseButtonLeft {
+			return nil
+		}
+		headerHeight := 8
+		y := message.Y
+		x := message.X
+		if y < headerHeight {
+			return nil
+		}
+		relativeY := y - headerHeight
+		if m.useStackedLayout() {
+			sectionHeights := []struct {
+				focus  int
+				height int
+			}{
+				{focusSidebar, max(8, 0)},
+				{focusContent, max(12, m.height/3)},
+				{focusDetail, max(10, m.height/3)},
+				{focusJobs, max(minJobsHeight, m.height/5)},
+				{focusLogs, max(minJobsHeight, m.height/5)},
+			}
+			accumulated := 0
+			for _, pane := range sectionHeights {
+				accumulated += pane.height + 1
+				if relativeY <= accumulated {
+					m.focus = pane.focus
+					m.recordNavigation()
+					return nil
+				}
+			}
+			return nil
+		}
+		jobsHeight := max(minJobsHeight, m.height/4)
+		mainHeight := max(16, m.height-jobsHeight-8)
+		sidebarWidth := max(minSidebarWidth, m.width/5)
+		contentWidth := max(minContentWidth, m.width/3)
+		if relativeY > mainHeight {
+			if x <= max(minJobsWidth, m.width/2) {
+				m.focus = focusJobs
+			} else {
+				m.focus = focusLogs
+			}
+			m.recordNavigation()
+			return nil
+		}
+		if x <= sidebarWidth {
+			m.focus = focusSidebar
+			entryIndex := max(0, (relativeY-2)/2)
+			if entryIndex < len(m.sidebar) {
+				m.sidebarIndex = entryIndex
+			}
+		} else if x <= sidebarWidth+contentWidth {
+			m.focus = focusContent
+		} else {
+			m.focus = focusDetail
+		}
+		m.recordNavigation()
 	}
 	return nil
 }
@@ -1120,6 +1893,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focus = focusSidebar
 		m.setActiveView(viewHubs)
 		return m, tea.Batch(loadHubsCmd(m.client, m.root), loadDoctorCmd(m.client, m.root))
+	case commandLoadedMsg:
+		if message.err != nil {
+			m.finishOperatorJob(message.jobID, "failed", message.err.Error())
+			m.setError(message.err)
+			return m, nil
+		}
+		m.finishOperatorJob(message.jobID, "completed", message.logMessage)
+		m.showResults(message.title, message.subtitle, message.items, message.rawText)
+		m.appendLog(message.logMessage)
+		m.syncDetailViewport()
+		if message.refreshData {
+			return m, tea.Batch(refreshAllCmd(m.client, m.root), loadRestorePointsCmd(m.client, m.root))
+		}
+		return m, nil
+	case exportFinishedMsg:
+		if message.err != nil {
+			m.setError(message.err)
+			return m, nil
+		}
+		m.appendLog("exported view to " + message.path)
+		return m, nil
 	case backendEventMsg:
 		m.backendOnline = message.event.Kind != "disconnect"
 		switch message.event.Kind {
@@ -1172,13 +1966,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshOverviewSection()
 		m.syncDetailViewport()
 		return m, waitForBackendEventCmd(m.client.Events())
+	case tea.MouseMsg:
+		return m, m.handleMouse(message)
 	case tea.KeyMsg:
+		if m.overlay.Mode != overlayNone {
+			return m.updateOverlay(message)
+		}
 		if m.wizard.active && m.focus == focusWizard {
 			return m.updateWizard(message)
 		}
 		switch message.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "ctrl+p", ":":
+			m.openPalette()
+			return m, nil
+		case "?":
+			m.openHelpOverlay()
+			return m, nil
+		case "/":
+			m.openFilterOverlay()
+			return m, nil
+		case "e":
+			return m, m.exportActiveContent()
+		case "b":
+			m.navigateHistory(-1)
+			return m, nil
+		case "f":
+			m.navigateHistory(1)
+			return m, nil
 		case "shift+tab":
 			m.cycleFocus(-1)
 			return m, nil
@@ -1193,6 +2009,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.focus == focusLogs {
 				m.focus = focusJobs
 			}
+			m.recordNavigation()
 			return m, nil
 		case "right":
 			if m.focus == focusSidebar {
@@ -1202,6 +2019,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.focus == focusJobs {
 				m.focus = focusLogs
 			}
+			m.recordNavigation()
 			return m, nil
 		case "up", "k":
 			if m.focus == focusSidebar {
@@ -1214,6 +2032,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == focusJobs {
 				m.jobTable.SetCursor(max(0, m.jobTable.Cursor()-1))
+				m.recordNavigation()
 				return m, nil
 			}
 		case "down", "j":
@@ -1228,6 +2047,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == focusJobs {
 				maxCursor := max(0, len(m.jobOrder)-1)
 				m.jobTable.SetCursor(min(maxCursor, m.jobTable.Cursor()+1))
+				m.recordNavigation()
 				return m, nil
 			}
 		case "enter":
@@ -1236,6 +2056,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == focusContent {
 				m.focus = focusDetail
+				m.recordNavigation()
 				return m, nil
 			}
 		case "x":
@@ -1285,6 +2106,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "7":
 			m.setActiveView(viewChanges)
+			m.focus = focusContent
+			return m, nil
+		case "8":
+			m.setActiveView(viewResults)
 			m.focus = focusContent
 			return m, nil
 		}
@@ -1391,7 +2216,7 @@ func (m Model) renderWizardDetail() string {
 
 func (m Model) renderHeader() string {
 	magician := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(magicianFrames[m.magicianFrame])
-	subtitle := "Operator console with navigation, detail, and job layers"
+	subtitle := "Operator console with navigation history, command palette, and export layers"
 	if m.useStackedLayout() {
 		subtitle = "Stacked operator console for narrow terminals"
 	}
@@ -1441,7 +2266,7 @@ func (m *Model) renderContentPanel(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(section.Title, m.focus == focusContent),
 		subtitleStyle.Render(section.Subtitle),
-		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d", selectedCountLabel(section.Selected, len(section.Items)), max(1, len(section.Items)))),
+		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d | filter=%s", selectedCountLabel(section.Selected, len(section.Items)), max(1, len(section.Items)), formatBlankAsNone(section.FilterQuery))),
 		"",
 	}
 	if len(section.Items) == 0 {
@@ -1490,7 +2315,7 @@ func (m Model) renderDetailPanel(width int, height int) string {
 	m.detail.SetContent(m.buildDetailContent())
 	body := []string{
 		renderPaneTitle("Detail", m.focus == focusDetail || m.focus == focusWizard),
-		subtitleStyle.Render("Preview and operator context"),
+		subtitleStyle.Render("Preview, export target, and command context"),
 		"",
 		m.detail.View(),
 	}
@@ -1566,14 +2391,81 @@ func (m Model) renderStatusLine() string {
 	if m.doctorLoaded {
 		generation = fmt.Sprintf("%d", m.doctor.Serving.ActiveGeneration)
 	}
+	historyState := "0/0"
+	if len(m.history) > 0 {
+		historyState = fmt.Sprintf("%d/%d", m.historyIndex+1, len(m.history))
+	}
 	status := strings.Join([]string{
 		"watcher: " + watcherState,
 		"stage: " + stage,
 		"backend: " + backendState,
 		"repo: " + truncate(m.root, max(24, m.width/3)),
 		"generation: " + generation,
+		"history: " + historyState,
 	}, " | ")
 	return statusLineStyle.Width(max(0, m.width-2)).Render(status)
+}
+
+func (m Model) renderOverlayCard(width int) string {
+	lines := []string{
+		renderPaneTitle(m.overlay.Title, true),
+		subtitleStyle.Render(m.overlay.Subtitle),
+		"",
+	}
+	switch m.overlay.Mode {
+	case overlayHelp:
+		lines = append(lines,
+			"Navigation",
+			"  Tab / Shift+Tab move focus across panes",
+			"  Up/Down move the selected row",
+			"  Enter opens detail from the content pane",
+			"  b / f walk back and forward through navigation history",
+			"",
+			"Commands",
+			"  : or Ctrl+P opens the command palette",
+			"  1-8 jump directly to overview, tree, hubs, restore, cluster, status, changes, and results",
+			"  i/t/x/s/r/w keep the existing index, retry, cancel, supersede, refresh, and watcher actions",
+			"",
+			"Filters and export",
+			"  / opens the current-section filter box",
+			"  e exports logs, results, or the selected detail view into .contextplus/exports/",
+			"",
+			"Mouse",
+			"  left-click focuses a pane and sidebar row",
+			"  wheel scrolls logs, detail, jobs, and content lists",
+		)
+	case overlayPalette:
+		lines = append(lines, m.overlay.Input.View(), "")
+		commands := m.filteredPaletteCommands()
+		if len(commands) == 0 {
+			lines = append(lines, "No commands match the current filter.")
+			break
+		}
+		windowSize := max(6, min(14, len(commands)))
+		start, end := visibleRange(len(commands), m.overlay.Selected, windowSize)
+		for index := start; index < end; index++ {
+			command := commands[index]
+			prefix := "  "
+			style := contentIdle
+			if index == m.overlay.Selected {
+				prefix = "> "
+				style = contentSelected
+			}
+			lines = append(lines, style.Render(prefix+command.Title))
+			lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
+		}
+	case overlayFilter:
+		lines = append(lines, m.overlay.Input.View())
+	case overlayPrompt:
+		lines = append(lines, m.overlay.Input.View())
+		if m.overlay.SecondaryEnabled {
+			lines = append(lines, m.overlay.Secondary.View())
+		}
+	}
+	if strings.TrimSpace(m.overlay.Message) != "" {
+		lines = append(lines, "", m.overlay.Message)
+	}
+	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) View() string {
@@ -1605,10 +2497,21 @@ func (m Model) View() string {
 		bottom := lipgloss.JoinHorizontal(lipgloss.Top, jobs, logs)
 		body = lipgloss.JoinVertical(lipgloss.Left, top, bottom)
 	}
+	if m.overlay.Mode != overlayNone {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, "", m.renderOverlayCard(max(48, m.width-4)))
+	}
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Up/Down move | Tab focus | Enter select/action | i index | t retry | x cancel | s supersede | r refresh | w watcher | n new hub | q quit")
+	footer := footerStyle.Render("Up/Down move | Tab focus | Enter detail/action | : palette | / filter | b/f history | e export | ? help | q quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
+	} else if m.overlay.Mode == overlayPalette {
+		footer = footerStyle.Render("Palette: type to filter | Up/Down select | Enter run | Esc close")
+	} else if m.overlay.Mode == overlayPrompt {
+		footer = footerStyle.Render("Prompt: Enter submit | Tab move fields | Esc cancel")
+	} else if m.overlay.Mode == overlayFilter {
+		footer = footerStyle.Render("Filter: type to narrow current section | Enter apply | Esc cancel")
+	} else if m.overlay.Mode == overlayHelp {
+		footer = footerStyle.Render("Help: Enter or Esc closes | mouse click focuses panes | wheel scrolls active panes")
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -1812,6 +2715,17 @@ func buildBlockItems(prefix string, text string) []contentItem {
 		})
 	}
 	return items
+}
+
+func renderRestorePoints(points []backend.RestorePoint) string {
+	if len(points) == 0 {
+		return "Restore points (0)\nNo restore points."
+	}
+	lines := []string{fmt.Sprintf("Restore points (%d)", len(points))}
+	for _, point := range points {
+		lines = append(lines, fmt.Sprintf("- %s | %d | %s", point.ID, point.Timestamp, point.Message))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildRestoreItems(points []backend.RestorePoint) []contentItem {
@@ -2204,6 +3118,17 @@ func titleFromID(value string) string {
 		parts[index] = strings.ToUpper(part[:1]) + part[1:]
 	}
 	return strings.Join(parts, " ")
+}
+
+func slugify(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer(" ", "-", "/", "-", "\\", "-", ":", "-", "_", "-")
+	value = replacer.Replace(value)
+	value = strings.Trim(value, "-")
+	if value == "" {
+		return "export"
+	}
+	return value
 }
 
 func jobStateLabel(job *jobState) string {

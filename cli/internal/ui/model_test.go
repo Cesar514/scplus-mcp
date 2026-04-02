@@ -1,12 +1,15 @@
 // Regression coverage for the human CLI operator console.
-// FEATURE: verifies doctor output, pane layout, status lines, and overview navigation.
+// FEATURE: verifies palette, filters, history, exports, and operator layout behavior.
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"contextplus/cli/internal/backend"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
@@ -123,11 +126,12 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Operator console with navigation, detail, and job layers",
+		"Operator console with navigation history, command palette, and export layers",
 		"Navigation",
 		"Overview",
 		"Status",
 		"Changes",
+		"Results",
 		"Detail",
 		"Jobs",
 		"Logs",
@@ -142,6 +146,7 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"backend: connected",
 		"repo: /tmp/contextplus",
 		"generation: 7",
+		"history: 1/1",
 		"Index",
 		"running",
 		"62",
@@ -402,5 +407,131 @@ func TestBuildSearchItemsCoversExactAndRelatedResults(t *testing.T) {
 		if !found {
 			t.Fatalf("expected badge %q in search items: %#v", badge, items)
 		}
+	}
+}
+
+func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 140
+	model.height = 34
+	model.openPalette()
+
+	rendered := model.View()
+	for _, needle := range []string{
+		"Command palette",
+		"Exact lookup",
+		"Go to file",
+		"Go to symbol",
+		"Lint",
+		"Blast radius",
+		"Checkpoint detail",
+		"Restore point",
+		"Palette: type to filter | Up/Down select | Enter run | Esc close",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in palette overlay: %s", needle, rendered)
+		}
+	}
+}
+
+func TestNavigationHistoryTracksViewTransitions(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.setActiveView(viewTree)
+	model.focus = focusContent
+	model.recordNavigation()
+	model.setActiveView(viewStatus)
+	model.focus = focusDetail
+	model.recordNavigation()
+
+	if got := len(model.history); got < 3 {
+		t.Fatalf("expected navigation history to record transitions, got %d entries", got)
+	}
+	model.navigateHistory(-1)
+	if model.activeView != viewStatus {
+		t.Fatalf("expected first history step back to remain on the last status view snapshot, got %s", model.activeView)
+	}
+	model.navigateHistory(-1)
+	if model.activeView != viewTree {
+		t.Fatalf("expected second history step back to return to tree view, got %s", model.activeView)
+	}
+	model.navigateHistory(1)
+	model.navigateHistory(1)
+	if model.activeView != viewStatus {
+		t.Fatalf("expected history forward to return to status view, got %s", model.activeView)
+	}
+}
+
+func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 24
+	model.doctorLoaded = true
+	model.doctor = backend.DoctorReport{
+		Root: "/tmp/contextplus",
+		RepoStatus: backend.RepoStatusSummary{
+			Branch:         "main",
+			UnstagedCount:  1,
+			UntrackedCount: 0,
+		},
+	}
+	model.refreshOverviewSection()
+	model.openFilterOverlay()
+	model.overlay.Input.SetValue("sched")
+	updated, cmd := model.updateOverlay(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected filter overlay to apply synchronously")
+	}
+	filtered := updated.(*Model)
+	rendered := filtered.renderContentPanel(72, 16)
+	if !strings.Contains(rendered, "filter=sched") {
+		t.Fatalf("expected rendered content to show active filter: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Scheduler") {
+		t.Fatalf("expected scheduler row to remain visible after filtering: %s", rendered)
+	}
+	if strings.Contains(rendered, "Repository") {
+		t.Fatalf("expected filtered overview to hide non-matching rows: %s", rendered)
+	}
+}
+
+func TestExportActionWritesResultsToExportsDirectory(t *testing.T) {
+	root := t.TempDir()
+	model := NewModel(root, nil)
+	model.width = 120
+	model.height = 24
+	model.showResults("Results", "Exact file lookup", []contentItem{
+		{ID: "1", Title: "cli/internal/ui/model.go", Summary: "Exact path hit", Detail: "Detail line", Badge: "exact-path"},
+	}, "Exact file matches for cli/internal/ui/model.go")
+
+	cmd := model.exportActiveContent()
+	msg := cmd()
+	exported, ok := msg.(exportFinishedMsg)
+	if !ok {
+		t.Fatalf("expected exportFinishedMsg, got %T", msg)
+	}
+	if exported.err != nil {
+		t.Fatalf("expected export to succeed: %v", exported.err)
+	}
+	content, err := os.ReadFile(exported.path)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	if !strings.Contains(string(content), "Exact file matches for cli/internal/ui/model.go") {
+		t.Fatalf("expected exported file to contain result text: %s", string(content))
+	}
+	if filepath.Dir(exported.path) != filepath.Join(root, ".contextplus", "exports") {
+		t.Fatalf("expected export path under .contextplus/exports, got %s", exported.path)
+	}
+}
+
+func TestMousePressFocusesJobsPane(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 160
+	model.height = 40
+	if cmd := model.handleMouse(tea.MouseMsg{X: 10, Y: 34, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}); cmd != nil {
+		t.Fatalf("expected mouse focus change without extra command")
+	}
+	if model.focus != focusJobs {
+		t.Fatalf("expected mouse click in the bottom-left pane to focus jobs, got %d", model.focus)
 	}
 }

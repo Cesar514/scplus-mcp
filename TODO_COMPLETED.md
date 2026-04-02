@@ -2,6 +2,16 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 26 by adding a real navigation, search, and command surface to `contextplus-ui`
+- [x] add back and forward navigation history over active view, focused pane, and selected section row state instead of relying only on direct tab or pane switching
+- [x] add a command palette bound to `:` and `Ctrl+P` that exposes exact lookup, related search, research, go-to file, go-to symbol, lint, blast-radius, checkpoint-detail, restore-point, status, and changes workflows
+- [x] add in-UI filter boxes plus palette-driven go-to file and go-to symbol flows that land in a typed Results section
+- [x] add a help overlay bound to `?` that documents navigation, command, filtering, export, and mouse controls
+- [x] add export actions for logs, query results, and selected detail views under `.contextplus/exports/`
+- [x] add mouse focus and wheel-scrolling support once the typed pane model exists
+- [x] verify v1.5 phase 26 directly with focused Go UI coverage for palette, filters, history, exports, and mouse handling, the full Go CLI test suite, the built `contextplus-ui` binary, direct snapshot inspection on this repository, and touched-file Context+ lint checks
+- [x] commit the verified v1.5 phase 26 work
+
 - [x] finish v1.5 phase 25 by replacing the bottom-pane string summary with a real jobs-and-logs operator surface in `contextplus-ui`
 - [x] replace the fixed 12-line `appendLog()` buffer with a scrollable log viewport fed by the persistent backend session
 - [x] add structured job rows for index, refresh, restore, lint, and query task slots instead of relying on ad hoc log-only state

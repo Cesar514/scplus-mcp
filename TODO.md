@@ -18,15 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 26: Navigation, Search, And Command Surface
-
-- [ ] Add a real navigation model with focused pane, selected row, open detail, and back or forward history instead of only tab switching.
-- [ ] Add a command palette that exposes every backend action the operator needs, including search, exact lookup, lint, blast radius, checkpoint, restore, changes, and status.
-- [ ] Add in-UI search and filter boxes, plus “go to file” and “go to symbol” workflows.
-- [ ] Add a help overlay bound to `?` that shows scrolling keys, command keys, filtering keys, and action keys.
-- [ ] Add copy or export actions for logs, query results, and selected detail views.
-- [ ] Add mouse support once the typed list and pane model exists.
-
 ## Phase 27: Expose The Full Engine In The TUI
 
 - [ ] Stop limiting the human CLI backend to `doctor`, `tree`, `hubs`, `cluster`, `restore-points`, and `index`, because this keeps the UI strategically thin relative to the engine.

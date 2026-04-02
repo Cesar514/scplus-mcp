@@ -641,6 +641,101 @@ func (c *Client) Search(ctx context.Context, root string, query string, intent s
 	return payload, err
 }
 
+func (c *Client) Symbol(ctx context.Context, root string, query string, topK int) (TextPayload, error) {
+	var payload TextPayload
+	args := map[string]any{
+		"root":  root,
+		"query": query,
+	}
+	if topK > 0 {
+		args["topK"] = topK
+	}
+	err := c.call(ctx, "symbol", args, &payload)
+	return payload, err
+}
+
+func (c *Client) Word(ctx context.Context, root string, query string, topK int) (TextPayload, error) {
+	var payload TextPayload
+	args := map[string]any{
+		"root":  root,
+		"query": query,
+	}
+	if topK > 0 {
+		args["topK"] = topK
+	}
+	err := c.call(ctx, "word", args, &payload)
+	return payload, err
+}
+
+func (c *Client) Outline(ctx context.Context, root string, filePath string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "outline", map[string]any{
+		"root":     root,
+		"filePath": filePath,
+	}, &payload)
+	return payload, err
+}
+
+func (c *Client) Deps(ctx context.Context, root string, target string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "deps", map[string]any{
+		"root":   root,
+		"target": target,
+	}, &payload)
+	return payload, err
+}
+
+func (c *Client) Research(ctx context.Context, root string, query string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "research", map[string]any{
+		"root":  root,
+		"query": query,
+	}, &payload)
+	return payload, err
+}
+
+func (c *Client) Lint(ctx context.Context, root string, targetPath string) (TextPayload, error) {
+	var payload TextPayload
+	args := map[string]any{"root": root}
+	if targetPath != "" {
+		args["targetPath"] = targetPath
+	}
+	err := c.call(ctx, "lint", args, &payload)
+	return payload, err
+}
+
+func (c *Client) BlastRadius(ctx context.Context, root string, symbolName string, fileContext string) (TextPayload, error) {
+	var payload TextPayload
+	args := map[string]any{
+		"root":       root,
+		"symbolName": symbolName,
+	}
+	if fileContext != "" {
+		args["fileContext"] = fileContext
+	}
+	err := c.call(ctx, "blast-radius", args, &payload)
+	return payload, err
+}
+
+func (c *Client) Checkpoint(ctx context.Context, root string, filePath string, newContent string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "checkpoint", map[string]any{
+		"root":       root,
+		"filePath":   filePath,
+		"newContent": newContent,
+	}, &payload)
+	return payload, err
+}
+
+func (c *Client) Restore(ctx context.Context, root string, pointID string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "restore", map[string]any{
+		"root":    root,
+		"pointId": pointID,
+	}, &payload)
+	return payload, err
+}
+
 func (c *Client) SetWatchEnabled(ctx context.Context, root string, enabled bool) (WatchState, error) {
 	var state WatchState
 	err := c.call(ctx, "watch-set", map[string]any{

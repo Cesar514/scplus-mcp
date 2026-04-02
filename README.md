@@ -198,13 +198,19 @@ The dashboard includes:
 - an animated magician header
 - a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
 - a stacked vertical fallback layout for narrower terminals
-- a real bottom status line showing watcher state, current index stage, backend connectivity, active repo, and active generation
+- a real bottom status line showing watcher state, current index stage, backend connectivity, active repo, active generation, and navigation-history position
 - observability details for stage timing, vector coverage, refresh failures, lexical candidate counts, and watcher scheduler state
 - typed section navigation for overview, tree, hubs, restore points, and clusters instead of a tab-only card wall, with overview rows that can be navigated and scrolled through the content pane
 - Bubble `list` and `table` components for operator sections instead of raw text dumps, with typed status and changes tables and typed list renderers for tree, hubs, restore points, clusters, and search-result state
 - a structured jobs table for index, refresh, restore, lint, and query task slots, with stage, percent, current file, elapsed time, queue depth, and pending-state context on the active index row
 - a real scrollable log panel instead of a fixed 12-line activity buffer
 - operator controls for retrying the last index and canceling or superseding queued watch work directly from the console sidebar and jobs pane hints
+- a command palette bound to `:` or `Ctrl+P` for exact lookup, related search, research, go-to file, go-to symbol, lint, blast-radius, checkpoint-detail, restore-point, status, and changes workflows
+- in-UI section filtering bound to `/`, with palette-driven go-to file and go-to symbol flows that land in the typed Results pane
+- a help overlay bound to `?` that documents navigation, command, filter, export, and mouse usage
+- export actions bound to `e` that write logs, Results output, or the selected detail content into `.contextplus/exports/`
+- back/forward navigation history bound to `b` and `f`, covering active view, focused pane, and selected section row state
+- mouse focus and wheel scrolling support across sidebar, content, detail, jobs, and logs panes
 - a persistent backend session shared through `bridge-serve`
 - a backend-owned watcher that streams change batches, explicit job progress, current-file progress, and index-job control effects to the UI
 - a human hub-creation flow
