@@ -12,6 +12,8 @@ import (
 
 	"contextplus/cli/internal/backend"
 	"contextplus/cli/internal/hubs"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,6 +26,8 @@ const (
 	viewHubs     = "hubs"
 	viewRestore  = "restore"
 	viewCluster  = "cluster"
+	viewStatus   = "status"
+	viewChanges  = "changes"
 )
 
 const (
@@ -89,6 +93,16 @@ type textLoadedMsg struct {
 	err  error
 }
 
+type statusLoadedMsg struct {
+	summary backend.RepoStatusSummary
+	err     error
+}
+
+type changesLoadedMsg struct {
+	summary backend.RepoChangesSummary
+	err     error
+}
+
 type restoreLoadedMsg struct {
 	points []backend.RestorePoint
 	err    error
@@ -134,11 +148,31 @@ type contentItem struct {
 	Badge   string
 }
 
+type sectionKind int
+
+const (
+	sectionList sectionKind = iota
+	sectionTable
+)
+
+type contentListItem struct {
+	item contentItem
+}
+
+func (i contentListItem) Title() string       { return i.item.Title }
+func (i contentListItem) Description() string { return i.item.Summary }
+func (i contentListItem) FilterValue() string {
+	return strings.ToLower(strings.TrimSpace(strings.Join([]string{i.item.Title, i.item.Summary, i.item.Badge}, " ")))
+}
+
 type sectionState struct {
 	ID           string
 	Title        string
 	Subtitle     string
+	Kind         sectionKind
 	Items        []contentItem
+	List         list.Model
+	Table        table.Model
 	Selected     int
 	EmptyMessage string
 }
@@ -184,41 +218,55 @@ func NewModel(root string, client *backend.Client) Model {
 		activeView:    viewOverview,
 		focus:         focusSidebar,
 		sections: map[string]*sectionState{
-			viewOverview: {
-				ID:           viewOverview,
-				Title:        "Overview",
-				Subtitle:     "Operator health and observability summary",
-				EmptyMessage: "Loading doctor report...",
-			},
-			viewTree: {
-				ID:           viewTree,
-				Title:        "Tree",
-				Subtitle:     "Prepared structural tree context",
-				EmptyMessage: "Loading tree view...",
-			},
-			viewHubs: {
-				ID:           viewHubs,
-				Title:        "Hubs",
-				Subtitle:     "Feature hubs and suggestions",
-				EmptyMessage: "Loading hub view...",
-			},
-			viewRestore: {
-				ID:           viewRestore,
-				Title:        "Restore",
-				Subtitle:     "Restore-point history",
-				EmptyMessage: "Loading restore points...",
-			},
-			viewCluster: {
-				ID:           viewCluster,
-				Title:        "Cluster",
-				Subtitle:     "Persisted semantic cluster summaries",
-				EmptyMessage: "Loading cluster view...",
-			},
+			viewOverview: newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
+			viewTree:     newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
+			viewHubs:     newListSection(viewHubs, "Hubs", "Feature hubs and suggestions", "Loading hub view..."),
+			viewRestore:  newListSection(viewRestore, "Restore", "Restore-point history", "Loading restore points..."),
+			viewCluster:  newListSection(viewCluster, "Cluster", "Persisted semantic cluster summaries", "Loading cluster view..."),
+			viewStatus:   newTableSection(viewStatus, "Status", "Git worktree status table", "Loading repo status...", []table.Column{{Title: "Path", Width: 32}, {Title: "Index", Width: 8}, {Title: "Worktree", Width: 10}}),
+			viewChanges:  newTableSection(viewChanges, "Changes", "Git change summary table", "Loading repo changes...", []table.Column{{Title: "Path", Width: 30}, {Title: "+/-", Width: 12}, {Title: "State", Width: 18}}),
 		},
 	}
 	model.refreshSidebar()
 	model.syncDetailViewport()
 	return model
+}
+
+func newListSection(id string, title string, subtitle string, empty string) *sectionState {
+	delegate := list.NewDefaultDelegate()
+	delegate.ShowDescription = true
+	model := list.New([]list.Item{}, delegate, 0, 0)
+	model.SetShowTitle(false)
+	model.SetShowStatusBar(false)
+	model.SetShowHelp(false)
+	model.SetShowPagination(false)
+	model.SetFilteringEnabled(false)
+	model.DisableQuitKeybindings()
+	return &sectionState{
+		ID:           id,
+		Title:        title,
+		Subtitle:     subtitle,
+		Kind:         sectionList,
+		List:         model,
+		EmptyMessage: empty,
+	}
+}
+
+func newTableSection(id string, title string, subtitle string, empty string, columns []table.Column) *sectionState {
+	model := table.New(
+		table.WithColumns(columns),
+		table.WithRows(nil),
+		table.WithHeight(8),
+		table.WithFocused(true),
+	)
+	return &sectionState{
+		ID:           id,
+		Title:        title,
+		Subtitle:     subtitle,
+		Kind:         sectionTable,
+		Table:        model,
+		EmptyMessage: empty,
+	}
 }
 
 func newWizardState() wizardState {
@@ -278,6 +326,20 @@ func loadRestorePointsCmd(client *backend.Client, root string) tea.Cmd {
 	}
 }
 
+func loadStatusCmd(client *backend.Client, root string) tea.Cmd {
+	return func() tea.Msg {
+		summary, err := client.Status(context.Background(), root)
+		return statusLoadedMsg{summary: summary, err: err}
+	}
+}
+
+func loadChangesCmd(client *backend.Client, root string) tea.Cmd {
+	return func() tea.Msg {
+		summary, err := client.Changes(context.Background(), root, "", 20)
+		return changesLoadedMsg{summary: summary, err: err}
+	}
+}
+
 func runIndexCmd(client *backend.Client, root string) tea.Cmd {
 	return func() tea.Msg {
 		output, err := client.Index(context.Background(), root, "full")
@@ -312,6 +374,8 @@ func refreshAllCmd(client *backend.Client, root string) tea.Cmd {
 		loadHubsCmd(client, root),
 		loadClusterCmd(client, root),
 		loadRestorePointsCmd(client, root),
+		loadStatusCmd(client, root),
+		loadChangesCmd(client, root),
 	)
 }
 
@@ -355,6 +419,8 @@ func (m *Model) refreshSidebar() {
 		{ID: viewHubs, Title: "Hubs", Subtitle: "Manual and suggested hub views"},
 		{ID: viewRestore, Title: "Restore", Subtitle: "Checkpoint history and recovery"},
 		{ID: viewCluster, Title: "Cluster", Subtitle: "Cluster and subsystem summaries"},
+		{ID: viewStatus, Title: "Status", Subtitle: "Git worktree status table"},
+		{ID: viewChanges, Title: "Changes", Subtitle: "Changed-file ranges and stats"},
 		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload backend snapshots", IsAction: true, Action: "refresh"},
 		{ID: "index", Title: indexLabel, Subtitle: indexSubtitle, IsAction: true, Action: "index"},
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
@@ -378,9 +444,7 @@ func (m *Model) setActiveView(viewID string) {
 		return
 	}
 	m.activeView = viewID
-	if m.activeSection().Selected >= len(m.activeSection().Items) {
-		m.activeSection().Selected = max(0, len(m.activeSection().Items)-1)
-	}
+	m.ensureSectionSelection(m.activeSection())
 	m.syncDetailViewport()
 }
 
@@ -401,6 +465,51 @@ func (m *Model) syncDetailViewport() {
 	m.detail.SetContent(m.buildDetailContent())
 }
 
+func (m *Model) ensureSectionSelection(section *sectionState) {
+	if section == nil {
+		return
+	}
+	if len(section.Items) == 0 {
+		section.Selected = 0
+		return
+	}
+	if section.Selected >= len(section.Items) {
+		section.Selected = len(section.Items) - 1
+	}
+	if section.Selected < 0 {
+		section.Selected = 0
+	}
+	if section.Kind == sectionList {
+		section.List.Select(section.Selected)
+		return
+	}
+	section.Table.SetCursor(section.Selected)
+}
+
+func (m *Model) setListSectionItems(kind string, items []contentItem) {
+	section := m.sections[kind]
+	if section == nil {
+		return
+	}
+	section.Items = items
+	listItems := make([]list.Item, 0, len(items))
+	for _, item := range items {
+		listItems = append(listItems, contentListItem{item: item})
+	}
+	section.List.SetItems(listItems)
+	m.ensureSectionSelection(section)
+}
+
+func (m *Model) setTableSectionRows(kind string, items []contentItem, rows []table.Row) {
+	section := m.sections[kind]
+	if section == nil {
+		return
+	}
+	section.Items = items
+	section.Table.SetRows(rows)
+	m.ensureSectionSelection(section)
+}
+
 func (m Model) useStackedLayout() bool {
 	return m.width < narrowLayoutCut || m.height < stackedHeightCut
 }
@@ -417,7 +526,7 @@ func (m *Model) refreshOverviewSection() {
 	}
 	chunkCoverage := m.doctor.HybridVectors.Chunk.VectorCoverage
 	identifierCoverage := m.doctor.HybridVectors.Identifier.VectorCoverage
-	section.Items = []contentItem{
+	items := []contentItem{
 		{
 			ID:      "repo",
 			Title:   "Repository",
@@ -519,39 +628,43 @@ func (m *Model) refreshOverviewSection() {
 		},
 	}
 	section.EmptyMessage = "No overview data."
-	if section.Selected >= len(section.Items) {
-		section.Selected = max(0, len(section.Items)-1)
-	}
+	m.setListSectionItems(viewOverview, items)
 }
 
 func (m *Model) setTextSection(kind string, text string) {
-	section := m.sections[kind]
-	if section == nil {
-		return
-	}
 	switch kind {
 	case viewTree:
-		section.Items = parseLineItems(kind, text)
-	case viewHubs, viewCluster:
-		section.Items = parseBlockItems(kind, text)
+		m.setListSectionItems(kind, buildTreeItems(text))
+	case viewHubs:
+		m.setListSectionItems(kind, buildHubItems(text))
+	case viewCluster:
+		m.setListSectionItems(kind, buildClusterItems(text))
 	default:
-		section.Items = parseLineItems(kind, text)
-	}
-	if section.Selected >= len(section.Items) {
-		section.Selected = max(0, len(section.Items)-1)
+		m.setListSectionItems(kind, buildTextFallbackItems(kind, text))
 	}
 }
 
 func (m *Model) setRestorePoints(points []backend.RestorePoint) {
 	m.restorePoints = points
-	section := m.sections[viewRestore]
-	if section == nil {
-		return
+	m.setListSectionItems(viewRestore, buildRestoreItems(points))
+}
+
+func (m *Model) setStatusSummary(summary backend.RepoStatusSummary) {
+	items, rows := buildStatusRows(summary)
+	section := m.sections[viewStatus]
+	if section != nil {
+		section.EmptyMessage = "Worktree clean."
 	}
-	section.Items = buildRestoreItems(points)
-	if section.Selected >= len(section.Items) {
-		section.Selected = max(0, len(section.Items)-1)
+	m.setTableSectionRows(viewStatus, items, rows)
+}
+
+func (m *Model) setChangesSummary(summary backend.RepoChangesSummary) {
+	items, rows := buildChangesRows(summary)
+	section := m.sections[viewChanges]
+	if section != nil {
+		section.EmptyMessage = "No changed files."
 	}
+	m.setTableSectionRows(viewChanges, items, rows)
 }
 
 func (m *Model) moveSidebar(delta int) {
@@ -581,6 +694,7 @@ func (m *Model) moveContent(delta int) {
 		next = 0
 	}
 	section.Selected = next
+	m.ensureSectionSelection(section)
 	m.syncDetailViewport()
 }
 
@@ -700,6 +814,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.setRestorePoints(message.points)
+		m.syncDetailViewport()
+		return m, nil
+	case statusLoadedMsg:
+		if message.err != nil {
+			m.setError(message.err)
+			return m, nil
+		}
+		m.setStatusSummary(message.summary)
+		m.syncDetailViewport()
+		return m, nil
+	case changesLoadedMsg:
+		if message.err != nil {
+			m.setError(message.err)
+			return m, nil
+		}
+		m.setChangesSummary(message.summary)
 		m.syncDetailViewport()
 		return m, nil
 	case indexFinishedMsg:
@@ -840,6 +970,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "5":
 			m.setActiveView(viewCluster)
+			m.focus = focusContent
+			return m, nil
+		case "6":
+			m.setActiveView(viewStatus)
+			m.focus = focusContent
+			return m, nil
+		case "7":
+			m.setActiveView(viewChanges)
 			m.focus = focusContent
 			return m, nil
 		}
@@ -985,41 +1123,54 @@ func (m Model) renderSidebarPanel(width int) string {
 	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
 
-func (m Model) renderContentPanel(width int) string {
+func (m *Model) renderContentPanel(width int, height int) string {
 	section := m.activeSection()
-	windowSize := max(6, m.height/2)
-	start, end := visibleRange(len(section.Items), section.Selected, windowSize)
+	m.ensureSectionSelection(section)
+	bodyHeight := max(4, height-6)
 	lines := []string{
 		renderPaneTitle(section.Title, m.focus == focusContent),
 		subtitleStyle.Render(section.Subtitle),
-		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d", min(section.Selected+1, max(1, len(section.Items))), max(1, len(section.Items)))),
+		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d", selectedCountLabel(section.Selected, len(section.Items)), max(1, len(section.Items)))),
 		"",
 	}
 	if len(section.Items) == 0 {
 		lines = append(lines, section.EmptyMessage)
-		return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 	}
-	if start > 0 {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier items hidden", start)))
-	}
-	for _, item := range visibleItems(section.Items, section.Selected, windowSize) {
-		style := contentIdle
-		if item.index == section.Selected {
-			style = contentSelected
+	if section.Kind == sectionList {
+		windowSize := max(6, bodyHeight)
+		start, end := visibleRange(len(section.Items), section.Selected, windowSize)
+		if start > 0 {
+			lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier items hidden", start)))
 		}
-		title := item.value.Title
-		if item.value.Badge != "" {
-			title += " [" + item.value.Badge + "]"
+		lines = append(lines, m.renderSectionList(section, width-4, bodyHeight))
+		if end < len(section.Items) {
+			lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more items hidden", len(section.Items)-end)))
 		}
-		lines = append(lines, style.Render(title))
-		if item.value.Summary != "" {
-			lines = append(lines, subtitleStyle.Render("  "+truncate(item.value.Summary, width-6)))
-		}
+		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 	}
-	if end < len(section.Items) {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more items hidden", len(section.Items)-end)))
+	lines = append(lines, m.renderSectionTable(section, width-4, bodyHeight))
+	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+}
+
+func (m *Model) renderSectionList(section *sectionState, width int, height int) string {
+	section.List.SetWidth(max(12, width))
+	section.List.SetHeight(max(4, height))
+	if m.focus == focusContent {
+		section.List.Styles.Title = lipgloss.NewStyle()
 	}
-	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+	return section.List.View()
+}
+
+func (m *Model) renderSectionTable(section *sectionState, width int, height int) string {
+	section.Table.SetWidth(max(12, width))
+	section.Table.SetHeight(max(4, height))
+	if m.focus == focusContent {
+		section.Table.Focus()
+	} else {
+		section.Table.Blur()
+	}
+	return section.Table.View()
 }
 
 func (m Model) renderDetailPanel(width int, height int) string {
@@ -1097,7 +1248,7 @@ func (m Model) View() string {
 	var body string
 	if m.useStackedLayout() {
 		sidebar := m.renderSidebarPanel(max(32, m.width-4))
-		content := m.renderContentPanel(max(32, m.width-4))
+		content := m.renderContentPanel(max(32, m.width-4), max(12, m.height/3))
 		detail := m.renderDetailPanel(max(36, m.width-4), max(10, m.height/3))
 		jobs := m.renderJobsPanel(max(36, m.width-4), max(minJobsHeight, m.height/4))
 		body = lipgloss.JoinVertical(lipgloss.Left, sidebar, content, detail, jobs)
@@ -1110,7 +1261,7 @@ func (m Model) View() string {
 		top := lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			m.renderSidebarPanel(sidebarWidth),
-			m.renderContentPanel(contentWidth),
+			m.renderContentPanel(contentWidth, mainHeight),
 			m.renderDetailPanel(detailWidth, mainHeight),
 		)
 		jobs := m.renderJobsPanel(max(70, m.width-2), jobsHeight)
@@ -1214,27 +1365,87 @@ func RenderSnapshot(root string, client *backend.Client) (string, error) {
 	return model.View(), nil
 }
 
-func parseLineItems(prefix string, text string) []contentItem {
+func buildTreeItems(text string) []contentItem {
 	lines := splitNonEmptyLines(text)
 	items := make([]contentItem, 0, len(lines))
-	for index, line := range lines {
-		title := strings.TrimSpace(line)
-		if title == "" {
+	pathStack := make([]string, 0, 12)
+	for index, raw := range lines {
+		indent := countLeadingSpaces(raw) / 2
+		line := strings.TrimSpace(raw)
+		if line == "" {
 			continue
 		}
-		start := max(0, index-2)
-		end := min(len(lines), index+3)
+		for len(pathStack) > indent {
+			pathStack = pathStack[:len(pathStack)-1]
+		}
+		title := line
+		badge := "entry"
+		summary := fmt.Sprintf("Tree line %d", index+1)
+		switch {
+		case strings.HasSuffix(line, "/"):
+			badge = "dir"
+			title = strings.TrimSuffix(line, "/")
+			if title == "." {
+				title = "./"
+			}
+			if title != "./" {
+				pathStack = append(pathStack, title)
+			}
+			summary = fmt.Sprintf("Directory depth %d", indent)
+		case strings.Contains(line, " | "):
+			parts := strings.SplitN(line, " | ", 3)
+			title = parts[0]
+			badge = "file"
+			if len(parts) > 1 {
+				summary = strings.Join(parts[1:], " | ")
+			}
+		case strings.Contains(line, ": "):
+			parts := strings.SplitN(line, ": ", 2)
+			badge = parts[0]
+			title = signatureTitle(parts[1])
+			summary = truncate(parts[1], 96)
+		default:
+			title = truncate(line, 96)
+		}
 		items = append(items, contentItem{
-			ID:      fmt.Sprintf("%s-%d", prefix, index),
+			ID:      fmt.Sprintf("tree-%d", index),
 			Title:   truncate(title, 88),
-			Summary: fmt.Sprintf("Line %d", index+1),
-			Detail:  strings.Join(lines[start:end], "\n"),
+			Summary: summary,
+			Badge:   badge,
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Tree line: %d", index+1),
+				fmt.Sprintf("Badge: %s", badge),
+				fmt.Sprintf("Path context: %s", formatPathStack(pathStack)),
+				line,
+			}, "\n"),
 		})
 	}
 	return items
 }
 
-func parseBlockItems(prefix string, text string) []contentItem {
+func buildHubItems(text string) []contentItem {
+	return buildBlockItems("hub", text)
+}
+
+func buildClusterItems(text string) []contentItem {
+	return buildBlockItems("cluster", text)
+}
+
+func buildTextFallbackItems(prefix string, text string) []contentItem {
+	lines := splitNonEmptyLines(text)
+	items := make([]contentItem, 0, len(lines))
+	for index, line := range lines {
+		items = append(items, contentItem{
+			ID:      fmt.Sprintf("%s-%d", prefix, index),
+			Title:   truncate(strings.TrimSpace(line), 88),
+			Summary: fmt.Sprintf("Line %d", index+1),
+			Detail:  line,
+		})
+	}
+	return items
+}
+
+func buildBlockItems(prefix string, text string) []contentItem {
 	blocks := splitBlocks(text)
 	items := make([]contentItem, 0, len(blocks))
 	for index, block := range blocks {
@@ -1242,15 +1453,20 @@ func parseBlockItems(prefix string, text string) []contentItem {
 		if len(lines) == 0 {
 			continue
 		}
-		title := lines[0]
+		title := strings.TrimSpace(lines[0])
 		summary := ""
+		badge := prefix
+		if strings.HasPrefix(title, "[") && strings.Contains(title, "]") {
+			badge = strings.Trim(strings.SplitN(title, "]", 2)[0], "[]")
+		}
 		if len(lines) > 1 {
 			summary = truncate(lines[1], 90)
 		}
 		items = append(items, contentItem{
 			ID:      fmt.Sprintf("%s-%d", prefix, index),
-			Title:   truncate(strings.TrimSpace(title), 88),
+			Title:   truncate(title, 88),
 			Summary: summary,
+			Badge:   badge,
 			Detail:  strings.Join(lines, "\n"),
 		})
 	}
@@ -1271,6 +1487,130 @@ func buildRestoreItems(points []backend.RestorePoint) []contentItem {
 				fmt.Sprintf("Timestamp: %s", time.UnixMilli(point.Timestamp).UTC().Format(time.RFC3339)),
 				fmt.Sprintf("Message: %s", point.Message),
 				fmt.Sprintf("Files: %s", files),
+			}, "\n"),
+		})
+	}
+	return items
+}
+
+func buildStatusRows(summary backend.RepoStatusSummary) ([]contentItem, []table.Row) {
+	items := make([]contentItem, 0, len(summary.Files))
+	rows := make([]table.Row, 0, len(summary.Files))
+	for _, file := range summary.Files {
+		items = append(items, contentItem{
+			ID:      file.Path,
+			Title:   file.Path,
+			Summary: fmt.Sprintf("index %s | worktree %s", renderGitStatusCode(file.Index), renderGitStatusCode(file.WorkingTree)),
+			Badge:   renderGitStatusBadge(file),
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Path: %s", file.Path),
+				fmt.Sprintf("Branch: %s", summary.Branch),
+				fmt.Sprintf("Ahead/behind: %d/%d", summary.Ahead, summary.Behind),
+				fmt.Sprintf("Index status: %s", renderGitStatusCode(file.Index)),
+				fmt.Sprintf("Worktree status: %s", renderGitStatusCode(file.WorkingTree)),
+				fmt.Sprintf("Repo totals: staged=%d unstaged=%d untracked=%d conflicted=%d", summary.StagedCount, summary.UnstagedCount, summary.UntrackedCount, summary.ConflictedCount),
+			}, "\n"),
+		})
+		rows = append(rows, table.Row{
+			truncate(file.Path, 42),
+			renderGitStatusCode(file.Index),
+			renderGitStatusCode(file.WorkingTree),
+		})
+	}
+	return items, rows
+}
+
+func buildChangesRows(summary backend.RepoChangesSummary) ([]contentItem, []table.Row) {
+	items := make([]contentItem, 0, len(summary.Files))
+	rows := make([]table.Row, 0, len(summary.Files))
+	for _, file := range summary.Files {
+		state := fmt.Sprintf("staged %s | unstaged %s", renderGitStatusCode(file.Staged), renderGitStatusCode(file.Unstaged))
+		rangeLines := make([]string, 0, len(file.Ranges))
+		for _, changeRange := range file.Ranges {
+			rangeLines = append(rangeLines, fmt.Sprintf("old %d:%d -> new %d:%d", changeRange.OldStart, changeRange.OldLines, changeRange.NewStart, changeRange.NewLines))
+		}
+		if len(rangeLines) == 0 {
+			rangeLines = append(rangeLines, "No diff ranges recorded.")
+		}
+		items = append(items, contentItem{
+			ID:      file.Path,
+			Title:   file.Path,
+			Summary: fmt.Sprintf("+%d -%d | %s", file.Additions, file.Deletions, state),
+			Badge:   renderChangeBadge(file),
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Path: %s", file.Path),
+				fmt.Sprintf("Additions: %d", file.Additions),
+				fmt.Sprintf("Deletions: %d", file.Deletions),
+				fmt.Sprintf("Staged status: %s", renderGitStatusCode(file.Staged)),
+				fmt.Sprintf("Unstaged status: %s", renderGitStatusCode(file.Unstaged)),
+				"Ranges:",
+				strings.Join(rangeLines, "\n"),
+			}, "\n"),
+		})
+		rows = append(rows, table.Row{
+			truncate(file.Path, 40),
+			fmt.Sprintf("+%d/-%d", file.Additions, file.Deletions),
+			state,
+		})
+	}
+	return items, rows
+}
+
+func buildSearchItems(payload backend.SearchResultPayload) []contentItem {
+	items := make([]contentItem, 0, len(payload.SymbolHits)+len(payload.PathHits)+len(payload.WordHits)+len(payload.Hits))
+	for _, hit := range payload.SymbolHits {
+		items = append(items, contentItem{
+			ID:      fmt.Sprintf("%s:%d", hit.Path, hit.Line),
+			Title:   hit.Name,
+			Summary: fmt.Sprintf("%s | %s:%d-%d", hit.Kind, hit.Path, hit.Line, hit.EndLine),
+			Badge:   "exact-symbol",
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Path: %s", hit.Path),
+				fmt.Sprintf("Kind: %s", hit.Kind),
+				fmt.Sprintf("Range: %d-%d", hit.Line, hit.EndLine),
+				fmt.Sprintf("Signature: %s", hit.Signature),
+				fmt.Sprintf("Header: %s", hit.Header),
+			}, "\n"),
+		})
+	}
+	for _, path := range payload.PathHits {
+		items = append(items, contentItem{
+			ID:      path,
+			Title:   path,
+			Summary: "Exact path match",
+			Badge:   "exact-path",
+			Detail:  fmt.Sprintf("Path hit: %s", path),
+		})
+	}
+	for _, hit := range payload.WordHits {
+		items = append(items, contentItem{
+			ID:      fmt.Sprintf("%s:%d:%s", hit.Path, hit.Line, hit.Token),
+			Title:   hit.Title,
+			Summary: fmt.Sprintf("%s | %s", hit.Path, truncate(hit.Snippet, 72)),
+			Badge:   "word-" + hit.Kind,
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Token: %s", hit.Token),
+				fmt.Sprintf("Kind: %s", hit.Kind),
+				fmt.Sprintf("Path: %s", hit.Path),
+				fmt.Sprintf("Line: %d", hit.Line),
+				fmt.Sprintf("Score: %.2f", hit.Score),
+				fmt.Sprintf("Snippet: %s", hit.Snippet),
+			}, "\n"),
+		})
+	}
+	for _, hit := range payload.Hits {
+		items = append(items, contentItem{
+			ID:      fmt.Sprintf("%s:%d:%s", hit.Path, hit.Line, hit.EntityType),
+			Title:   hit.Title,
+			Summary: fmt.Sprintf("%s | %s", hit.Path, truncate(hit.Snippet, 72)),
+			Badge:   "related-" + hit.EntityType,
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Entity type: %s", hit.EntityType),
+				fmt.Sprintf("Kind: %s", hit.Kind),
+				fmt.Sprintf("Path: %s", hit.Path),
+				fmt.Sprintf("Line: %d", hit.Line),
+				fmt.Sprintf("Score: %.2f", hit.Score),
+				fmt.Sprintf("Snippet: %s", hit.Snippet),
 			}, "\n"),
 		})
 	}
@@ -1318,6 +1658,97 @@ func visibleRange(total int, selected int, maxRows int) (int, int) {
 		start = max(0, end-maxRows)
 	}
 	return start, end
+}
+
+func selectedCountLabel(selected int, total int) int {
+	if total <= 0 {
+		return 1
+	}
+	if selected < 0 {
+		return 1
+	}
+	if selected >= total {
+		return total
+	}
+	return selected + 1
+}
+
+func countLeadingSpaces(value string) int {
+	count := 0
+	for _, char := range value {
+		if char != ' ' {
+			break
+		}
+		count++
+	}
+	return count
+}
+
+func signatureTitle(signature string) string {
+	candidate := strings.TrimSpace(signature)
+	if candidate == "" {
+		return "unknown"
+	}
+	if open := strings.Index(candidate, "("); open > 0 {
+		parts := strings.Fields(candidate[:open])
+		if len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+	}
+	parts := strings.Fields(candidate)
+	return parts[len(parts)-1]
+}
+
+func formatPathStack(stack []string) string {
+	if len(stack) == 0 {
+		return "./"
+	}
+	return "./" + strings.Join(stack, "/")
+}
+
+func renderGitStatusCode(value string) string {
+	code := strings.TrimSpace(value)
+	if code == "" {
+		return "clean"
+	}
+	if code == "?" {
+		return "untracked"
+	}
+	return code
+}
+
+func renderGitStatusBadge(file backend.RepoStatusFile) string {
+	switch {
+	case file.Index == "?" || file.WorkingTree == "?":
+		return "untracked"
+	case file.Index == "U" || file.WorkingTree == "U":
+		return "conflict"
+	case file.Index == "R" || file.WorkingTree == "R":
+		return "renamed"
+	case file.Index == "A" || file.WorkingTree == "A":
+		return "created"
+	case file.Index == "D" || file.WorkingTree == "D":
+		return "deleted"
+	case file.Index == "M" || file.WorkingTree == "M":
+		return "modified"
+	default:
+		return "clean"
+	}
+}
+
+func renderChangeBadge(file backend.ChangeEntry) string {
+	switch {
+	case file.Staged == "?" || file.Unstaged == "?":
+		return "untracked"
+	case file.Staged == "R" || file.Unstaged == "R":
+		return "renamed"
+	case file.Staged == "D" || file.Unstaged == "D":
+		return "deleted"
+	case file.Staged == "A" || file.Unstaged == "A":
+		return "created"
+	default:
+		return "changed"
+	}
 }
 
 func splitBlocks(text string) []string {

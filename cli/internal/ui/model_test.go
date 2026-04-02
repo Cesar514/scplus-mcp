@@ -118,6 +118,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"Operator console with navigation, detail, and job layers",
 		"Navigation",
 		"Overview",
+		"Status",
+		"Changes",
 		"Detail",
 		"Jobs",
 		"Refresh data",
@@ -202,7 +204,7 @@ func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
 	section := model.sections[viewOverview]
 	section.Selected = len(section.Items) - 1
 
-	rendered := model.renderContentPanel(56)
+	rendered := model.renderContentPanel(56, 10)
 	for _, needle := range []string{
 		"Selected 8/8",
 		"... 2 earlier items hidden",
@@ -214,5 +216,126 @@ func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
 	}
 	if strings.Contains(rendered, "Repository") {
 		t.Fatalf("expected earliest overview row to be scrolled out of the visible window: %s", rendered)
+	}
+}
+
+func TestStatusSectionRendersBubbleTable(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 140
+	model.height = 24
+	model.setStatusSummary(backend.RepoStatusSummary{
+		Branch: "main",
+		Files: []backend.RepoStatusFile{
+			{Path: "cli/internal/ui/model.go", Index: "M", WorkingTree: " "},
+			{Path: "README.md", Index: " ", WorkingTree: "M"},
+		},
+	})
+	model.setActiveView(viewStatus)
+
+	rendered := model.renderContentPanel(72, 16)
+	for _, needle := range []string{
+		"Git worktree status table",
+		"Selected 1/2",
+		"Path",
+		"Index",
+		"Worktree",
+		"cli/internal/ui/model.go",
+		"README.md",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in status content panel: %s", needle, rendered)
+		}
+	}
+}
+
+func TestChangesSectionRendersBubbleTable(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 140
+	model.height = 24
+	model.setChangesSummary(backend.RepoChangesSummary{
+		ChangedFiles: 1,
+		Files: []backend.ChangeEntry{
+			{
+				Path:      "cli/internal/ui/model.go",
+				Staged:    "M",
+				Unstaged:  " ",
+				Additions: 12,
+				Deletions: 4,
+				Ranges: []backend.ChangeRange{
+					{OldStart: 10, OldLines: 2, NewStart: 10, NewLines: 6},
+				},
+			},
+		},
+	})
+	model.setActiveView(viewChanges)
+
+	rendered := model.renderContentPanel(72, 16)
+	for _, needle := range []string{
+		"Git change summary table",
+		"Selected 1/1",
+		"Path",
+		"+/-",
+		"State",
+		"cli/internal/ui/model.go",
+		"+12/-4",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in changes content panel: %s", needle, rendered)
+		}
+	}
+}
+
+func TestBuildSearchItemsCoversExactAndRelatedResults(t *testing.T) {
+	items := buildSearchItems(backend.SearchResultPayload{
+		Query: "runSearchByIntent",
+		SymbolHits: []backend.SearchSymbolHit{
+			{
+				Path:      "src/tools/query-intent.ts",
+				Name:      "runSearchByIntent",
+				Kind:      "function",
+				Line:      182,
+				EndLine:   184,
+				Signature: "async function runSearchByIntent(options: SearchIntentOptions): Promise<string> {",
+				Header:    "Query-intent router",
+			},
+		},
+		PathHits: []string{"src/tools/query-intent.ts"},
+		WordHits: []backend.SearchWordHit{
+			{
+				Kind:    "symbol",
+				Token:   "runsearchbyintent",
+				Path:    "src/tools/query-intent.ts",
+				Line:    182,
+				Title:   "runSearchByIntent",
+				Snippet: "async function runSearchByIntent(options: SearchIntentOptions): Promise<string> {",
+				Score:   1,
+			},
+		},
+		Hits: []backend.SearchRankedHit{
+			{
+				EntityType: "file",
+				Path:       "src/tools/query-intent.ts",
+				Title:      "src/tools/query-intent.ts",
+				Kind:       "file",
+				Line:       1,
+				Snippet:    "Query-intent router for exact lookups, related discovery, and research",
+				Score:      0.91,
+			},
+		},
+	})
+	if len(items) != 4 {
+		t.Fatalf("expected 4 search items, got %d", len(items))
+	}
+	for _, badge := range []string{"exact-symbol", "exact-path", "word-symbol", "related-file"} {
+		found := false
+		for _, item := range items {
+			if item.Badge == badge {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected badge %q in search items: %#v", badge, items)
+		}
 	}
 }

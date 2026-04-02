@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 24: Raw Text View Replacement
-
-- [ ] Replace the `syncViewport()` pattern in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), which currently pushes raw `treeText`, `hubsText`, restore text, and `clusterText` into `viewport.SetContent()`.
-- [ ] Replace monolithic text dumps with proper Bubble components: lists for hubs, restore points, clusters, files, and actions; tables for status, changes, and lint findings; a viewport only for previews or detail text.
-- [ ] Add selection state so a chosen row in the center pane updates a detail preview in another pane.
-- [ ] Add typed renderers for tree, hubs, restore points, clusters, status, changes, and search results instead of plain text blocks.
-
 ## Phase 25: Logs, Jobs, And Progress Model
 
 - [ ] Replace the current `appendLog()` behavior in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), which keeps only 12 log lines, with a real scrollable log panel.

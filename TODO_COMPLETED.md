@@ -2,6 +2,14 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 24 by replacing the remaining raw text view path in `contextplus-ui` with typed Bubble list and table state
+- [x] stop feeding tree, hubs, restore points, and cluster views through generic raw text splitting by adding typed list renderers for each section
+- [x] add typed Bubble table sections for git status and repo changes, backed by structured bridge payloads in the Go backend client
+- [x] keep the detail viewport only for previews while making list and table selection drive the right-hand detail pane
+- [x] add typed search-result renderer state so exact and related search payloads no longer depend on plain text blocks inside the UI model layer
+- [x] verify v1.5 phase 24 directly with focused Go UI renderer coverage, the full Go CLI test suite, direct `contextplus-ui snapshot` inspection on this repository, and touched-file Context+ lint checks
+- [x] commit the verified v1.5 phase 24 work
+
 - [x] finish v1.5 phase 23 by making the operator overview a real navigable list with a shipped bottom status line instead of leaving the old static-overview TODO open
 - [x] keep the animated header while making the overview pane show typed rows, selection state, and a visible scroll window rather than a static card wall with no navigation
 - [x] expand the overview section into enough typed operator rows to exercise selection and scrolling inside the center content pane

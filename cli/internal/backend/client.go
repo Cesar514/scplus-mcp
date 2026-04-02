@@ -1,3 +1,5 @@
+// Persistent human-CLI bridge client for the Node backend session.
+// FEATURE: typed doctor, status, changes, search, watch, and index payloads.
 package backend
 
 import (
@@ -36,6 +38,76 @@ type RepoStatusSummary struct {
 	DeletedCount    int              `json:"deletedCount"`
 	RenamedCount    int              `json:"renamedCount"`
 	Files           []RepoStatusFile `json:"files"`
+}
+
+type ChangeRange struct {
+	OldStart int `json:"oldStart"`
+	OldLines int `json:"oldLines"`
+	NewStart int `json:"newStart"`
+	NewLines int `json:"newLines"`
+}
+
+type ChangeEntry struct {
+	Path      string        `json:"path"`
+	Staged    string        `json:"staged"`
+	Unstaged  string        `json:"unstaged"`
+	Additions int           `json:"additions"`
+	Deletions int           `json:"deletions"`
+	Ranges    []ChangeRange `json:"ranges"`
+}
+
+type RepoChangesSummary struct {
+	ChangedFiles   int           `json:"changedFiles"`
+	StagedFiles    int           `json:"stagedFiles"`
+	UnstagedFiles  int           `json:"unstagedFiles"`
+	UntrackedFiles int           `json:"untrackedFiles"`
+	Files          []ChangeEntry `json:"files"`
+}
+
+type SearchSymbolHit struct {
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"endLine"`
+	Signature  string `json:"signature"`
+	ParentName string `json:"parentName"`
+	Header     string `json:"header"`
+	ModulePath string `json:"modulePath"`
+}
+
+type SearchWordHit struct {
+	Kind    string  `json:"kind"`
+	Token   string  `json:"token"`
+	Path    string  `json:"path"`
+	Line    int     `json:"line"`
+	Title   string  `json:"title"`
+	Snippet string  `json:"snippet"`
+	Score   float64 `json:"score"`
+}
+
+type SearchRankedHit struct {
+	EntityType string  `json:"entityType"`
+	Path       string  `json:"path"`
+	Title      string  `json:"title"`
+	Kind       string  `json:"kind"`
+	Line       int     `json:"line"`
+	Snippet    string  `json:"snippet"`
+	Score      float64 `json:"score"`
+}
+
+type SearchResultPayload struct {
+	Root            string            `json:"root"`
+	FreshnessHeader string            `json:"freshnessHeader"`
+	Intent          string            `json:"intent"`
+	SearchType      string            `json:"searchType"`
+	Query           string            `json:"query"`
+	TopK            int               `json:"topK"`
+	SymbolHits      []SearchSymbolHit `json:"symbolHits"`
+	PathHits        []string          `json:"pathHits"`
+	WordHits        []SearchWordHit   `json:"wordHits"`
+	Hits            []SearchRankedHit `json:"hits"`
+	Text            string            `json:"text"`
 }
 
 type IndexValidationIssue struct {
@@ -517,6 +589,40 @@ func (c *Client) RestorePoints(ctx context.Context, root string) ([]RestorePoint
 	var points []RestorePoint
 	err := c.call(ctx, "restore-points", map[string]any{"root": root}, &points)
 	return points, err
+}
+
+func (c *Client) Status(ctx context.Context, root string) (RepoStatusSummary, error) {
+	var summary RepoStatusSummary
+	err := c.call(ctx, "status", map[string]any{"root": root}, &summary)
+	return summary, err
+}
+
+func (c *Client) Changes(ctx context.Context, root string, path string, limit int) (RepoChangesSummary, error) {
+	var summary RepoChangesSummary
+	args := map[string]any{"root": root}
+	if path != "" {
+		args["path"] = path
+	}
+	if limit > 0 {
+		args["limit"] = limit
+	}
+	err := c.call(ctx, "changes", args, &summary)
+	return summary, err
+}
+
+func (c *Client) Search(ctx context.Context, root string, query string, intent string, searchType string, topK int) (SearchResultPayload, error) {
+	var payload SearchResultPayload
+	args := map[string]any{
+		"root":       root,
+		"query":      query,
+		"intent":     intent,
+		"searchType": searchType,
+	}
+	if topK > 0 {
+		args["topK"] = topK
+	}
+	err := c.call(ctx, "search", args, &payload)
+	return payload, err
 }
 
 func (c *Client) SetWatchEnabled(ctx context.Context, root string, enabled bool) (WatchState, error) {
