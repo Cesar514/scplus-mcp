@@ -311,6 +311,8 @@ type Model struct {
 	history        []navigationSnapshot
 	historyIndex   int
 	historyPaused  bool
+	lastView       navigationSnapshot
+	hasLastView    bool
 }
 
 func NewModel(root string, client *backend.Client) Model {
@@ -449,8 +451,15 @@ func newOverlayState() overlayState {
 
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
+		{ID: "open-overview", Title: "Open overview", Subtitle: "Jump to operator health and observability", Action: "open-overview"},
+		{ID: "open-tree", Title: "Open tree", Subtitle: "Jump to the prepared tree view", Action: "open-tree"},
+		{ID: "open-hubs", Title: "Open hubs", Subtitle: "Jump to manual and suggested hubs", Action: "open-hubs"},
+		{ID: "open-restore", Title: "Open restore", Subtitle: "Jump to restore points and recovery", Action: "open-restore"},
+		{ID: "open-cluster", Title: "Open cluster", Subtitle: "Jump to persisted semantic clusters", Action: "open-cluster"},
 		{ID: "open-status", Title: "Open status", Subtitle: "Jump to the git worktree status table", Action: "open-status"},
 		{ID: "open-changes", Title: "Open changes", Subtitle: "Jump to changed-file stats and ranges", Action: "open-changes"},
+		{ID: "open-search", Title: "Open search", Subtitle: "Jump to the ranked search results pane", Action: "open-search"},
+		{ID: "open-symbol", Title: "Open symbol", Subtitle: "Jump to the exact symbol results pane", Action: "open-symbol"},
 		{ID: "find-hub", Title: "Find hub", Subtitle: "Rank hubs by keyword and semantic relevance", Action: "find-hub", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
 		{ID: "exact-lookup", Title: "Exact lookup", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
 		{ID: "search-related", Title: "Search related", Subtitle: "Run related discovery over prepared ranked results", Action: "search-related", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
@@ -582,7 +591,8 @@ func (m *Model) syncLogViewport(follow bool) {
 	}
 	height := max(6, m.height/4)
 	if m.useStackedLayout() {
-		height = max(6, m.height/5)
+		_, _, _, _, logsHeight := m.stackedPaneHeights()
+		height = max(3, logsHeight-4)
 	}
 	m.logViewport.Width = width
 	m.logViewport.Height = height
@@ -907,22 +917,22 @@ func (m *Model) openPalette() {
 	m.overlay = newOverlayState()
 	m.overlay.Mode = overlayPalette
 	m.overlay.Title = "Command palette"
-	m.overlay.Subtitle = "Search commands, run backend actions, and jump to exact results"
+	m.overlay.Subtitle = "Use / to jump between windows, run backend actions, and launch exact results"
 	m.overlay.PreviousFocus = m.focus
 	m.overlay.Commands = paletteCommands()
 	m.overlay.Input.Focus()
 	m.focus = focusOverlay
 }
 
-func (m *Model) openFilterOverlay() {
+func (m *Model) openSectionSearchOverlay() {
 	section := m.activeSection()
 	m.overlay = newOverlayState()
 	m.overlay.Mode = overlayFilter
-	m.overlay.Title = "Filter section"
-	m.overlay.Subtitle = fmt.Sprintf("Filter %s items in-place", section.Title)
+	m.overlay.Title = "Search section"
+	m.overlay.Subtitle = fmt.Sprintf("Search %s items in-place", section.Title)
 	m.overlay.PreviousFocus = m.focus
 	m.overlay.TargetSectionID = section.ID
-	m.overlay.Input = newOverlayInput("Filter: ", "type to narrow the current section")
+	m.overlay.Input = newOverlayInput("Search: ", "type to narrow the current section")
 	m.overlay.Input.SetValue(section.FilterQuery)
 	m.overlay.Input.Focus()
 	m.focus = focusOverlay
@@ -952,6 +962,44 @@ func (m *Model) closeOverlay() {
 	}
 	m.focus = previousFocus
 	m.syncDetailViewport()
+}
+
+func (m *Model) stackedPaneHeights() (int, int, int, int, int) {
+	available := max(16, m.height-6)
+	weights := []int{4, 5, 5, 3, 3}
+	heights := make([]int, len(weights))
+	totalWeight := 0
+	for _, weight := range weights {
+		totalWeight += weight
+	}
+	used := 0
+	for index, weight := range weights {
+		height := max(3, (available*weight)/totalWeight)
+		heights[index] = height
+		used += height
+	}
+	for used < available {
+		for index := range heights {
+			heights[index]++
+			used++
+			if used >= available {
+				break
+			}
+		}
+	}
+	for used > available {
+		for index := range heights {
+			if heights[index] <= 3 {
+				continue
+			}
+			heights[index]--
+			used--
+			if used <= available {
+				break
+			}
+		}
+	}
+	return heights[0], heights[1], heights[2], heights[3], heights[4]
 }
 
 func (m *Model) filteredPaletteCommands() []paletteCommand {
@@ -1182,6 +1230,10 @@ func (m *Model) setActiveView(viewID string) {
 	if _, ok := m.sections[viewID]; !ok {
 		return
 	}
+	if viewID != m.activeView {
+		m.lastView = m.captureNavigationSnapshot()
+		m.hasLastView = true
+	}
 	m.activeView = viewID
 	m.ensureSectionSelection(m.activeSection())
 	m.syncDetailViewport()
@@ -1198,7 +1250,8 @@ func (m *Model) syncDetailViewport() {
 	}
 	height := m.height - 16
 	if m.useStackedLayout() {
-		height = max(8, (m.height/3)-2)
+		_, _, detailHeight, _, _ := m.stackedPaneHeights()
+		height = max(4, detailHeight-4)
 	}
 	m.detail.Width = width
 	m.detail.Height = height
@@ -1248,6 +1301,18 @@ func (m *Model) setTableSectionRows(kind string, items []contentItem, rows []tab
 
 func (m Model) useStackedLayout() bool {
 	return m.width < narrowLayoutCut || m.height < stackedHeightCut
+}
+
+func (m *Model) restoreLastView() bool {
+	if !m.hasLastView {
+		return false
+	}
+	current := m.captureNavigationSnapshot()
+	target := m.lastView
+	m.restoreNavigationSnapshot(target)
+	m.lastView = current
+	m.hasLastView = true
+	return true
 }
 
 func (m *Model) refreshOverviewSection() {
@@ -1441,6 +1506,11 @@ func (m *Model) moveSidebar(delta int) {
 	m.recordNavigation()
 }
 
+func (m *Model) moveSidebarPage(delta int) {
+	step := max(1, visibleSidebarCount(m.height))
+	m.moveSidebar(delta * step)
+}
+
 func (m *Model) moveContent(delta int) {
 	section := m.activeSection()
 	if len(section.Items) == 0 {
@@ -1456,6 +1526,42 @@ func (m *Model) moveContent(delta int) {
 	section.Selected = next
 	m.ensureSectionSelection(section)
 	m.syncDetailViewport()
+	m.recordNavigation()
+}
+
+func (m *Model) moveContentPage(delta int) {
+	section := m.activeSection()
+	if section == nil || len(section.Items) == 0 {
+		return
+	}
+	step := max(1, visibleContentCount(m.height))
+	next := section.Selected + (delta * step)
+	if next < 0 {
+		next = 0
+	}
+	if next >= len(section.Items) {
+		next = len(section.Items) - 1
+	}
+	section.Selected = next
+	m.ensureSectionSelection(section)
+	m.syncDetailViewport()
+	m.recordNavigation()
+}
+
+func (m *Model) moveJobsPage(delta int) {
+	if len(m.jobOrder) == 0 {
+		return
+	}
+	step := max(1, m.jobTable.Height()-1)
+	next := m.jobTable.Cursor() + (delta * step)
+	if next < 0 {
+		next = 0
+	}
+	maxCursor := max(0, len(m.jobOrder)-1)
+	if next > maxCursor {
+		next = maxCursor
+	}
+	m.jobTable.SetCursor(next)
 	m.recordNavigation()
 }
 
@@ -1710,6 +1816,31 @@ func (m *Model) submitPaletteSelection() tea.Cmd {
 		return nil
 	}
 	switch command.Action {
+	case "open-overview":
+		m.setActiveView(viewOverview)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-tree":
+		m.setActiveView(viewTree)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-hubs":
+		m.setActiveView(viewHubs)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-restore":
+		m.setActiveView(viewRestore)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-cluster":
+		m.setActiveView(viewCluster)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
 	case "open-status":
 		m.setActiveView(viewStatus)
 		m.focus = focusContent
@@ -1717,6 +1848,16 @@ func (m *Model) submitPaletteSelection() tea.Cmd {
 		return nil
 	case "open-changes":
 		m.setActiveView(viewChanges)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-search":
+		m.setActiveView(viewSearch)
+		m.focus = focusContent
+		m.recordNavigation()
+		return nil
+	case "open-symbol":
+		m.setActiveView(viewSymbol)
 		m.focus = focusContent
 		m.recordNavigation()
 		return nil
@@ -1829,6 +1970,10 @@ func (m *Model) handleMouse(message tea.MouseMsg) tea.Cmd {
 		return nil
 	case tea.MouseActionPress:
 		if message.Button == tea.MouseButtonWheelUp {
+			if m.focus == focusSidebar {
+				m.moveSidebar(-1)
+				return nil
+			}
 			if m.focus == focusLogs {
 				m.logViewport.LineUp(3)
 				return nil
@@ -1847,6 +1992,10 @@ func (m *Model) handleMouse(message tea.MouseMsg) tea.Cmd {
 			}
 		}
 		if message.Button == tea.MouseButtonWheelDown {
+			if m.focus == focusSidebar {
+				m.moveSidebar(1)
+				return nil
+			}
 			if m.focus == focusLogs {
 				m.logViewport.LineDown(3)
 				return nil
@@ -1875,15 +2024,16 @@ func (m *Model) handleMouse(message tea.MouseMsg) tea.Cmd {
 		}
 		relativeY := y - headerHeight
 		if m.useStackedLayout() {
+			sidebarHeight, contentHeight, detailHeight, jobsHeight, logsHeight := m.stackedPaneHeights()
 			sectionHeights := []struct {
 				focus  int
 				height int
 			}{
-				{focusSidebar, max(8, 0)},
-				{focusContent, max(12, m.height/3)},
-				{focusDetail, max(10, m.height/3)},
-				{focusJobs, max(minJobsHeight, m.height/5)},
-				{focusLogs, max(minJobsHeight, m.height/5)},
+				{focusSidebar, sidebarHeight},
+				{focusContent, contentHeight},
+				{focusDetail, detailHeight},
+				{focusJobs, jobsHeight},
+				{focusLogs, logsHeight},
 			}
 			accumulated := 0
 			for _, pane := range sectionHeights {
@@ -2135,14 +2285,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch message.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
-		case "ctrl+p", ":":
+		case "ctrl+p", ":", "/":
 			m.openPalette()
 			return m, nil
+		case "ctrl+f":
+			if m.focus == focusContent {
+				m.openSectionSearchOverlay()
+				return m, nil
+			}
 		case "?":
 			m.openHelpOverlay()
-			return m, nil
-		case "/":
-			m.openFilterOverlay()
 			return m, nil
 		case "e":
 			return m, m.exportActiveContent()
@@ -2179,6 +2331,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.recordNavigation()
 			return m, nil
 		case "up", "k":
+			if m.focus == focusDetail {
+				m.detail.LineUp(1)
+				return m, nil
+			}
+			if m.focus == focusLogs {
+				m.logViewport.LineUp(1)
+				return m, nil
+			}
 			if m.focus == focusSidebar {
 				m.moveSidebar(-1)
 				return m, nil
@@ -2193,6 +2353,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "down", "j":
+			if m.focus == focusDetail {
+				m.detail.LineDown(1)
+				return m, nil
+			}
+			if m.focus == focusLogs {
+				m.logViewport.LineDown(1)
+				return m, nil
+			}
 			if m.focus == focusSidebar {
 				m.moveSidebar(1)
 				return m, nil
@@ -2207,6 +2375,72 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.recordNavigation()
 				return m, nil
 			}
+		case "pgup", "ctrl+b":
+			switch m.focus {
+			case focusSidebar:
+				m.moveSidebarPage(-1)
+			case focusContent:
+				m.moveContentPage(-1)
+			case focusDetail:
+				m.detail.HalfViewUp()
+			case focusJobs:
+				m.moveJobsPage(-1)
+			case focusLogs:
+				m.logViewport.HalfViewUp()
+			}
+			return m, nil
+		case "pgdown":
+			switch m.focus {
+			case focusSidebar:
+				m.moveSidebarPage(1)
+			case focusContent:
+				m.moveContentPage(1)
+			case focusDetail:
+				m.detail.HalfViewDown()
+			case focusJobs:
+				m.moveJobsPage(1)
+			case focusLogs:
+				m.logViewport.HalfViewDown()
+			}
+			return m, nil
+		case "home":
+			switch m.focus {
+			case focusSidebar:
+				m.sidebarIndex = 0
+			case focusContent:
+				if section := m.activeSection(); section != nil {
+					section.Selected = 0
+					m.ensureSectionSelection(section)
+				}
+			case focusDetail:
+				m.detail.GotoTop()
+			case focusJobs:
+				m.jobTable.SetCursor(0)
+			case focusLogs:
+				m.logViewport.GotoTop()
+			}
+			m.syncDetailViewport()
+			m.recordNavigation()
+			return m, nil
+		case "end":
+			switch m.focus {
+			case focusSidebar:
+				m.sidebarIndex = max(0, len(m.sidebar)-1)
+			case focusContent:
+				if section := m.activeSection(); section != nil && len(section.Items) > 0 {
+					section.Selected = len(section.Items) - 1
+					m.ensureSectionSelection(section)
+				}
+			case focusDetail:
+				m.detail.GotoBottom()
+			case focusJobs:
+				m.jobTable.SetCursor(max(0, len(m.jobOrder)-1))
+			case focusLogs:
+				m.logViewport.GotoBottom()
+			}
+			m.syncDetailViewport()
+			m.recordNavigation()
+			return m, nil
 		case "enter":
 			if m.focus == focusSidebar {
 				return m, m.executeSidebarSelection()
@@ -2216,6 +2450,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.recordNavigation()
 				return m, nil
 			}
+		case "esc":
+			if m.focus == focusDetail {
+				m.focus = focusContent
+				m.recordNavigation()
+				return m, nil
+			}
+			if m.restoreLastView() {
+				return m, nil
+			}
+			return m, nil
 		case "x":
 			m.sidebarIndex = m.findSidebarAction("cancel-pending")
 			return m, m.executeSidebarSelection()
@@ -2395,6 +2639,14 @@ func (m Model) renderHeader() string {
 	subtitle := "Operator console with navigation history, command palette, and export layers"
 	if m.useStackedLayout() {
 		subtitle = "Stacked operator console for narrow terminals"
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			magician,
+			lipgloss.NewStyle().MarginTop(1).Render(
+				titleStyle.Render("contextplusplus-cli")+"\n"+
+					subtitleStyle.Render(subtitle),
+			),
+		)
 	}
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -2406,12 +2658,25 @@ func (m Model) renderHeader() string {
 	)
 }
 
-func (m Model) renderSidebarPanel(width int) string {
+func visibleSidebarCount(height int) int {
+	return max(3, (max(8, height-4)-3)/2)
+}
+
+func visibleContentCount(height int) int {
+	return max(3, max(4, height-6))
+}
+
+func (m Model) renderSidebarPanel(width int, height int) string {
+	start, end := visibleRange(len(m.sidebar), m.sidebarIndex, visibleSidebarCount(height))
 	lines := []string{
 		renderPaneTitle("Navigation", m.focus == focusSidebar),
 		"",
 	}
-	for index, entry := range m.sidebar {
+	if start > 0 {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier entries hidden", start)))
+	}
+	for index := start; index < end; index++ {
+		entry := m.sidebar[index]
 		prefix := "  "
 		if entry.IsAction {
 			prefix = "> "
@@ -2432,7 +2697,10 @@ func (m Model) renderSidebarPanel(width int) string {
 			lines = append(lines, subtitleStyle.Render("  "+entry.Subtitle))
 		}
 	}
-	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+	if end < len(m.sidebar) {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more entries hidden", len(m.sidebar)-end)))
+	}
+	return cardStyle.Width(width).Height(max(6, height)).Render(strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderContentPanel(width int, height int) string {
@@ -2442,7 +2710,7 @@ func (m *Model) renderContentPanel(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(section.Title, m.focus == focusContent),
 		subtitleStyle.Render(section.Subtitle),
-		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d | filter=%s", selectedCountLabel(section.Selected, len(section.Items)), max(1, len(section.Items)), formatBlankAsNone(section.FilterQuery))),
+		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d | search=%s", selectedCountLabel(section.Selected, len(section.Items)), max(1, len(section.Items)), formatBlankAsNone(section.FilterQuery))),
 		"",
 	}
 	if len(section.Items) == 0 {
@@ -2599,13 +2867,15 @@ func (m Model) renderOverlayCard(width int) string {
 			"  b / f walk back and forward through navigation history",
 			"",
 			"Commands",
-			"  : or Ctrl+P opens the command palette",
+			"  /, :, or Ctrl+P opens the command palette",
 			"  1-9 jump directly to overview, tree, hubs, restore, cluster, status, changes, search, and symbol",
 			"  i/t/x/s/r/w keep the existing index, retry, cancel, supersede, refresh, and watcher actions",
 			"  u restores the selected restore point from the Restore section",
+			"  Esc returns from detail or jumps back to the previous view",
 			"",
-			"Filters and export",
-			"  / opens the current-section filter box",
+			"Search and export",
+			"  Ctrl+F searches the current section in place",
+			"  PageUp/PageDown/Home/End move quickly through panes",
 			"  e exports logs, results, or the selected detail view into .contextplus/exports/",
 			"",
 			"Mouse",
@@ -2650,11 +2920,12 @@ func (m Model) View() string {
 	header := m.renderHeader()
 	var body string
 	if m.useStackedLayout() {
-		sidebar := m.renderSidebarPanel(max(32, m.width-4))
-		content := m.renderContentPanel(max(32, m.width-4), max(12, m.height/3))
-		detail := m.renderDetailPanel(max(36, m.width-4), max(10, m.height/3))
-		jobs := m.renderJobsPanel(max(36, m.width-4), max(minJobsHeight, m.height/5))
-		logs := m.renderLogsPanel(max(36, m.width-4), max(minJobsHeight, m.height/5))
+		sidebarHeight, contentHeight, detailHeight, jobsHeight, logsHeight := m.stackedPaneHeights()
+		sidebar := m.renderSidebarPanel(max(32, m.width-4), sidebarHeight)
+		content := m.renderContentPanel(max(32, m.width-4), contentHeight)
+		detail := m.renderDetailPanel(max(36, m.width-4), detailHeight)
+		jobs := m.renderJobsPanel(max(36, m.width-4), jobsHeight)
+		logs := m.renderLogsPanel(max(36, m.width-4), logsHeight)
 		body = lipgloss.JoinVertical(lipgloss.Left, sidebar, content, detail, jobs, logs)
 	} else {
 		jobsHeight := max(minJobsHeight, m.height/4)
@@ -2664,7 +2935,7 @@ func (m Model) View() string {
 		detailWidth := max(minDetailWidth, m.width-sidebarWidth-contentWidth-8)
 		top := lipgloss.JoinHorizontal(
 			lipgloss.Top,
-			m.renderSidebarPanel(sidebarWidth),
+			m.renderSidebarPanel(sidebarWidth, mainHeight),
 			m.renderContentPanel(contentWidth, mainHeight),
 			m.renderDetailPanel(detailWidth, mainHeight),
 		)
@@ -2679,7 +2950,7 @@ func (m Model) View() string {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, "", m.renderOverlayCard(max(48, m.width-4)))
 	}
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Up/Down move | Tab focus | Enter detail/action | : palette | / filter | b/f history | e export | ? help | q quit")
+	footer := footerStyle.Render("Up/Down move | Tab focus | Enter detail/action | / commands | Ctrl+F search | Esc back | e export | ? help | q quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
 	} else if m.overlay.Mode == overlayPalette {
@@ -2687,11 +2958,11 @@ func (m Model) View() string {
 	} else if m.overlay.Mode == overlayPrompt {
 		footer = footerStyle.Render("Prompt: Enter submit | Tab move fields | Esc cancel")
 	} else if m.overlay.Mode == overlayFilter {
-		footer = footerStyle.Render("Filter: type to narrow current section | Enter apply | Esc cancel")
+		footer = footerStyle.Render("Search: type to narrow current section | Enter apply | Esc cancel")
 	} else if m.overlay.Mode == overlayHelp {
 		footer = footerStyle.Render("Help: Enter or Esc closes | mouse click focuses panes | wheel scrolls active panes")
 	} else if m.activeView == viewRestore && m.focus == focusContent {
-		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | / filter | e export | q quit")
+		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | Ctrl+F search | Esc back | e export | q quit")
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,

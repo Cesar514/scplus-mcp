@@ -133,24 +133,14 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Operator console with navigation history, command palette, and export layers",
+		"/\\_",
 		"Navigation",
 		"Overview",
 		"Find hub",
-		"Status",
-		"Changes",
-		"Search",
-		"Symbol",
+		"... 19 more entries hidden",
 		"Detail",
 		"Jobs",
 		"Logs",
-		"Refresh data",
-		"Index running",
-		"Retry last index",
-		"Cancel pending refresh",
-		"Supersede pending refresh",
-		"Disable watcher",
-		"Changes detected (2)",
-		"pending refresh",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -467,13 +457,14 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
+		"Open overview",
+		"Open tree",
 		"Find hub",
 		"Exact lookup",
-		"Go to file",
-		"Go to symbol",
-		"Symbol lookup",
-		"Lint",
-		"Blast radius",
+		"Open search",
+		"Open symbol",
+		"Search related",
+		"Research",
 		"Palette: type to filter | Up/Down select | Enter run | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -523,7 +514,7 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 		},
 	}
 	model.refreshOverviewSection()
-	model.openFilterOverlay()
+	model.openSectionSearchOverlay()
 	model.overlay.Input.SetValue("sched")
 	updated, cmd := model.updateOverlay(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
@@ -531,7 +522,7 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	}
 	filtered := updated.(*Model)
 	rendered := filtered.renderContentPanel(72, 16)
-	if !strings.Contains(rendered, "filter=sched") {
+	if !strings.Contains(rendered, "search=sched") {
 		t.Fatalf("expected rendered content to show active filter: %s", rendered)
 	}
 	if !strings.Contains(rendered, "Scheduler") {
@@ -539,6 +530,70 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	}
 	if strings.Contains(rendered, "Repository") {
 		t.Fatalf("expected filtered overview to hide non-matching rows: %s", rendered)
+	}
+}
+
+func TestSlashOpensCommandPalette(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if cmd != nil {
+		t.Fatalf("expected command palette open without extra command")
+	}
+	next := updated.(Model)
+	if next.overlay.Mode != overlayPalette {
+		t.Fatalf("expected / to open the command palette, got %#v", next.overlay.Mode)
+	}
+}
+
+func TestEscReturnsToPreviousView(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.setActiveView(viewTree)
+	model.focus = focusContent
+	model.setActiveView(viewStatus)
+	model.focus = focusContent
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected esc back navigation without extra command")
+	}
+	next := updated.(Model)
+	if next.activeView != viewTree {
+		t.Fatalf("expected esc to restore previous view, got %s", next.activeView)
+	}
+}
+
+func TestCtrlFOpensSectionSearchOverlay(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.focus = focusContent
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	if cmd != nil {
+		t.Fatalf("expected section search overlay to open synchronously")
+	}
+	next := updated.(Model)
+	if next.overlay.Mode != overlayFilter {
+		t.Fatalf("expected ctrl+f to open the section search overlay, got %#v", next.overlay.Mode)
+	}
+	if next.overlay.Title != "Search section" {
+		t.Fatalf("expected search overlay title, got %q", next.overlay.Title)
+	}
+}
+
+func TestSidebarPanelShowsHiddenEntriesWhenScrolled(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 18
+	model.sidebarIndex = len(model.sidebar) - 1
+
+	rendered := model.renderSidebarPanel(38, 10)
+	if !strings.Contains(rendered, "earlier entries hidden") {
+		t.Fatalf("expected hidden-entry marker in sidebar: %s", rendered)
+	}
+	if strings.Contains(rendered, "Overview") {
+		t.Fatalf("expected earliest sidebar entry to be scrolled out of the visible window: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Help") {
+		t.Fatalf("expected trailing sidebar actions to remain visible: %s", rendered)
 	}
 }
 

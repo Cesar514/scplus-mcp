@@ -367,3 +367,11 @@
 - [x] Finish the public rename pass so actual command, binary, config, and UI surfaces use `contextplusplus` / `contextplusplus-cli`, while `context++` remains product branding only in prose and reading-only labels.
 - [x] Remove lingering `++` command names from CLI-visible text, generated artifacts, install/build entrypoints, and repo-local completion notes.
 - [x] Verify the rename directly with root build/tests, Go CLI build/tests, landing build, and a repository grep sweep for stale actual-surface names.
+
+## cli usability refinement completed
+
+- [x] Make the human CLI panes usable in small and large terminals by adding real scrolling and windowing where rows can overflow, instead of truncating boxes with unreachable content.
+- [x] Move command discovery to `/`, keep `Esc` returning to the previous view, and preserve direct execution into the correct destination view.
+- [x] Add section-local search for file-heavy and index-heavy blocks so operators can narrow lists and tables without endless scrolling.
+- [x] Restore the magician pet as a visible stable part of the CLI header across layouts.
+- [x] Verify the CLI behavior directly with focused Go UI tests, the full Go CLI build and test suite, and a built snapshot render.
