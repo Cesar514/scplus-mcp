@@ -166,6 +166,10 @@
 - [x] finish roadmap step 20 by extending the evaluation suite to measure hot exact-query latency, related-search latency, broad-research latency, estimated token cost, and hybrid exact-vs-related task efficiency
 - [x] verify roadmap step 20 directly with the focused evaluation suite, a direct built evaluation run, the full main test suite, and the landing production build
 - [x] commit the verified step 20 work
+- [x] re-verify roadmap step 18 against the current shipped MCP surface, built exact-query runtime, and landing copies after later roadmap drift
+- [x] confirm the tiny exact-query MCP tool set still exposes `symbol`, `word`, `outline`, `deps`, `status`, and `changes` without additional public-surface drift
+- [x] re-run the direct step 18 verification pass with the built-server MCP integration test, a live built-server MCP probe on this repository, build, the full main test suite, and the landing production build
+- [x] commit the verified step 18 follow-up work
 - [x] re-verify roadmap step 17 against the current prepared-index pipeline and exact-query surface after later roadmap drift
 - [x] fix local dependency resolution for runtime `.js` import specifiers so the active-generation structure artifact and exact-query dependency graph resolve TypeScript source files correctly
 - [x] re-run the direct step 17 verification pass with active-generation sqlite inspection, built exact-query dependency lookups, Context+ lint, focused exact-query coverage, build, and the full main test suite
