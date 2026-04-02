@@ -28,6 +28,12 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report.HybridVectors.Identifier.VectorCoverage.LoadedVectorCount = 2
 	report.HybridVectors.Identifier.VectorCoverage.RequestedVectorCount = 2
 	report.HybridVectors.Identifier.VectorCoverage.State = "complete"
+	report.Observability.Caches.Embeddings.ProcessNamespaceHits = 4
+	report.Observability.Caches.Embeddings.ProcessVectorHits = 6
+	report.Observability.Scheduler.QueueDepth = 1
+	report.Observability.Scheduler.MaxQueueDepth = 2
+	report.Observability.Scheduler.DedupedPathEvents = 3
+	report.Observability.Scheduler.SupersededJobs = 1
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
@@ -39,6 +45,8 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 		"Restore points: 3",
 		"Hybrid vectors: chunk 3/3 complete | identifier 2/2 complete",
 		"Tree-sitter parse failures: 2",
+		"Embedding cache hits: namespace 4 | vector 6",
+		"Scheduler: queue depth 1 | max 2 | deduped 3 | superseded 1",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in rendered doctor output: %s", needle, rendered)

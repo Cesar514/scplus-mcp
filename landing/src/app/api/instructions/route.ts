@@ -1,3 +1,5 @@
+// API route serves mirrored Context+ instructions for landing site consumers
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 import { NextResponse } from "next/server";
 
 const instructionsText = `# Context+ MCP - Agent Instructions
@@ -12,20 +14,20 @@ The MCP server is built with TypeScript and communicates over stdio using the Mo
 
 **Core Layer** (\`src/core/\`):
 
-- \`parser.ts\` - Multi-language symbol extraction via tree-sitter AST with regex fallback. Supports 14+ languages.
+- \`parser.ts\` - Multi-language symbol extraction via tree-sitter AST analysis.
 - \`tree-sitter.ts\` - WASM grammar loader for 43 file extensions using web-tree-sitter 0.20.8.
 - \`walker.ts\` - Gitignore-aware recursive directory traversal with depth and target path control.
-- \`embeddings.ts\` - Ollama vector embedding engine with disk cache, cosine similarity search, and API key support.
+- \`embeddings.ts\` - Ollama/OpenAI-compatible vector embedding engine with sqlite vector collections and cosine similarity search.
 
 **Tools Layer** (\`src/tools/\`):
 
 - \`context-tree.ts\` - Token-aware structural tree with symbol line ranges and Level 0/1/2 pruning.
 - \`file-skeleton.ts\` - Function signatures with line ranges, without reading full bodies.
-- \`semantic-search.ts\` - Ollama-powered semantic file search with symbol definition lines and 60s cache TTL.
-- \`semantic-identifiers.ts\` - Identifier-level semantic search returning ranked definitions + call chains with line numbers.
-- \`semantic-navigate.ts\` - Browse-by-meaning navigator using spectral clustering and Ollama labeling.
+- \`semantic-search.ts\` - Semantic file search with persisted sqlite vector reuse for file-level retrieval.
+- \`semantic-identifiers.ts\` - Identifier-level semantic search returning ranked definitions + call chains with line numbers and dedicated definition/callsite vector collections.
+- \`semantic-navigate.ts\` - Browse-by-meaning navigation backed by persisted semantic clusters.
 - \`blast-radius.ts\` - Symbol usage tracer across the entire codebase.
-- \`static-analysis.ts\` - Native linter runner (tsc, eslint, py_compile, cargo check, go vet).
+- \`static-analysis.ts\` - Native linter runner plus repo/file scoring from Context+ rule findings.
 - \`propose-commit.ts\` - Code gatekeeper validating headers, FEATURE tag, nesting, and file length.
 - \`feature-hub.ts\` - Obsidian-style feature hub navigator with bundled skeleton views.
 
@@ -140,9 +142,9 @@ Strict order within every file:
 | \`deps\`                       | Use for direct and reverse dependency tracing of a known indexed file. |
 | \`status\`                     | Use for tiny git worktree summaries instead of broader repository inspection. |
 | \`changes\`                    | Use for changed-file summaries and line-range hunks, optionally scoped to one file. |
-| \`search\`                     | Route repository search by explicit intent. Use \`intent\` = \`exact\` for deterministic fast-substrate answers and \`intent\` = \`related\` for ranked discovery. \`search_type\` stays \`file\`, \`symbol\`, or \`mixed\`. |
+| \`search\`                     | Route repository search by explicit intent. Use \`intent\` = \`exact\` for deterministic fast-substrate answers and \`intent\` = \`related\` for ranked discovery. \`search_type\` stays \`file\`, \`symbol\`, or \`mixed\`, and related search also accepts \`retrieval_mode\` = \`semantic\`, \`keyword\`, or \`both\`. |
 | \`research\`                   | Use only for broad subsystem understanding after exact lookup and related-item search are no longer enough. |
-| \`evaluate\`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
+| \`evaluate\`                  | Run the built-in real benchmark harness for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
 | \`blast_radius\`               | Before deleting or modifying any symbol.                                           |
 | \`lint\`                       | After writing code. Catch dead code deterministically.                             |
 | \`checkpoint\`                 | The ONLY way to save files. Validates before writing.                              |

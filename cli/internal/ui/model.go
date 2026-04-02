@@ -114,6 +114,8 @@ type Model struct {
 	backendOnline bool
 	jobPhase      string
 	jobMessage    string
+	queueDepth    int
+	jobReason     string
 	wizard        wizardState
 }
 
@@ -333,6 +335,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.backendOnline = true
 		m.doctor = message.report
 		m.doctorLoaded = true
+		m.queueDepth = message.report.Observability.Scheduler.QueueDepth
 		m.appendLog("doctor report refreshed")
 		return m, nil
 	case textLoadedMsg:
@@ -391,13 +394,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "watch-state":
 			m.watchEnabled = message.event.Enabled
+			m.queueDepth = message.event.QueueDepth
 		case "watch-batch":
+			m.queueDepth = message.event.QueueDepth
 			if len(message.event.ChangedPaths) > 0 {
 				m.appendLog("detected changes: " + strings.Join(message.event.ChangedPaths, ", "))
 			}
 		case "job":
 			m.jobPhase = message.event.Phase
 			m.jobMessage = message.event.Message
+			m.jobReason = message.event.RebuildReason
+			m.queueDepth = message.event.QueueDepth
 			m.indexing = message.event.State == "running" || message.event.State == "progress" || message.event.State == "queued"
 		}
 		return m, waitForBackendEventCmd(m.client.Events())
@@ -558,6 +565,19 @@ func (m Model) renderOverview() string {
 				m.doctor.HybridVectors.Identifier.VectorCoverage.State,
 			),
 			fmt.Sprintf("tree-sitter failures %d | parser reuses %d", m.doctor.TreeSitter.TotalParseFailures, m.doctor.TreeSitter.TotalParserReuses),
+			fmt.Sprintf(
+				"cache hits ns %d | vector %d | lexical candidates chunk %d | id %d",
+				m.doctor.Observability.Caches.Embeddings.ProcessNamespaceHits,
+				m.doctor.Observability.Caches.Embeddings.ProcessVectorHits,
+				m.doctor.Observability.Caches.HybridSearch.Chunk.LastLexicalCandidateCount,
+				m.doctor.Observability.Caches.HybridSearch.Identifier.LastLexicalCandidateCount,
+			),
+			fmt.Sprintf(
+				"stale age %s ms | refresh failures file %d | write %d",
+				formatOptionalInt(m.doctor.Observability.Integrity.StaleGenerationAgeMs),
+				m.doctor.Observability.Integrity.RefreshFailures.FileSearch.RefreshFailures,
+				m.doctor.Observability.Integrity.RefreshFailures.WriteFreshness.RefreshFailures,
+			),
 			ollamaLine,
 		}, "\n")
 	}
@@ -571,6 +591,9 @@ func (m Model) renderOverview() string {
 			fmt.Sprintf("indexing %s", map[bool]string{true: "running", false: "idle"}[m.indexing]),
 			fmt.Sprintf("backend %s", map[bool]string{true: "connected", false: "offline"}[m.backendOnline]),
 			fmt.Sprintf("phase %s", formatBlankAsNone(m.jobPhase)),
+			fmt.Sprintf("queue depth %d | max %d", m.queueDepth, m.doctor.Observability.Scheduler.MaxQueueDepth),
+			fmt.Sprintf("deduped %d | superseded %d", m.doctor.Observability.Scheduler.DedupedPathEvents, m.doctor.Observability.Scheduler.SupersededJobs),
+			fmt.Sprintf("rebuild reason %s", formatBlankAsNone(m.jobReason)),
 		}, "\n")
 	}
 	logs := "No activity yet."
@@ -671,6 +694,18 @@ func RenderDoctorPlain(report backend.DoctorReport) string {
 			report.HybridVectors.Identifier.VectorCoverage.State,
 		),
 		fmt.Sprintf("Tree-sitter parse failures: %d", report.TreeSitter.TotalParseFailures),
+		fmt.Sprintf(
+			"Embedding cache hits: namespace %d | vector %d",
+			report.Observability.Caches.Embeddings.ProcessNamespaceHits,
+			report.Observability.Caches.Embeddings.ProcessVectorHits,
+		),
+		fmt.Sprintf(
+			"Scheduler: queue depth %d | max %d | deduped %d | superseded %d",
+			report.Observability.Scheduler.QueueDepth,
+			report.Observability.Scheduler.MaxQueueDepth,
+			report.Observability.Scheduler.DedupedPathEvents,
+			report.Observability.Scheduler.SupersededJobs,
+		),
 	)
 	return strings.Join(lines, "\n")
 }

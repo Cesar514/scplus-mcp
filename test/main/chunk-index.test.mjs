@@ -123,7 +123,7 @@ describe("chunk-index", () => {
       const chunkState = readArtifactFromDb(dbPath, "chunk-search-index");
       const chunkVectors = readVectorEntriesFromDb(dbPath, "chunk-search");
 
-      assert.equal(firstRefresh.state.artifactVersion, 16);
+      assert.equal(firstRefresh.state.artifactVersion, 17);
       assert.equal(firstRefresh.state.contractVersion, 13);
       assert.equal(firstRefresh.state.mode, "full");
       assert.equal(firstRefresh.stats.totalFiles, 1);

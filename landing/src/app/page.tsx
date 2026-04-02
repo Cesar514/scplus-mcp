@@ -1,3 +1,5 @@
+// Landing page showcases Context+ tools and current public product surface
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 import Background from "../components/Background";
 import Header from "../components/Header";
 import IdeSetup from "../components/IdeSetup";
@@ -10,10 +12,10 @@ export const dynamic = "force-dynamic";
 const toolRefRows = [
   {
     name: "index",
-    desc: "Create or refresh repo-local .contextplus state. Writes project config, a context-tree snapshot, a file manifest, and durable checkpoint/index storage.",
+    desc: "Create or refresh repo-local .contextplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/config/project.json\n  .contextplus/config/context-tree.txt\n  .contextplus/config/file-manifest.json\n  .contextplus/checkpoints/restore-points.json"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\nContext+ root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
   },
   {
     name: "validate_index",
@@ -89,9 +91,9 @@ const toolRefRows = [
   },
   {
     name: "search",
-    desc: "Route repository search by intent. Use intent 'exact' for deterministic fast-substrate answers, and intent 'related' for ranked related-item and pattern discovery.",
+    desc: "Route repository search by explicit intent. Use intent 'exact' for deterministic fast-substrate answers and intent 'related' for ranked related-item and pattern discovery.",
     input:
-      "{ intent: 'exact' | 'related', search_type: 'file' | 'symbol' | 'mixed', query: string, top_k?: number, include_kinds?: string[] }",
+      "{ intent: 'exact' | 'related', search_type: 'file' | 'symbol' | 'mixed', query: string, retrieval_mode?: 'semantic' | 'keyword' | 'both', top_k?: number, include_kinds?: string[] }",
     output:
       '"1. [file] src/auth/jwt.ts (94.0% total)\n   Evidence: file 0.43 | chunk 0.28 | identifier 0.17 | structure 0.12\n2. [symbol] src/auth/session.ts#createSession (87.4% total)\n   Signature: createSession(token: string): string"',
   },
@@ -104,7 +106,7 @@ const toolRefRows = [
   },
   {
     name: "evaluate",
-    desc: "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality.",
+    desc: "Run the built-in real benchmark harness for retrieval quality, navigation quality, reindex speed, hot-query latency, token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality.",
     input: "{}",
     output:
       '"Evaluation suite: default\nOverall: PASS\nValidation: initial=ok | refresh=ok\nTimings: initialIndexMs=2104.19 | refreshIndexMs=511.71 | hotExactSearchMs=2.27 | relatedSearchMs=127.15 | broadResearchMs=143.84\nToken cost: exact=31 (123 chars) | related=323 (1292 chars) | research=952 (3806 chars)\n\nRetrieval quality: 3/3\nNavigation quality: 3/3\nAnswer quality: 4/4\nHybrid efficiency: 4/4\nArtifact freshness: 3/3"',
@@ -145,7 +147,7 @@ const toolRefRows = [
   },
   {
     name: "cluster",
-    desc: "Browse codebase by meaning using spectral clustering. Groups semantically related files into labeled clusters.",
+    desc: "Browse persisted semantic clusters and related-file neighborhoods from the prepared full index.",
     input: "{\n  max_depth?: number,\n  max_clusters?: number\n}",
     output:
       '"Authentication (4 files)\n  src/auth/jwt.ts\n  src/auth/session.ts\n  src/middleware/guard.ts\n  src/models/user.ts\n\nParsing (3 files)\n  src/core/parser.ts\n  src/core/tree-sitter.ts\n  src/core/walker.ts"',

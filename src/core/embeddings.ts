@@ -110,6 +110,16 @@ interface NamespaceProcessCacheEntry {
   fullyLoaded: boolean;
 }
 
+export interface EmbeddingRuntimeStats {
+  processNamespaceHits: number;
+  processNamespaceMisses: number;
+  processVectorHits: number;
+  processVectorMisses: number;
+  sqliteNamespaceLoads: number;
+  sqliteEntryLoads: number;
+  generationInvalidations: number;
+}
+
 const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
 const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k";
 const OPENAI_EMBED_MODEL = process.env.CONTEXTPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
@@ -132,6 +142,15 @@ const IDENTIFIER_CALLSITE_VECTOR_NAMESPACE = "identifier-callsite-search";
 const CHUNK_VECTOR_NAMESPACE = "chunk-search";
 const embeddingProcessCache = new Map<string, NamespaceProcessCacheEntry>();
 const activeGenerationByRoot = new Map<string, number>();
+let embeddingRuntimeStats: EmbeddingRuntimeStats = {
+  processNamespaceHits: 0,
+  processNamespaceMisses: 0,
+  processVectorHits: 0,
+  processVectorMisses: 0,
+  sqliteNamespaceLoads: 0,
+  sqliteEntryLoads: 0,
+  generationInvalidations: 0,
+};
 
 type OllamaEmbedClient = { embed: (params: Record<string, unknown>) => Promise<{ embeddings: number[][] }> };
 let ollamaClient: OllamaEmbedClient | null = null;
@@ -483,6 +502,22 @@ function cloneEmbeddingCacheValue(value: EmbeddingCacheValue): EmbeddingCacheVal
   };
 }
 
+export function getEmbeddingRuntimeStats(): EmbeddingRuntimeStats {
+  return { ...embeddingRuntimeStats };
+}
+
+export function resetEmbeddingRuntimeStats(): void {
+  embeddingRuntimeStats = {
+    processNamespaceHits: 0,
+    processNamespaceMisses: 0,
+    processVectorHits: 0,
+    processVectorMisses: 0,
+    sqliteNamespaceLoads: 0,
+    sqliteEntryLoads: 0,
+    generationInvalidations: 0,
+  };
+}
+
 function buildProcessCacheKey(rootDir: string, generation: number, namespace: string): string {
   return `${resolve(rootDir)}::${generation}::${namespace}`;
 }
@@ -492,6 +527,7 @@ function invalidateRootGenerationCache(rootDir: string, activeGeneration: number
   const previousGeneration = activeGenerationByRoot.get(normalizedRootDir);
   if (previousGeneration === activeGeneration) return;
   activeGenerationByRoot.set(normalizedRootDir, activeGeneration);
+  if (previousGeneration !== undefined) embeddingRuntimeStats.generationInvalidations++;
   for (const cacheKey of embeddingProcessCache.keys()) {
     if (cacheKey.startsWith(`${normalizedRootDir}::`) && !cacheKey.startsWith(`${normalizedRootDir}::${activeGeneration}::`)) {
       embeddingProcessCache.delete(cacheKey);
@@ -524,15 +560,19 @@ async function loadEmbeddingNamespaceEntries(
   const cacheKey = buildProcessCacheKey(rootDir, generation, namespace);
   let namespaceCache = embeddingProcessCache.get(cacheKey);
   if (!namespaceCache) {
+    embeddingRuntimeStats.processNamespaceMisses++;
     namespaceCache = {
       entries: new Map<string, EmbeddingCacheValue>(),
       fullyLoaded: false,
     };
     embeddingProcessCache.set(cacheKey, namespaceCache);
+  } else {
+    embeddingRuntimeStats.processNamespaceHits++;
   }
 
   if (!entryIds) {
     if (!namespaceCache.fullyLoaded) {
+      embeddingRuntimeStats.sqliteNamespaceLoads++;
       const entries = await loadVectorCollection(rootDir, namespace, { generation });
       namespaceCache.entries = new Map(entries.map((entry) => [
         entry.id,
@@ -540,6 +580,7 @@ async function loadEmbeddingNamespaceEntries(
       ]));
       namespaceCache.fullyLoaded = true;
     }
+    embeddingRuntimeStats.processVectorHits += namespaceCache.entries.size;
     return new Map(Array.from(namespaceCache.entries.entries(), ([id, value]) => [id, cloneEmbeddingCacheValue(value)]));
   }
 
@@ -547,7 +588,10 @@ async function loadEmbeddingNamespaceEntries(
   const missingIds = namespaceCache.fullyLoaded
     ? []
     : uniqueEntryIds.filter((entryId) => !namespaceCache.entries.has(entryId));
+  embeddingRuntimeStats.processVectorHits += uniqueEntryIds.length - missingIds.length;
+  embeddingRuntimeStats.processVectorMisses += missingIds.length;
   if (missingIds.length > 0) {
+    embeddingRuntimeStats.sqliteEntryLoads += missingIds.length;
     const fetchedEntries = await loadVectorEntriesById(rootDir, namespace, missingIds, { generation });
     for (const entry of fetchedEntries) {
       namespaceCache.entries.set(entry.id, {

@@ -294,6 +294,15 @@ function formatRestorePoints(points: Awaited<ReturnType<typeof listRestorePoints
 function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>): string {
   const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
   const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;
+  const indexingStages = Object.entries(report.observability.indexing.stages)
+    .map(([stage, metrics]) => {
+      const throughputParts = [
+        metrics.filesPerSecond ? `files/s=${metrics.filesPerSecond}` : "",
+        metrics.chunksPerSecond ? `chunks/s=${metrics.chunksPerSecond}` : "",
+        metrics.embedsPerSecond ? `embeds/s=${metrics.embedsPerSecond}` : "",
+      ].filter(Boolean);
+      return `- ${stage}: ${metrics.durationMs}ms${throughputParts.length > 0 ? ` | ${throughputParts.join(" | ")}` : ""}`;
+    });
   const lines = [
     `Doctor: ${report.root}`,
     "",
@@ -313,7 +322,21 @@ function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>
     report.ollama.ok
       ? `Ollama: ok | running models ${report.ollama.models.length}`
       : `Ollama: error | ${report.ollama.error}`,
+    "",
+    `Observability: staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"} | fallback markers=${report.observability.integrity.fallbackMarkerCount}`,
+    `Refresh failures: file-search=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures} | write-refresh=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
+    `Embedding cache: namespace hits=${report.observability.caches.embeddings.processNamespaceHits} | namespace misses=${report.observability.caches.embeddings.processNamespaceMisses} | vector hits=${report.observability.caches.embeddings.processVectorHits} | vector misses=${report.observability.caches.embeddings.processVectorMisses}`,
+    `Hybrid search runtime: chunk lexical=${report.observability.caches.hybridSearch.chunk.lexicalCandidateCount} | identifier lexical=${report.observability.caches.hybridSearch.identifier.lexicalCandidateCount}`,
+    `Scheduler: queueDepth=${report.observability.scheduler.queueDepth} | maxQueueDepth=${report.observability.scheduler.maxQueueDepth} | dedupedPathEvents=${report.observability.scheduler.dedupedPathEvents} | supersededJobs=${report.observability.scheduler.supersededJobs}`,
   ];
+  if (indexingStages.length > 0) {
+    lines.push("Index stages:");
+    lines.push(...indexingStages);
+  }
+  if (report.observability.scheduler.fullRebuildReasons.length > 0) {
+    lines.push("Recent full rebuild reasons:");
+    for (const reason of report.observability.scheduler.fullRebuildReasons) lines.push(`- ${reason}`);
+  }
   for (const model of report.ollama.models) {
     lines.push(`- ${model.name} | ${model.processor ?? "unknown processor"} | ${model.until ?? "unknown expiry"}`);
   }

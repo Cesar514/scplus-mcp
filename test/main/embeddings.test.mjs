@@ -8,9 +8,11 @@ import { join } from "node:path";
 import {
   SearchIndex,
   fetchEmbedding,
+  getEmbeddingRuntimeStats,
   getEmbeddingBatchSize,
   loadEmbeddingCache,
   loadEmbeddingCacheEntries,
+  resetEmbeddingRuntimeStats,
   saveEmbeddingCache,
   upsertEmbeddingCacheEntries,
 } from "../../build/core/embeddings.js";
@@ -109,6 +111,33 @@ function deleteVectorEntry(dbPath, namespace, entryId) {
 }
 
 describe("embeddings", () => {
+  it("tracks process-cache hits, misses, and sqlite loads for embedding lookups", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-runtime-"));
+    try {
+      resetEmbeddingRuntimeStats();
+      const pendingGeneration = await reservePendingIndexGeneration(rootDir);
+      await runWithIndexGenerationContext({ writeGeneration: pendingGeneration }, async () => {
+        await saveEmbeddingCache(rootDir, {
+          alpha: { hash: "hash-a", vector: [1, 0, 0] },
+          beta: { hash: "hash-b", vector: [0, 1, 0] },
+        }, "chunk-embeddings-cache.json");
+      });
+      await activateIndexGeneration(rootDir, pendingGeneration, new Date().toISOString());
+      resetEmbeddingRuntimeStats();
+
+      await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["alpha"]);
+      await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["alpha", "beta"]);
+      const stats = getEmbeddingRuntimeStats();
+
+      assert.equal(stats.processNamespaceHits+stats.processNamespaceMisses >= 1, true);
+      assert.equal(stats.processVectorHits >= 1, true);
+      assert.equal(typeof stats.sqliteEntryLoads, "number");
+      assert.equal(typeof stats.sqliteNamespaceLoads, "number");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
   describe("getEmbeddingBatchSize", () => {
     it("returns a GPU-safe value between 5 and 10", () => {
       const value = getEmbeddingBatchSize();

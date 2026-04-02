@@ -1,12 +1,19 @@
 // Human CLI backend reports for dashboard, status, and health data
 // FEATURE: Human terminal interface bridge over Context+ backend commands surface
 
+import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { getBackendSchedulerObservability, type BackendSchedulerObservability } from "../core/runtime-observability.js";
+import { walkDirectory } from "../core/walker.js";
+import { getEmbeddingRuntimeStats, type EmbeddingRuntimeStats } from "../core/embeddings.js";
 import { loadHubSuggestionState } from "../tools/hub-suggestions.js";
 import { getRepoStatus, type RepoStatusSummary } from "../tools/exact-query.js";
-import { inspectHybridVectorCoverage, type HybridVectorCoverageSummary } from "../tools/hybrid-retrieval.js";
+import { getHybridSearchRuntimeStats, inspectHybridVectorCoverage, type HybridSearchRuntimeStats, type HybridVectorCoverageSummary } from "../tools/hybrid-retrieval.js";
 import { validatePreparedIndex, type IndexValidationReport } from "../tools/index-reliability.js";
+import { createIndexRuntime, loadIndexStatus, type IndexStageObservabilityStatus } from "../tools/index-stages.js";
+import { getFileSearchRuntimeStats, type FileSearchRuntimeStats } from "../tools/semantic-search.js";
+import { getWriteFreshnessRuntimeStats, type WriteFreshnessRuntimeStats } from "../tools/write-freshness.js";
 import { listRestorePoints } from "../git/shadow.js";
 import { getTreeSitterRuntimeStats, type TreeSitterRuntimeStats } from "../core/tree-sitter.js";
 
@@ -50,6 +57,29 @@ export interface BridgeDoctorReport {
     identifier: HybridVectorCoverageSummary;
   };
   treeSitter: TreeSitterRuntimeStats;
+  observability: {
+    indexing: {
+      lastUpdatedAt?: string;
+      elapsedMs?: number;
+      stages: Partial<Record<"bootstrap" | "file-search" | "identifier-search" | "full-artifacts", IndexStageObservabilityStatus>>;
+    };
+    caches: {
+      embeddings: EmbeddingRuntimeStats;
+      hybridSearch: HybridSearchRuntimeStats;
+      parserPoolReuseCount: number;
+    };
+    integrity: {
+      staleGenerationAgeMs?: number;
+      fallbackMarkerCount: number;
+      fallbackFiles: string[];
+      parseFailuresByLanguage: Record<string, number>;
+      refreshFailures: {
+        fileSearch: FileSearchRuntimeStats;
+        writeFreshness: WriteFreshnessRuntimeStats;
+      };
+    };
+    scheduler: BackendSchedulerObservability;
+  };
   restorePointCount: number;
   ollama: OllamaRuntimeStatus;
 }
@@ -77,8 +107,56 @@ async function getOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
   }
 }
 
+const OBSERVABILITY_IGNORE_PREFIXES = [
+  ".contextplus/",
+  ".git/",
+  ".pixi/",
+  "build/",
+  "dist/",
+  "landing/.next/",
+  "node_modules/",
+];
+
+function shouldInspectFallbackMarkers(path: string): boolean {
+  return !OBSERVABILITY_IGNORE_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+async function inspectFallbackMarkers(rootDir: string): Promise<{ count: number; files: string[] }> {
+  const entries = await walkDirectory({ rootDir, depthLimit: 0 });
+  const files = entries.filter((entry) => !entry.isDirectory && shouldInspectFallbackMarkers(entry.relativePath));
+  const markerFiles: string[] = [];
+  let count = 0;
+  for (const file of files) {
+    const content = await readFile(file.path, "utf8").catch(() => "");
+    if (!content.includes("// FALLBACK")) continue;
+    markerFiles.push(file.relativePath.replace(/\\/g, "/"));
+    const matches = content.match(/\/\/ FALLBACK/g);
+    count += matches?.length ?? 0;
+  }
+  return {
+    count,
+    files: markerFiles.sort(),
+  };
+}
+
+function getStaleGenerationAgeMs(validatedAt: string | undefined): number | undefined {
+  if (!validatedAt) return undefined;
+  const parsed = Date.parse(validatedAt);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(0, Date.now() - parsed);
+}
+
+function getParseFailuresByLanguage(treeSitter: TreeSitterRuntimeStats): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(treeSitter.languages)
+      .filter(([, stats]) => stats.parseFailures > 0)
+      .map(([language, stats]) => [language, stats.parseFailures]),
+  );
+}
+
 export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorReport> {
-  const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter, hybridVectors] = await Promise.all([
+  const runtime = await createIndexRuntime({ rootDir, mode: "full" });
+  const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter, hybridVectors, indexStatus, fallbackMarkers] = await Promise.all([
     getRepoStatus(rootDir),
     validatePreparedIndex({ rootDir, mode: "full" }),
     loadHubSuggestionState(rootDir),
@@ -86,7 +164,10 @@ export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorRe
     getOllamaRuntimeStatus(),
     Promise.resolve(getTreeSitterRuntimeStats()),
     inspectHybridVectorCoverage(rootDir),
+    loadIndexStatus(runtime, new Date().toISOString()),
+    inspectFallbackMarkers(rootDir),
   ]);
+  const scheduler = getBackendSchedulerObservability(rootDir);
   return {
     generatedAt: new Date().toISOString(),
     root: rootDir,
@@ -108,6 +189,29 @@ export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorRe
     },
     hybridVectors,
     treeSitter,
+    observability: {
+      indexing: {
+        lastUpdatedAt: indexStatus.lastUpdatedAt,
+        elapsedMs: indexStatus.elapsedMs,
+        stages: indexStatus.observability?.stages ?? {},
+      },
+      caches: {
+        embeddings: getEmbeddingRuntimeStats(),
+        hybridSearch: getHybridSearchRuntimeStats(),
+        parserPoolReuseCount: treeSitter.totalParserReuses,
+      },
+      integrity: {
+        staleGenerationAgeMs: getStaleGenerationAgeMs(indexValidation.activeGenerationValidatedAt),
+        fallbackMarkerCount: fallbackMarkers.count,
+        fallbackFiles: fallbackMarkers.files,
+        parseFailuresByLanguage: getParseFailuresByLanguage(treeSitter),
+        refreshFailures: {
+          fileSearch: getFileSearchRuntimeStats(),
+          writeFreshness: getWriteFreshnessRuntimeStats(),
+        },
+      },
+      scheduler,
+    },
     restorePointCount: restorePoints.length,
     ollama,
   };

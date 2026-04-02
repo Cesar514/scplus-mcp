@@ -132,6 +132,21 @@ export interface HybridVectorCoverageSummary {
   vectorCoverage: HybridVectorCoverageDiagnostics;
 }
 
+export interface HybridSearchRuntimeSourceStats {
+  searchCalls: number;
+  lexicalCandidateCount: number;
+  rerankCandidateCount: number;
+  finalResultCount: number;
+  lastLexicalCandidateCount: number;
+  lastRerankCandidateCount: number;
+  lastFinalResultCount: number;
+}
+
+export interface HybridSearchRuntimeStats {
+  chunk: HybridSearchRuntimeSourceStats;
+  identifier: HybridSearchRuntimeSourceStats;
+}
+
 export class HybridVectorIntegrityError extends Error {
   readonly rootDir: string;
   readonly source: "chunk" | "identifier";
@@ -156,6 +171,71 @@ export class HybridVectorIntegrityError extends Error {
     this.retrievalMode = retrievalMode;
     this.diagnostics = diagnostics;
   }
+}
+
+let hybridSearchRuntimeStats: HybridSearchRuntimeStats = {
+  chunk: {
+    searchCalls: 0,
+    lexicalCandidateCount: 0,
+    rerankCandidateCount: 0,
+    finalResultCount: 0,
+    lastLexicalCandidateCount: 0,
+    lastRerankCandidateCount: 0,
+    lastFinalResultCount: 0,
+  },
+  identifier: {
+    searchCalls: 0,
+    lexicalCandidateCount: 0,
+    rerankCandidateCount: 0,
+    finalResultCount: 0,
+    lastLexicalCandidateCount: 0,
+    lastRerankCandidateCount: 0,
+    lastFinalResultCount: 0,
+  },
+};
+
+export function getHybridSearchRuntimeStats(): HybridSearchRuntimeStats {
+  return {
+    chunk: { ...hybridSearchRuntimeStats.chunk },
+    identifier: { ...hybridSearchRuntimeStats.identifier },
+  };
+}
+
+export function resetHybridSearchRuntimeStats(): void {
+  hybridSearchRuntimeStats = {
+    chunk: {
+      searchCalls: 0,
+      lexicalCandidateCount: 0,
+      rerankCandidateCount: 0,
+      finalResultCount: 0,
+      lastLexicalCandidateCount: 0,
+      lastRerankCandidateCount: 0,
+      lastFinalResultCount: 0,
+    },
+    identifier: {
+      searchCalls: 0,
+      lexicalCandidateCount: 0,
+      rerankCandidateCount: 0,
+      finalResultCount: 0,
+      lastLexicalCandidateCount: 0,
+      lastRerankCandidateCount: 0,
+      lastFinalResultCount: 0,
+    },
+  };
+}
+
+function recordHybridSearchRuntimeStats(
+  source: "chunk" | "identifier",
+  diagnostics: HybridSearchDiagnostics,
+): void {
+  const current = hybridSearchRuntimeStats[source];
+  current.searchCalls++;
+  current.lexicalCandidateCount += diagnostics.lexicalCandidateCount;
+  current.rerankCandidateCount += diagnostics.rerankCandidateCount;
+  current.finalResultCount += diagnostics.finalResultCount;
+  current.lastLexicalCandidateCount = diagnostics.lexicalCandidateCount;
+  current.lastRerankCandidateCount = diagnostics.rerankCandidateCount;
+  current.lastFinalResultCount = diagnostics.finalResultCount;
 }
 
 function clamp01(value: number): number {
@@ -440,23 +520,25 @@ async function searchHybridState(
   const lexicalWeight = normalizeWeight(options?.lexicalWeight, 0.32);
   const retrievalMode = resolveHybridRetrievalMode(semanticWeight, lexicalWeight);
   if (documents.length === 0) {
+    const diagnostics: HybridSearchDiagnostics = {
+      totalDocuments: 0,
+      lexicalCandidateCount: 0,
+      rerankCandidateCount: 0,
+      finalResultCount: 0,
+      retrievalMode,
+      vectorCoverage: {
+        state: retrievalMode === "keyword" ? "explicit-lexical-only" : "complete",
+        requestedVectorCount: 0,
+        loadedVectorCount: 0,
+        missingVectorCount: 0,
+        coverageRatio: 1,
+        missingVectorIds: [],
+      },
+    };
+    recordHybridSearchRuntimeStats(state.source, diagnostics);
     return {
       matches: [],
-      diagnostics: {
-        totalDocuments: 0,
-        lexicalCandidateCount: 0,
-        rerankCandidateCount: 0,
-        finalResultCount: 0,
-        retrievalMode,
-        vectorCoverage: {
-          state: retrievalMode === "keyword" ? "explicit-lexical-only" : "complete",
-          requestedVectorCount: 0,
-          loadedVectorCount: 0,
-          missingVectorCount: 0,
-          coverageRatio: 1,
-          missingVectorIds: [],
-        },
-      },
+      diagnostics,
     };
   }
 
@@ -553,16 +635,18 @@ async function searchHybridState(
   const matches = ranked
     .sort((a, b) => b.score - a.score || b.lexicalScore - a.lexicalScore || b.semanticScore - a.semanticScore)
     .slice(0, topK);
+  const diagnostics: HybridSearchDiagnostics = {
+    totalDocuments: documents.length,
+    lexicalCandidateCount: lexicalCandidates.length,
+    rerankCandidateCount: selectedCandidates.length,
+    finalResultCount: matches.length,
+    retrievalMode,
+    vectorCoverage,
+  };
+  recordHybridSearchRuntimeStats(state.source, diagnostics);
   return {
     matches,
-    diagnostics: {
-      totalDocuments: documents.length,
-      lexicalCandidateCount: lexicalCandidates.length,
-      rerankCandidateCount: selectedCandidates.length,
-      finalResultCount: matches.length,
-      retrievalMode,
-      vectorCoverage,
-    },
+    diagnostics,
   };
 }
 

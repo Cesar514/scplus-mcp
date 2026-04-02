@@ -154,6 +154,7 @@ describe("bridge-serve", () => {
         ]);
         assert.equal(doctor.root, cwd);
         assert.equal(doctor.indexValidation.ok, true);
+        assert.equal(doctor.observability.scheduler.queueDepth, 0);
         assert.equal(tree.root, cwd);
         assert.equal(tree.text.includes("src/"), true);
 
@@ -172,6 +173,7 @@ describe("bridge-serve", () => {
           event.changedPaths.some((path) => path === "src/app.ts"),
         );
         assert.equal(batchEvent.root, cwd);
+        assert.equal(typeof batchEvent.queueDepth, "number");
 
         const jobCompleted = await session.waitForEvent((event) =>
           event.kind === "job" &&
@@ -180,10 +182,14 @@ describe("bridge-serve", () => {
           event.source === "watch",
         );
         assert.equal(jobCompleted.root, cwd);
+        assert.equal(typeof jobCompleted.queueDepth, "number");
+        assert.equal(jobCompleted.rebuildReason.includes("watch-triggered full rebuild"), true);
 
         const doctorAfterWatch = await session.request("doctor", { root: cwd });
         assert.equal(doctorAfterWatch.root, cwd);
         assert.equal(doctorAfterWatch.indexValidation.ok, true);
+        assert.equal(doctorAfterWatch.observability.scheduler.batchCount >= 1, true);
+        assert.equal(doctorAfterWatch.observability.scheduler.fullRebuildReasons.some((reason) => reason.includes("watch-triggered full rebuild")), true);
       } finally {
         await session.close();
       }

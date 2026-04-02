@@ -3,6 +3,7 @@
 
 import { readdir, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
+import { resetBackendSchedulerObservability, updateBackendSchedulerObservability } from "../core/runtime-observability.js";
 import { listRestorePoints } from "../git/shadow.js";
 import { semanticNavigate } from "../tools/semantic-navigate.js";
 import { DEFAULT_INDEX_MODE, type IndexMode } from "../tools/index-contract.js";
@@ -38,6 +39,8 @@ export interface BackendEvent {
   pending?: boolean;
   enabled?: boolean;
   changedPaths?: string[];
+  queueDepth?: number;
+  rebuildReason?: string;
 }
 
 interface TextPayload {
@@ -88,6 +91,11 @@ class BackendRootSession {
   private queuedWatchIndex = false;
   private closed = false;
   private scanRunning = false;
+  private dedupedPathEvents = 0;
+  private batchCount = 0;
+  private supersededJobs = 0;
+  private canceledJobs = 0;
+  private lastWatchBatch: string[] = [];
 
   constructor(
     private readonly rootDir: string,
@@ -131,6 +139,7 @@ class BackendRootSession {
     if (this.closed) return;
     this.closed = true;
     this.stopWatcher();
+    resetBackendSchedulerObservability(this.rootDir);
   }
 
   private assertOpen(): void {
@@ -153,7 +162,47 @@ class BackendRootSession {
       root: this.rootDir,
       message,
       level,
+      queueDepth: this.getQueueDepth(),
     });
+  }
+
+  private getQueueDepth(): number {
+    return this.pendingPaths.size + (this.queuedWatchIndex ? 1 : 0);
+  }
+
+  private syncSchedulerObservability(): void {
+    updateBackendSchedulerObservability(this.rootDir, (current) => ({
+      ...current,
+      watchEnabled: this.watchEnabled,
+      queueDepth: this.getQueueDepth(),
+      maxQueueDepth: Math.max(current.maxQueueDepth, this.getQueueDepth()),
+      batchCount: this.batchCount,
+      dedupedPathEvents: this.dedupedPathEvents,
+      supersededJobs: this.supersededJobs,
+      canceledJobs: this.canceledJobs,
+    }));
+  }
+
+  private recordFullRebuildReason(reason: string): void {
+    updateBackendSchedulerObservability(this.rootDir, (current) => ({
+      ...current,
+      watchEnabled: this.watchEnabled,
+      queueDepth: this.getQueueDepth(),
+      maxQueueDepth: Math.max(current.maxQueueDepth, this.getQueueDepth()),
+      batchCount: this.batchCount,
+      dedupedPathEvents: this.dedupedPathEvents,
+      supersededJobs: this.supersededJobs,
+      canceledJobs: this.canceledJobs,
+      fullRebuildReasons: [...current.fullRebuildReasons, reason],
+    }));
+  }
+
+  private trackPendingPath(path: string): void {
+    if (this.pendingPaths.has(path)) {
+      this.dedupedPathEvents++;
+    }
+    this.pendingPaths.add(path);
+    this.syncSchedulerObservability();
   }
 
   private async startWatcher(debounceMs?: number): Promise<void> {
@@ -173,6 +222,7 @@ class BackendRootSession {
       throw error;
     }
     this.watchEnabled = true;
+    this.syncSchedulerObservability();
     const pollMs = Math.max(250, Math.min(this.watchDebounceMs, 1000));
     this.scanTimer = setInterval(() => {
       void this.scanForChanges();
@@ -193,6 +243,7 @@ class BackendRootSession {
     this.previousSnapshot.clear();
     this.scanRunning = false;
     this.watchEnabled = false;
+    this.syncSchedulerObservability();
   }
 
   private resetWatchDebounce(): void {
@@ -208,15 +259,20 @@ class BackendRootSession {
     if (this.pendingPaths.size === 0) return;
     const changedPaths = Array.from(this.pendingPaths).sort();
     this.pendingPaths.clear();
+    this.lastWatchBatch = changedPaths;
+    this.batchCount++;
+    this.syncSchedulerObservability();
     await this.emit({
       kind: "watch-batch",
       root: this.rootDir,
       changedPaths,
+      queueDepth: this.getQueueDepth(),
       message: `detected changes: ${changedPaths.join(", ")}`,
     });
     if (this.indexRunning) {
       if (!this.queuedWatchIndex) {
         this.queuedWatchIndex = true;
+        this.syncSchedulerObservability();
         await this.emit({
           kind: "job",
           root: this.rootDir,
@@ -225,8 +281,14 @@ class BackendRootSession {
           mode: DEFAULT_INDEX_MODE,
           source: "watch",
           pending: true,
+          queueDepth: this.getQueueDepth(),
+          rebuildReason: `watch changes: ${changedPaths.join(", ")}`,
           message: "queued reindex because one is already running",
         });
+      } else {
+        this.supersededJobs++;
+        this.syncSchedulerObservability();
+        this.emitLog(`watch batch superseded an already queued rebuild: ${changedPaths.join(", ")}`);
       }
       return;
     }
@@ -265,12 +327,12 @@ class BackendRootSession {
       const nextSnapshot = await this.scanSnapshot();
       for (const [path, fingerprint] of nextSnapshot.entries()) {
         if (this.previousSnapshot.get(path) !== fingerprint) {
-          this.pendingPaths.add(path);
+          this.trackPendingPath(path);
         }
       }
       for (const path of this.previousSnapshot.keys()) {
         if (!nextSnapshot.has(path)) {
-          this.pendingPaths.add(path);
+          this.trackPendingPath(path);
         }
       }
       this.previousSnapshot = nextSnapshot;
@@ -293,6 +355,10 @@ class BackendRootSession {
 
   private async runIndex(mode: IndexMode, source: "manual" | "watch"): Promise<string> {
     this.indexRunning = true;
+    const rebuildReason = source === "watch"
+      ? `watch-triggered full rebuild for ${this.lastWatchBatch.length > 0 ? this.lastWatchBatch.join(", ") : "pending file changes"}`
+      : "manual operator-requested full rebuild";
+    this.recordFullRebuildReason(rebuildReason);
     await this.emit({
       kind: "job",
       root: this.rootDir,
@@ -301,6 +367,8 @@ class BackendRootSession {
       mode,
       phase: "bootstrap",
       source,
+      queueDepth: this.getQueueDepth(),
+      rebuildReason,
       pending: this.queuedWatchIndex,
       message: source === "watch" ? "running watcher-triggered index" : "running manual index",
     });
@@ -318,6 +386,8 @@ class BackendRootSession {
             phase: progress.phase,
             source,
             elapsedMs: progress.elapsedMs,
+            queueDepth: this.getQueueDepth(),
+            rebuildReason,
             pending: this.queuedWatchIndex,
             message: progress.message,
           });
@@ -334,6 +404,8 @@ class BackendRootSession {
         mode,
         phase: "completed",
         source,
+        queueDepth: this.getQueueDepth(),
+        rebuildReason,
         pending: this.queuedWatchIndex,
         message: summary,
       });
@@ -349,14 +421,18 @@ class BackendRootSession {
         mode,
         phase: "failed",
         source,
+        queueDepth: this.getQueueDepth(),
+        rebuildReason,
         pending: this.queuedWatchIndex,
         message,
       });
       throw error;
     } finally {
       this.indexRunning = false;
+      this.syncSchedulerObservability();
       if (this.queuedWatchIndex) {
         this.queuedWatchIndex = false;
+        this.syncSchedulerObservability();
         this.emitLog("running queued reindex after recent file changes");
         void this.runAutomaticWatchIndex();
       }

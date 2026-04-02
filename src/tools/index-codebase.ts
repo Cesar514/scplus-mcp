@@ -7,7 +7,18 @@ import { type FileSearchIndexProgress } from "./semantic-search.js";
 import { type IdentifierIndexProgress } from "./semantic-identifiers.js";
 import { type FullIndexProgress } from "./full-index-artifacts.js";
 import { DEFAULT_INDEX_MODE, getStageDefinitions, type IndexMode } from "./index-contract.js";
-import { createIndexRuntime, executeIndexStage, loadIndexStageState, loadIndexStatus, saveIndexStageState, saveIndexStatus, type ChunkIndexStatus, type IndexStatus } from "./index-stages.js";
+import {
+  createIndexRuntime,
+  executeIndexStage,
+  loadIndexStageState,
+  loadIndexStatus,
+  saveIndexStageState,
+  saveIndexStatus,
+  type ChunkIndexStatus,
+  type IndexObservabilityStatus,
+  type IndexStageObservabilityStatus,
+  type IndexStatus,
+} from "./index-stages.js";
 
 export interface IndexCodebaseOptions {
   rootDir: string;
@@ -23,6 +34,13 @@ export interface IndexCodebaseProgressEvent {
   mode: IndexMode;
 }
 
+interface StageTimingRecorder {
+  currentPhase?: IndexCodebaseProgressEvent["phase"];
+  phaseDurationsMs: Partial<Record<IndexCodebaseProgressEvent["phase"], number>>;
+  phaseStartedAtMs?: number;
+  startedAtMs: number;
+}
+
 export interface IndexProgressPersistenceControllerOptions {
   persist: () => Promise<void> | void;
   now?: () => number;
@@ -30,6 +48,95 @@ export interface IndexProgressPersistenceControllerOptions {
 }
 
 const DEFAULT_PROGRESS_PERSIST_INTERVAL_MS = 1000;
+
+function createStageTimingRecorder(startedAtMs: number): StageTimingRecorder {
+  return {
+    phaseDurationsMs: {},
+    startedAtMs,
+  };
+}
+
+function noteStagePhase(recorder: StageTimingRecorder, phase: IndexCodebaseProgressEvent["phase"], nowMs: number = Date.now()): void {
+  if (recorder.currentPhase === phase) return;
+  if (recorder.currentPhase && recorder.phaseStartedAtMs !== undefined) {
+    recorder.phaseDurationsMs[recorder.currentPhase] = (recorder.phaseDurationsMs[recorder.currentPhase] ?? 0) + (nowMs - recorder.phaseStartedAtMs);
+  }
+  recorder.currentPhase = phase;
+  recorder.phaseStartedAtMs = nowMs;
+}
+
+function finalizeStageTiming(recorder: StageTimingRecorder, nowMs: number = Date.now()): {
+  durationMs: number;
+  phaseDurationsMs: Partial<Record<IndexCodebaseProgressEvent["phase"], number>>;
+} {
+  if (recorder.currentPhase && recorder.phaseStartedAtMs !== undefined) {
+    recorder.phaseDurationsMs[recorder.currentPhase] = (recorder.phaseDurationsMs[recorder.currentPhase] ?? 0) + (nowMs - recorder.phaseStartedAtMs);
+    recorder.phaseStartedAtMs = nowMs;
+  }
+  return {
+    durationMs: Math.max(0, nowMs - recorder.startedAtMs),
+    phaseDurationsMs: { ...recorder.phaseDurationsMs },
+  };
+}
+
+function ratePerSecond(count: number | undefined, durationMs: number | undefined): number | undefined {
+  if (!count || count <= 0 || !durationMs || durationMs <= 0) return undefined;
+  return Number(((count / durationMs) * 1000).toFixed(2));
+}
+
+function buildStageObservabilityStatus(
+  stage: "bootstrap" | "file-search" | "identifier-search" | "full-artifacts",
+  timing: ReturnType<typeof finalizeStageTiming>,
+  status: IndexStatus,
+): IndexStageObservabilityStatus {
+  if (stage === "bootstrap") {
+    return {
+      durationMs: timing.durationMs,
+      phaseDurationsMs: timing.phaseDurationsMs,
+      processedFiles: status.bootstrap?.files,
+      filesPerSecond: ratePerSecond(status.bootstrap?.files, timing.phaseDurationsMs.bootstrap ?? timing.durationMs),
+    };
+  }
+  if (stage === "file-search") {
+    return {
+      durationMs: timing.durationMs,
+      phaseDurationsMs: timing.phaseDurationsMs,
+      processedFiles: status.fileSearch?.processedFiles,
+      embeddedCount: status.fileSearch?.embeddedDocuments,
+      filesPerSecond: ratePerSecond(status.fileSearch?.processedFiles, timing.phaseDurationsMs["file-scan"] ?? timing.durationMs),
+      embedsPerSecond: ratePerSecond(status.fileSearch?.embeddedDocuments, timing.phaseDurationsMs["file-embeddings"] ?? timing.durationMs),
+    };
+  }
+  if (stage === "identifier-search") {
+    return {
+      durationMs: timing.durationMs,
+      phaseDurationsMs: timing.phaseDurationsMs,
+      processedFiles: status.identifierSearch?.processedFiles,
+      embeddedCount: status.identifierSearch?.embeddedIdentifiers,
+      filesPerSecond: ratePerSecond(status.identifierSearch?.processedFiles, timing.phaseDurationsMs["identifier-scan"] ?? timing.durationMs),
+      embedsPerSecond: ratePerSecond(status.identifierSearch?.embeddedIdentifiers, timing.phaseDurationsMs["identifier-embeddings"] ?? timing.durationMs),
+    };
+  }
+  return {
+    durationMs: timing.durationMs,
+    phaseDurationsMs: timing.phaseDurationsMs,
+    processedFiles: status.fullIndex?.chunkIndex?.processedFiles ?? status.fullIndex?.structureIndex?.processedFiles,
+    indexedChunks: status.fullIndex?.chunkIndex?.indexedChunks,
+    embeddedCount: status.fullIndex?.chunkIndex?.embeddedChunks,
+    filesPerSecond: ratePerSecond(
+      status.fullIndex?.chunkIndex?.processedFiles ?? status.fullIndex?.structureIndex?.processedFiles,
+      timing.phaseDurationsMs["chunk-scan"] ?? timing.phaseDurationsMs["structure-scan"] ?? timing.durationMs,
+    ),
+    chunksPerSecond: ratePerSecond(status.fullIndex?.chunkIndex?.indexedChunks, timing.phaseDurationsMs["chunk-scan"] ?? timing.durationMs),
+    embedsPerSecond: ratePerSecond(status.fullIndex?.chunkIndex?.embeddedChunks, timing.phaseDurationsMs["chunk-embeddings"] ?? timing.durationMs),
+  };
+}
+
+function ensureObservabilityStatus(status: IndexStatus): IndexObservabilityStatus {
+  const existing = status.observability ?? { stages: {} };
+  status.observability = existing;
+  return existing;
+}
 
 export function createIndexProgressPersistenceController(options: IndexProgressPersistenceControllerOptions): {
   persist(phase: string): Promise<boolean>;
@@ -104,6 +211,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
   const progressLog: string[] = [];
   const stageState = await loadIndexStageState(runtime);
   const status = await loadIndexStatus(runtime, startedAt);
+  ensureObservabilityStatus(status);
   status.state = "running";
   status.phase = "bootstrap";
   status.runGeneration = pendingGeneration;
@@ -138,6 +246,8 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       readGeneration: runtime.servingState.activeGeneration,
       writeGeneration: pendingGeneration,
     }, async () => {
+      const bootstrapTiming = createStageTimingRecorder(Date.now());
+      noteStagePhase(bootstrapTiming, "bootstrap", bootstrapTiming.startedAtMs);
       await executeIndexStage({
       runtime,
       status,
@@ -146,8 +256,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       persist: persistStatusImmediately,
       });
       appendProgress(`bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`);
+      status.observability!.stages.bootstrap = buildStageObservabilityStatus("bootstrap", finalizeStageTiming(bootstrapTiming), status);
       await persistStatusImmediately();
 
+      const fileSearchTiming = createStageTimingRecorder(Date.now());
       await executeIndexStage({
         runtime,
         status,
@@ -155,6 +267,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         stage: "file-search",
         persist: persistStatusImmediately,
         onFileProgress: async (progress) => {
+        noteStagePhase(fileSearchTiming, progress.phase);
         status.phase = progress.phase;
         status.fileSearch = {
           ...status.fileSearch,
@@ -168,12 +281,15 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         await progressPersistence.persist(status.phase);
       },
       });
+      noteStagePhase(fileSearchTiming, "file-embeddings");
       appendProgress(
         `file-ready | ${status.fileSearch?.indexedDocuments ?? 0} docs | ` +
         `${status.fileSearch?.embeddedDocuments ?? 0} embedded | ${status.fileSearch?.reusedDocuments ?? 0} reused`,
       );
+      status.observability!.stages["file-search"] = buildStageObservabilityStatus("file-search", finalizeStageTiming(fileSearchTiming), status);
       await persistStatusImmediately();
 
+      const identifierTiming = createStageTimingRecorder(Date.now());
       await executeIndexStage({
         runtime,
         status,
@@ -181,6 +297,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         stage: "identifier-search",
         persist: persistStatusImmediately,
         onIdentifierProgress: async (progress) => {
+        noteStagePhase(identifierTiming, progress.phase);
         status.phase = progress.phase;
         status.identifierSearch = {
           ...status.identifierSearch,
@@ -194,10 +311,12 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         await progressPersistence.persist(status.phase);
       },
       });
+      noteStagePhase(identifierTiming, "identifier-embeddings");
       appendProgress(
         `identifier-ready | ${status.identifierSearch?.indexedIdentifiers ?? 0} identifiers | ` +
         `${status.identifierSearch?.embeddedIdentifiers ?? 0} embedded | ${status.identifierSearch?.reusedIdentifiers ?? 0} reused`,
       );
+      status.observability!.stages["identifier-search"] = buildStageObservabilityStatus("identifier-search", finalizeStageTiming(identifierTiming), status);
     });
 
     if (mode === "full") {
@@ -205,6 +324,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         readGeneration: pendingGeneration,
         writeGeneration: pendingGeneration,
       }, async () => {
+        const fullArtifactsTiming = createStageTimingRecorder(Date.now());
         await executeIndexStage({
           runtime,
           status,
@@ -212,6 +332,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           stage: "full-artifacts",
           persist: persistStatusImmediately,
           onFullProgress: async (progress) => {
+          noteStagePhase(fullArtifactsTiming, progress.phase);
           status.phase = progress.phase;
           status.fullIndex = {
             ...status.fullIndex,
@@ -248,6 +369,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           await progressPersistence.persist(status.phase);
         },
         });
+        noteStagePhase(fullArtifactsTiming, "explanation-scan");
         appendProgress(
           `full-ready | ${status.fullIndex?.chunkIndex?.indexedChunks ?? 0} chunks | ` +
           `${status.fullIndex?.structureIndex?.indexedStructures ?? 0} structures | ` +
@@ -256,6 +378,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs | ` +
           `${status.fullIndex?.queryExplanationIndex?.fileCardCount ?? 0} explanation cards`,
         );
+        status.observability!.stages["full-artifacts"] = buildStageObservabilityStatus("full-artifacts", finalizeStageTiming(fullArtifactsTiming), status);
       });
     }
 

@@ -1,3 +1,5 @@
+// Tool diagram presents current Context+ tool groups on the landing
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,10 +10,10 @@ const toolGroupsLight = [
     color: "#000000",
     layout: "grid" as const,
     tools: [
-      { color: "#000000", label: "Context Tree" },
-      { color: "#111111", label: "File Skeleton" },
-      { color: "#222222", label: "Semantic Search" },
-      { color: "#333333", label: "Semantic Identifiers" },
+      { color: "#000000", label: "Tree" },
+      { color: "#111111", label: "Skeleton" },
+      { color: "#222222", label: "Search" },
+      { color: "#333333", label: "Research" },
     ],
   },
   {
@@ -20,7 +22,7 @@ const toolGroupsLight = [
     layout: "column" as const,
     tools: [
       { color: "#444444", label: "Blast Radius" },
-      { color: "#555555", label: "Static Analysis" },
+      { color: "#555555", label: "Lint" },
     ],
   },
   {
@@ -28,8 +30,8 @@ const toolGroupsLight = [
     color: "#666666",
     layout: "column" as const,
     tools: [
-      { color: "#666666", label: "Propose Commit" },
-      { color: "#777777", label: "Feature Hub" },
+      { color: "#666666", label: "Checkpoint" },
+      { color: "#777777", label: "Find Hub" },
     ],
   },
   {
@@ -38,7 +40,7 @@ const toolGroupsLight = [
     layout: "column" as const,
     tools: [
       { color: "#888888", label: "Restore Points" },
-      { color: "#999999", label: "Undo Change" },
+      { color: "#999999", label: "Restore" },
     ],
   },
 ];
@@ -49,10 +51,10 @@ const toolGroupsDark = [
     color: "#ffffff",
     layout: "grid" as const,
     tools: [
-      { color: "#ffffff", label: "Context Tree" },
-      { color: "#eeeeee", label: "File Skeleton" },
-      { color: "#dddddd", label: "Semantic Search" },
-      { color: "#cccccc", label: "Semantic Identifiers" },
+      { color: "#ffffff", label: "Tree" },
+      { color: "#eeeeee", label: "Skeleton" },
+      { color: "#dddddd", label: "Search" },
+      { color: "#cccccc", label: "Research" },
     ],
   },
   {
@@ -61,7 +63,7 @@ const toolGroupsDark = [
     layout: "column" as const,
     tools: [
       { color: "#bbbbbb", label: "Blast Radius" },
-      { color: "#aaaaaa", label: "Static Analysis" },
+      { color: "#aaaaaa", label: "Lint" },
     ],
   },
   {
@@ -69,8 +71,8 @@ const toolGroupsDark = [
     color: "#999999",
     layout: "column" as const,
     tools: [
-      { color: "#999999", label: "Propose Commit" },
-      { color: "#888888", label: "Feature Hub" },
+      { color: "#999999", label: "Checkpoint" },
+      { color: "#888888", label: "Find Hub" },
     ],
   },
   {
@@ -79,7 +81,7 @@ const toolGroupsDark = [
     layout: "column" as const,
     tools: [
       { color: "#777777", label: "Restore Points" },
-      { color: "#666666", label: "Undo Change" },
+      { color: "#666666", label: "Restore" },
     ],
   },
 ];

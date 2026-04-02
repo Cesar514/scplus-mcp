@@ -1,3 +1,5 @@
+// Isometric diagram cycles through current Context+ tools on landing surfaces
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
@@ -25,32 +27,32 @@ function useTheme() {
 const functions = [
   {
     id: "context-tree",
-    label: "Context Tree",
-    desc: "Hierarchical feature graph of the codebase",
+    label: "Tree",
+    desc: "Structural codebase map with line-ranged symbols",
     color: "#000000",
   },
   {
     id: "file-skeleton",
-    label: "File Skeleton",
-    desc: "Structural outline of any source file",
+    label: "Skeleton",
+    desc: "API surface view for a known file",
     color: "#1a1a1a",
   },
   {
     id: "semantic-search",
-    label: "Semantic Search",
-    desc: "File-level semantic search with definition lines",
+    label: "Search",
+    desc: "Intent-routed exact and related repository search",
     color: "#333333",
   },
   {
     id: "identifier-search",
-    label: "Identifier Search",
-    desc: "Function and variable search with ranked call chains",
+    label: "Research",
+    desc: "Broad subsystem report over prepared artifacts",
     color: "#3a3a3a",
   },
   {
     id: "semantic-navigate",
-    label: "Semantic Navigate",
-    desc: "Jump to related code by meaning",
+    label: "Cluster",
+    desc: "Persisted semantic clusters and neighborhoods",
     color: "#444444",
   },
   {
@@ -61,26 +63,26 @@ const functions = [
   },
   {
     id: "static-analysis",
-    label: "Static Analysis",
-    desc: "AST-powered code inspection",
+    label: "Lint",
+    desc: "Native lint, typecheck, and repo-rule inspection",
     color: "#666666",
   },
   {
     id: "feature-hub",
-    label: "Feature Hub",
-    desc: "Cluster features by semantic similarity",
+    label: "Find Hub",
+    desc: "Manual and suggested feature hub navigation",
     color: "#777777",
   },
   {
     id: "propose-commit",
-    label: "Propose Commit",
-    desc: "AI-generated commit messages",
+    label: "Checkpoint",
+    desc: "Validated code writes with restore-point capture",
     color: "#888888",
   },
   {
     id: "git-shadow",
-    label: "Git Shadow",
-    desc: "Lightweight git worktree operations",
+    label: "Restore",
+    desc: "Undo MCP-authored file changes without git resets",
     color: "#999999",
   },
 ];

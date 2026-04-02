@@ -15,7 +15,21 @@ export interface RefreshPreparedIndexAfterWriteOptions {
   cause: "checkpoint" | "restore";
 }
 
+export interface WriteFreshnessRuntimeStats {
+  refreshFailures: number;
+  lastRefreshFailure?: {
+    rootDir: string;
+    cause: RefreshPreparedIndexAfterWriteOptions["cause"];
+    paths: string[];
+    reason: string;
+    at: string;
+  };
+}
+
 const rootMutationQueue = new Map<string, Promise<void>>();
+let writeFreshnessRuntimeStats: WriteFreshnessRuntimeStats = {
+  refreshFailures: 0,
+};
 
 function formatAffectedPaths(relativePaths: string[]): string {
   const unique = Array.from(new Set(relativePaths.map((value) => value.trim()).filter(Boolean)));
@@ -93,9 +107,35 @@ export async function refreshPreparedIndexAfterWrite(
     return { mode, output };
   } catch (error) {
     const blockedReason = formatBlockedReason(options.cause, options.relativePaths, error);
+    writeFreshnessRuntimeStats.refreshFailures++;
+    writeFreshnessRuntimeStats.lastRefreshFailure = {
+      rootDir: normalizedRootDir,
+      cause: options.cause,
+      paths: [...options.relativePaths],
+      reason: blockedReason,
+      at: new Date().toISOString(),
+    };
     await updateIndexServingFreshness(normalizedRootDir, "blocked", blockedReason);
     throw new Error(`${blockedReason}\nRun repair_index with target="full" after fixing the underlying indexing error.`);
   }
+}
+
+export function getWriteFreshnessRuntimeStats(): WriteFreshnessRuntimeStats {
+  return {
+    refreshFailures: writeFreshnessRuntimeStats.refreshFailures,
+    lastRefreshFailure: writeFreshnessRuntimeStats.lastRefreshFailure
+      ? {
+        ...writeFreshnessRuntimeStats.lastRefreshFailure,
+        paths: [...writeFreshnessRuntimeStats.lastRefreshFailure.paths],
+      }
+      : undefined,
+  };
+}
+
+export function resetWriteFreshnessRuntimeStats(): void {
+  writeFreshnessRuntimeStats = {
+    refreshFailures: 0,
+  };
 }
 
 export async function formatPreparedIndexFreshnessHeader(rootDir: string): Promise<string> {

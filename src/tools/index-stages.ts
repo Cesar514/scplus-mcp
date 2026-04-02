@@ -66,6 +66,21 @@ export interface QueryExplanationIndexStatus {
   hubCardCount: number;
 }
 
+export interface IndexStageObservabilityStatus {
+  durationMs: number;
+  phaseDurationsMs: Partial<Record<IndexPhase, number>>;
+  processedFiles?: number;
+  indexedChunks?: number;
+  embeddedCount?: number;
+  filesPerSecond?: number;
+  chunksPerSecond?: number;
+  embedsPerSecond?: number;
+}
+
+export interface IndexObservabilityStatus {
+  stages: Partial<Record<IndexStageName, IndexStageObservabilityStatus>>;
+}
+
 export interface IndexStatus {
   state: "running" | "completed" | "failed";
   phase: IndexPhase;
@@ -100,6 +115,7 @@ export interface IndexStatus {
     hybridIdentifierIndex?: Partial<HybridRetrievalIndexStatus>;
     queryExplanationIndex?: Partial<QueryExplanationIndexStatus>;
   };
+  observability?: IndexObservabilityStatus;
   stages: PersistedIndexStageState["stages"];
   error?: string;
 }
@@ -206,6 +222,9 @@ function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageSt
     rootDir: runtime.rootDir,
     startedAt,
     lastUpdatedAt: startedAt,
+    observability: {
+      stages: {},
+    },
     stages: stageState.stages,
   };
 }

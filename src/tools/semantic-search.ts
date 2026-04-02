@@ -55,6 +55,17 @@ export interface FileSearchRefreshFailure {
   previousEntryExisted: boolean;
 }
 
+export interface FileSearchRuntimeStats {
+  refreshFailures: number;
+  refreshFailedFiles: number;
+  lastRefreshFailure?: {
+    rootDir: string;
+    fileCount: number;
+    paths: string[];
+    at: string;
+  };
+}
+
 interface PersistedFileSearchEntry {
   contentHash: string;
   mtimeMs: number;
@@ -94,6 +105,10 @@ const DEFAULT_MAX_EMBED_FILE_SIZE = 50 * 1024;
 
 let cachedIndex: SearchIndex | null = null;
 let cachedRootDir: string | null = null;
+let fileSearchRuntimeStats: FileSearchRuntimeStats = {
+  refreshFailures: 0,
+  refreshFailedFiles: 0,
+};
 
 export class FileSearchRefreshError extends Error {
   readonly rootDir: string;
@@ -106,6 +121,26 @@ export class FileSearchRefreshError extends Error {
     this.rootDir = rootDir;
     this.failures = failures;
   }
+}
+
+export function getFileSearchRuntimeStats(): FileSearchRuntimeStats {
+  return {
+    refreshFailures: fileSearchRuntimeStats.refreshFailures,
+    refreshFailedFiles: fileSearchRuntimeStats.refreshFailedFiles,
+    lastRefreshFailure: fileSearchRuntimeStats.lastRefreshFailure
+      ? {
+        ...fileSearchRuntimeStats.lastRefreshFailure,
+        paths: [...fileSearchRuntimeStats.lastRefreshFailure.paths],
+      }
+      : undefined,
+  };
+}
+
+export function resetFileSearchRuntimeStats(): void {
+  fileSearchRuntimeStats = {
+    refreshFailures: 0,
+    refreshFailedFiles: 0,
+  };
 }
 
 function isTextIndexCandidate(filePath: string): boolean {
@@ -311,6 +346,14 @@ async function refreshPersistedFileSearchState(
   }
 
   if (failures.length > 0) {
+    fileSearchRuntimeStats.refreshFailures++;
+    fileSearchRuntimeStats.refreshFailedFiles += failures.length;
+    fileSearchRuntimeStats.lastRefreshFailure = {
+      rootDir,
+      fileCount: failures.length,
+      paths: failures.map((failure) => failure.path),
+      at: new Date().toISOString(),
+    };
     throw new FileSearchRefreshError(rootDir, failures);
   }
 
@@ -470,6 +513,14 @@ export async function refreshFileSearchEmbeddings(options: { rootDir: string; re
   }
 
   if (failures.length > 0) {
+    fileSearchRuntimeStats.refreshFailures++;
+    fileSearchRuntimeStats.refreshFailedFiles += failures.length;
+    fileSearchRuntimeStats.lastRefreshFailure = {
+      rootDir: options.rootDir,
+      fileCount: failures.length,
+      paths: failures.map((failure) => failure.path),
+      at: new Date().toISOString(),
+    };
     throw new FileSearchRefreshError(options.rootDir, failures);
   }
 
