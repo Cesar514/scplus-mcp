@@ -19,7 +19,7 @@ const EXT_TO_GRAMMAR: Record<string, string> = {
   ".swift": "swift", ".kt": "kotlin", ".kts": "kotlin", ".lua": "lua",
   ".dart": "dart", ".ex": "elixir", ".exs": "elixir", ".elm": "elm",
   ".ml": "ocaml", ".scala": "scala", ".sc": "scala", ".sol": "solidity",
-  ".zig": "zig", ".vue": "vue", ".sh": "bash", ".bash": "bash", ".zsh": "bash",
+  ".zig": "zig", ".vue": "vue",
   ".toml": "toml", ".yaml": "yaml", ".yml": "yaml", ".json": "json",
   ".html": "html", ".css": "css", ".m": "objc", ".re": "rescript",
 };
@@ -98,9 +98,6 @@ const DEFINITION_TYPES: Record<string, Record<string, string>> = {
   },
   zig: {
     function_declaration: "function",
-  },
-  bash: {
-    function_definition: "function",
   },
   ocaml: {
     let_binding: "function", type_binding: "type",

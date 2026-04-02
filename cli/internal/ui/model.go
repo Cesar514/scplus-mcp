@@ -451,6 +451,7 @@ func newOverlayState() overlayState {
 
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
+		{ID: "exit", Title: "Exit", Subtitle: "Quit the human CLI", Action: "exit"},
 		{ID: "open-overview", Title: "Open overview", Subtitle: "Jump to operator health and observability", Action: "open-overview"},
 		{ID: "open-tree", Title: "Open tree", Subtitle: "Jump to the prepared tree view", Action: "open-tree"},
 		{ID: "open-hubs", Title: "Open hubs", Subtitle: "Jump to manual and suggested hubs", Action: "open-hubs"},
@@ -920,6 +921,7 @@ func (m *Model) openPalette() {
 	m.overlay.Subtitle = "Use / to jump between windows, run backend actions, and launch exact results"
 	m.overlay.PreviousFocus = m.focus
 	m.overlay.Commands = paletteCommands()
+	m.overlay.Input = newOverlayInput("/", "type a command")
 	m.overlay.Input.Focus()
 	m.focus = focusOverlay
 }
@@ -1005,6 +1007,7 @@ func (m *Model) stackedPaneHeights() (int, int, int, int, int) {
 func (m *Model) filteredPaletteCommands() []paletteCommand {
 	commands := m.overlay.Commands
 	query := strings.ToLower(strings.TrimSpace(m.overlay.Input.Value()))
+	query = strings.TrimLeft(query, "/")
 	if query == "" {
 		return commands
 	}
@@ -1569,7 +1572,7 @@ func (m *Model) cycleFocus(delta int) {
 	if m.overlay.Mode != overlayNone {
 		return
 	}
-	order := []int{focusSidebar, focusContent, focusDetail, focusJobs, focusLogs}
+	order := []int{focusContent, focusDetail}
 	if m.wizard.active {
 		order = append(order, focusWizard)
 	}
@@ -1806,6 +1809,11 @@ func (m *Model) executePromptCommand(command paletteCommand, primary string, sec
 
 func (m *Model) submitPaletteSelection() tea.Cmd {
 	command, ok := m.activePaletteCommand()
+	query := strings.TrimSpace(m.overlay.Input.Value())
+	if strings.EqualFold(strings.TrimLeft(query, "/"), "exit") {
+		m.closeOverlay()
+		return tea.Quit
+	}
 	if !ok {
 		m.setError(errors.New("no palette command matches the current filter"))
 		return nil
@@ -1816,6 +1824,8 @@ func (m *Model) submitPaletteSelection() tea.Cmd {
 		return nil
 	}
 	switch command.Action {
+	case "exit":
+		return tea.Quit
 	case "open-overview":
 		m.setActiveView(viewOverview)
 		m.focus = focusContent
@@ -2283,7 +2293,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateWizard(message)
 		}
 		switch message.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
 		case "ctrl+p", ":", "/":
 			m.openPalette()
@@ -2753,6 +2763,32 @@ func (m *Model) renderSectionTable(section *sectionState, width int, height int)
 	return section.Table.View()
 }
 
+func (m Model) renderActivityPanel(width int) string {
+	activeJob := m.activeStatusJob()
+	lines := []string{
+		renderPaneTitle("Activity", false),
+		subtitleStyle.Render("Only the current status and latest error stay visible here"),
+		"",
+		subtitleStyle.Render(fmt.Sprintf(
+			"%s | state=%s | phase=%s | pending=%d",
+			activeJob.Title,
+			jobStateLabel(activeJob),
+			formatBlankAsNone(activeJob.Phase),
+			m.pendingChangeCount(),
+		)),
+	}
+	if strings.TrimSpace(activeJob.Message) != "" {
+		lines = append(lines, truncate(activeJob.Message, max(24, width-6)))
+	}
+	if strings.TrimSpace(m.lastError) != "" {
+		lines = append(lines, "", errorStyle.Render("Last error: "+truncate(m.lastError, max(24, width-18))))
+	}
+	if len(m.logs) > 0 {
+		lines = append(lines, "", subtitleStyle.Render("Latest log: "+truncate(m.logs[len(m.logs)-1], max(24, width-16))))
+	}
+	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+}
+
 func (m Model) renderDetailPanel(width int, height int) string {
 	m.detail.Width = max(minDetailWidth, width-4)
 	m.detail.Height = max(8, height-4)
@@ -2764,6 +2800,13 @@ func (m Model) renderDetailPanel(width int, height int) string {
 		m.detail.View(),
 	}
 	return cardStyle.Width(width).Height(height).Render(strings.Join(body, "\n"))
+}
+
+func (m Model) renderMainPanel(width int, height int) string {
+	if m.wizard.active || m.focus == focusDetail {
+		return m.renderDetailPanel(width, height)
+	}
+	return m.renderContentPanel(width, height)
 }
 
 func (m Model) renderJobsPanel(width int, height int) string {
@@ -2861,9 +2904,9 @@ func (m Model) renderOverlayCard(width int) string {
 	case overlayHelp:
 		lines = append(lines,
 			"Navigation",
-			"  Tab / Shift+Tab move focus across panes",
+			"  Tab / Shift+Tab toggle between the current list and detail view",
 			"  Up/Down move the selected row",
-			"  Enter opens detail from the content pane",
+			"  Enter opens detail for the current item",
 			"  b / f walk back and forward through navigation history",
 			"",
 			"Commands",
@@ -2875,12 +2918,8 @@ func (m Model) renderOverlayCard(width int) string {
 			"",
 			"Search and export",
 			"  Ctrl+F searches the current section in place",
-			"  PageUp/PageDown/Home/End move quickly through panes",
-			"  e exports logs, results, or the selected detail view into .contextplus/exports/",
-			"",
-			"Mouse",
-			"  left-click focuses a pane and sidebar row",
-			"  wheel scrolls logs, detail, jobs, and content lists",
+			"  PageUp/PageDown/Home/End move quickly through the current content",
+			"  e exports the current view into .contextplus/exports/",
 		)
 	case overlayPalette:
 		lines = append(lines, m.overlay.Input.View(), "")
@@ -2918,51 +2957,31 @@ func (m Model) renderOverlayCard(width int) string {
 
 func (m Model) View() string {
 	header := m.renderHeader()
-	var body string
+	mainHeight := max(12, m.height-12)
 	if m.useStackedLayout() {
-		sidebarHeight, contentHeight, detailHeight, jobsHeight, logsHeight := m.stackedPaneHeights()
-		sidebar := m.renderSidebarPanel(max(32, m.width-4), sidebarHeight)
-		content := m.renderContentPanel(max(32, m.width-4), contentHeight)
-		detail := m.renderDetailPanel(max(36, m.width-4), detailHeight)
-		jobs := m.renderJobsPanel(max(36, m.width-4), jobsHeight)
-		logs := m.renderLogsPanel(max(36, m.width-4), logsHeight)
-		body = lipgloss.JoinVertical(lipgloss.Left, sidebar, content, detail, jobs, logs)
-	} else {
-		jobsHeight := max(minJobsHeight, m.height/4)
-		mainHeight := max(16, m.height-jobsHeight-8)
-		sidebarWidth := max(minSidebarWidth, m.width/5)
-		contentWidth := max(minContentWidth, m.width/3)
-		detailWidth := max(minDetailWidth, m.width-sidebarWidth-contentWidth-8)
-		top := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			m.renderSidebarPanel(sidebarWidth, mainHeight),
-			m.renderContentPanel(contentWidth, mainHeight),
-			m.renderDetailPanel(detailWidth, mainHeight),
-		)
-		jobsWidth := max(minJobsWidth, m.width/2)
-		logsWidth := max(minLogsWidth, m.width-jobsWidth-4)
-		jobs := m.renderJobsPanel(jobsWidth, jobsHeight)
-		logs := m.renderLogsPanel(logsWidth, jobsHeight)
-		bottom := lipgloss.JoinHorizontal(lipgloss.Top, jobs, logs)
-		body = lipgloss.JoinVertical(lipgloss.Left, top, bottom)
+		mainHeight = max(8, m.height-12)
+	}
+	body := m.renderMainPanel(max(36, m.width-4), mainHeight)
+	if strings.TrimSpace(m.lastError) != "" || len(m.logs) > 0 || isActiveJobState(m.activeStatusJob().State) {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, m.renderActivityPanel(max(36, m.width-4)))
 	}
 	if m.overlay.Mode != overlayNone {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, "", m.renderOverlayCard(max(48, m.width-4)))
 	}
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Up/Down move | Tab focus | Enter detail/action | / commands | Ctrl+F search | Esc back | e export | ? help | q quit")
+	footer := footerStyle.Render("Up/Down move | Enter detail | / commands | Ctrl+F search | Esc back | e export | ? help | Ctrl+C quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
 	} else if m.overlay.Mode == overlayPalette {
-		footer = footerStyle.Render("Palette: type to filter | Up/Down select | Enter run | Esc close")
+		footer = footerStyle.Render("Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close")
 	} else if m.overlay.Mode == overlayPrompt {
 		footer = footerStyle.Render("Prompt: Enter submit | Tab move fields | Esc cancel")
 	} else if m.overlay.Mode == overlayFilter {
 		footer = footerStyle.Render("Search: type to narrow current section | Enter apply | Esc cancel")
 	} else if m.overlay.Mode == overlayHelp {
-		footer = footerStyle.Render("Help: Enter or Esc closes | mouse click focuses panes | wheel scrolls active panes")
+		footer = footerStyle.Render("Help: Enter or Esc closes")
 	} else if m.activeView == viewRestore && m.focus == focusContent {
-		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | Ctrl+F search | Esc back | e export | q quit")
+		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | Ctrl+F search | Esc back | e export | Ctrl+C quit")
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,

@@ -375,3 +375,11 @@
 - [x] Add section-local search for file-heavy and index-heavy blocks so operators can narrow lists and tables without endless scrolling.
 - [x] Restore the magician pet as a visible stable part of the CLI header across layouts.
 - [x] Verify the CLI behavior directly with focused Go UI tests, the full Go CLI build and test suite, and a built snapshot render.
+
+## cli simplification and index health refinement completed
+
+- [x] Replace the five-pane default dashboard with a single main panel plus a compact activity strip so the human CLI behaves like an on-demand terminal tool instead of a wall of always-open boxes.
+- [x] Make `/` open a real command palette that still shows matches while the query starts with a slash, support `/exit` for quitting, and stop binding plain `q` to quit.
+- [x] Keep file-heavy sections searchable in place and preserve detail/back navigation with `Enter` and `Esc`.
+- [x] Remove the shell-script parser failure from the prepared-index path so `install-contextplusplus.sh` no longer poisons the initial index state.
+- [x] Verify the updated CLI and refreshed index directly with focused Go UI tests, the full Go CLI suite, a TypeScript build, a targeted tree-sitter test run, a built snapshot render, and a fresh full index on this repository.

@@ -49,8 +49,8 @@ describe("tree-sitter", () => {
       assert.equal(getGrammarName(".TS"), "typescript");
     });
 
-    it("maps .sh to bash", () => {
-      assert.equal(getGrammarName(".sh"), "bash");
+    it("treats .sh as unsupported", () => {
+      assert.equal(getGrammarName(".sh"), null);
     });
 
     it("maps .cs to c_sharp", () => {

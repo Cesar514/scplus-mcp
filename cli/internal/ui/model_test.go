@@ -134,13 +134,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	for _, needle := range []string{
 		"Operator console with navigation history, command palette, and export layers",
 		"/\\_",
-		"Navigation",
 		"Overview",
-		"Find hub",
-		"... 19 more entries hidden",
-		"Detail",
-		"Jobs",
-		"Logs",
+		"Activity",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -180,9 +175,8 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Stacked operator console for narrow terminals",
-		"Navigation",
-		"Jobs",
-		"Logs",
+		"Overview",
+		"Activity",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
@@ -465,7 +459,7 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 		"Open symbol",
 		"Search related",
 		"Research",
-		"Palette: type to filter | Up/Down select | Enter run | Esc close",
+		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in palette overlay: %s", needle, rendered)
@@ -545,6 +539,20 @@ func TestSlashOpensCommandPalette(t *testing.T) {
 	}
 }
 
+func TestPaletteLeadingSlashStillShowsCommands(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.openPalette()
+	model.overlay.Input.SetValue("/tr")
+
+	commands := model.filteredPaletteCommands()
+	if len(commands) == 0 {
+		t.Fatal("expected commands to stay visible when the palette query starts with slash")
+	}
+	if commands[0].Action != "open-tree" {
+		t.Fatalf("expected /tr to match open-tree first, got %s", commands[0].Action)
+	}
+}
+
 func TestEscReturnsToPreviousView(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.setActiveView(viewTree)
@@ -597,22 +605,36 @@ func TestSidebarPanelShowsHiddenEntriesWhenScrolled(t *testing.T) {
 	}
 }
 
-func TestQuitKeyWhileWatcherActiveReturnsQuitCommand(t *testing.T) {
+func TestQNoLongerQuitsWhileWatcherActive(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.watchEnabled = true
 	model.pendingPaths = []string{"src/app.ts"}
 	model.pendingJobKind = "refresh"
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	if cmd == nil {
-		t.Fatal("expected quit command when pressing q")
+	if cmd != nil {
+		t.Fatalf("expected q to remain available for typing, got command %v", cmd)
 	}
-	if _, ok := updated.(Model); !ok {
+	next, ok := updated.(Model)
+	if !ok {
 		t.Fatalf("expected updated model value, got %T", updated)
 	}
-	message := cmd()
-	if _, ok := message.(tea.QuitMsg); !ok {
-		t.Fatalf("expected tea.QuitMsg, got %T", message)
+	if next.focus != model.focus {
+		t.Fatalf("expected q to leave focus unchanged, got %d", next.focus)
+	}
+}
+
+func TestPaletteExitCommandQuits(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.openPalette()
+	model.overlay.Input.SetValue("/exit")
+
+	cmd := model.submitPaletteSelection()
+	if cmd == nil {
+		t.Fatal("expected /exit to return a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg from /exit")
 	}
 }
 
