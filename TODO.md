@@ -25,24 +25,12 @@
 - [ ] Preserve useful cluster labels, related-file neighborhoods, and subsystem summaries while replacing the current algorithmic bottleneck.
 - [ ] Add benchmark coverage for medium and large repos so clustering cost is measured directly.
 
-## Phase 14: No-Fallback Parser And Index Correctness
-
-- [ ] Finish removing the remaining `null`-return contract from `parseWithTreeSitter()` in [src/core/tree-sitter.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/tree-sitter.ts) so unsupported-language handling becomes an explicit blocked or unsupported state instead of a silent `null` path.
-- [ ] Decide the strict unsupported-language behavior explicitly: either unsupported files are excluded by contract before parsing begins, or they fail loudly as unsupported, but they must not silently degrade into approximate parsing.
-- [ ] If regex parsing remains anywhere for framework-required reasons, mark it explicitly as a fallback path and surface it in diagnostics.
-
 ## Phase 15: Silent File Omission Bug
 
 - [ ] Fix the file omission bug in `refreshPersistedFileSearchState()` in [src/tools/semantic-search.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/semantic-search.ts), where changed files are re-added only when `doc` is truthy and are otherwise silently absent from `nextFiles`.
 - [ ] Replace silent omission with a loud failure or blocked refresh result so the operator knows the file could not be indexed.
 - [ ] Add explicit refresh diagnostics listing files that failed document construction, along with the reason.
 - [ ] Add regression coverage that proves a file cannot disappear from the live index without an explicit surfaced error.
-
-## Phase 16: Regex Range Corruption
-
-- [ ] Replace or retire `findBraceBlockEnd()` in [src/core/parser.ts](/home/cesar514/Documents/agent_programming/contextplus/src/core/parser.ts), because it scans raw characters and counts braces without understanding strings or comments.
-- [ ] Ensure symbol `endLine` computation cannot be shifted by braces that appear inside string literals or comments.
-- [ ] Add regression fixtures that include braces inside strings, comments, templates, or nested language literals.
 
 ## Phase 17: Ranking Misclassification Bug
 

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import {
   TreeSitterGrammarLoadError,
   TreeSitterParseError,
+  TreeSitterUnsupportedLanguageError,
   getTreeSitterRuntimeStats,
   parseWithTreeSitter,
   getSupportedExtensions,
@@ -193,9 +194,15 @@ describe("tree-sitter", () => {
   });
 
   describe("parseWithTreeSitter - unsupported", () => {
-    it("returns null for unknown extensions", async () => {
-      const syms = await parseWithTreeSitter("some content", ".xyz");
-      assert.equal(syms, null);
+    it("throws an explicit unsupported-language error for unknown extensions", async () => {
+      await assert.rejects(
+        () => parseWithTreeSitter("some content", ".xyz"),
+        (error) => {
+          assert.ok(error instanceof TreeSitterUnsupportedLanguageError);
+          assert.match(error.message, /Unsupported tree-sitter extension: \.xyz/);
+          return true;
+        },
+      );
     });
   });
 

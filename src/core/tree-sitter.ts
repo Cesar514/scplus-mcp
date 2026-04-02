@@ -169,6 +169,16 @@ export class TreeSitterParseError extends Error {
   }
 }
 
+export class TreeSitterUnsupportedLanguageError extends Error {
+  readonly extension: string;
+
+  constructor(extension: string) {
+    super(`Unsupported tree-sitter extension: ${extension || "<none>"}`);
+    this.name = "TreeSitterUnsupportedLanguageError";
+    this.extension = extension;
+  }
+}
+
 function createEmptyRuntimeStats(): TreeSitterRuntimeStats {
   return {
     totalParseCalls: 0,
@@ -407,9 +417,9 @@ export function getGrammarName(ext: string): string | null {
   return EXT_TO_GRAMMAR[ext.toLowerCase()] ?? null;
 }
 
-export async function parseWithTreeSitter(content: string, ext: string): Promise<CodeSymbol[] | null> {
+export async function parseWithTreeSitter(content: string, ext: string): Promise<CodeSymbol[]> {
   const grammarName = getGrammarName(ext);
-  if (!grammarName) return null;
+  if (!grammarName) throw new TreeSitterUnsupportedLanguageError(ext);
 
   const defTypes = DEFINITION_TYPES[grammarName];
   if (!defTypes) {

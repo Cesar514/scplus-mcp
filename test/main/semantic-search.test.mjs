@@ -165,6 +165,7 @@ describe("semantic-search", () => {
         assert.match(firstResult, /alpha\.ts/);
         assert.equal(Boolean(initialState.files["alpha.ts"]), true);
         assert.equal(typeof initialState.files["alpha.ts"].mtimeMs, "number");
+        assert.equal(typeof initialState.files["alpha.ts"].ctimeMs, "number");
         assert.equal(typeof initialState.files["alpha.ts"].size, "number");
 
         await writeFile(

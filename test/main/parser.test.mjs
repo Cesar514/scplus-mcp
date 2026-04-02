@@ -8,6 +8,7 @@ import {
 } from "../../build/core/parser.js";
 import {
   TreeSitterParseError,
+  TreeSitterUnsupportedLanguageError,
   resetTreeSitterRuntimeStateForTests,
   setTreeSitterParserFactoryForTests,
 } from "../../build/core/tree-sitter.js";
@@ -207,6 +208,22 @@ describe("parser", () => {
       const result = await analyzeFile(goFile);
       assert.ok(result.symbols.find((s) => s.name === "hello"));
       assert.ok(result.symbols.find((s) => s.name === "Point"));
+    });
+  });
+
+  describe("analyzeFile - unsupported", () => {
+    const mdFile = join(FIXTURE_DIR, "sample.md");
+
+    it("fails loudly for unsupported source extensions instead of returning a null parser result", async () => {
+      await writeFile(mdFile, "# Heading\n\nSome markdown\n");
+      await assert.rejects(
+        () => analyzeFile(mdFile),
+        (error) => {
+          assert.ok(error instanceof TreeSitterUnsupportedLanguageError);
+          assert.match(error.message, /Unsupported tree-sitter extension: \.md/);
+          return true;
+        },
+      );
     });
   });
 

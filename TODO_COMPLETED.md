@@ -2,6 +2,11 @@
 
 ## v1.5
 
+- [x] finish removing the remaining `null`-return contract from `parseWithTreeSitter()` in `src/core/tree-sitter.ts` so unsupported-language handling becomes an explicit `TreeSitterUnsupportedLanguageError` instead of a silent `null` path
+- [x] make unsupported-language handling fail loudly by contract so unsupported files no longer silently degrade into approximate parsing
+- [x] remove the remaining regex parser path from `src/core/parser.ts`, including the old brace-counting range heuristics, instead of keeping a hidden fallback implementation
+- [x] verify direct built artifacts now throw `TreeSitterUnsupportedLanguageError` for unsupported files through both `parseWithTreeSitter()` and `analyzeFile()`
+- [x] tighten file-search invalidation metadata to include `ctimeMs` alongside `mtimeMs` and `size` so same-size rewrites with reset mtimes cannot evade refresh detection
 - [x] replace JSON text vector storage in sqlite with binary `Float32Array` blob storage in `src/core/index-database.ts`
 - [x] remove repeated vector JSON stringify and parse overhead from vector load and save paths by switching `vector_entries` to `vector_blob`
 - [x] migrate existing vector read and write helpers to the binary layout without reintroducing whole-namespace rewrites

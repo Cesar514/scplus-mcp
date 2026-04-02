@@ -52,6 +52,7 @@ export interface FileSearchIndexStats {
 interface PersistedFileSearchEntry {
   contentHash: string;
   mtimeMs: number;
+  ctimeMs: number;
   size: number;
   doc: SearchDocument;
 }
@@ -99,6 +100,11 @@ function getMaxEmbedFileSize(): number {
 
 function normalizeMtimeMs(value: number): number {
   if (!Number.isFinite(value)) throw new Error(`Expected finite mtimeMs, received ${String(value)}.`);
+  return Math.trunc(value);
+}
+
+function normalizeCtimeMs(value: number): number {
+  if (!Number.isFinite(value)) throw new Error(`Expected finite ctimeMs, received ${String(value)}.`);
   return Math.trunc(value);
 }
 
@@ -187,10 +193,16 @@ async function refreshPersistedFileSearchState(
     const fullPath = resolve(rootDir, relativePath);
     const fileStats = await stat(fullPath);
     const mtimeMs = normalizeMtimeMs(fileStats.mtimeMs);
+    const ctimeMs = normalizeCtimeMs(fileStats.ctimeMs);
     const size = fileStats.size;
     const previousEntry = previous.files[relativePath];
 
-    if (previousEntry && previousEntry.mtimeMs === mtimeMs && previousEntry.size === size) {
+    if (
+      previousEntry
+      && previousEntry.mtimeMs === mtimeMs
+      && previousEntry.ctimeMs === ctimeMs
+      && previousEntry.size === size
+    ) {
       nextFiles[relativePath] = previousEntry;
     } else {
       const contentHash = await computeFileContentHash(fullPath);
@@ -199,6 +211,7 @@ async function refreshPersistedFileSearchState(
         nextFiles[relativePath] = {
           ...previousEntry,
           mtimeMs,
+          ctimeMs,
           size,
         };
       } else {
@@ -208,6 +221,7 @@ async function refreshPersistedFileSearchState(
           nextFiles[relativePath] = {
             contentHash,
             mtimeMs,
+            ctimeMs,
             size,
             doc,
           };
