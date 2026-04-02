@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 29 by hardening the remaining watcher close path against repeated shutdowns
+- [x] verify that the old TODO suspicion about `contextplus-ui` double-closing a final model after `program.Run()` is stale on the current tree, then fix the real remaining risk in the Go watcher service instead
+- [x] make [cli/internal/watcher/watcher.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/watcher/watcher.go) `Close()` idempotent so repeated closes cannot panic on `close(s.stop)`
+- [x] add regression coverage for repeated watcher close after live watch activity and for quitting the UI while watch state is active
+- [x] verify v1.5 phase 29 directly with focused Go watcher/UI coverage plus the full Go CLI suite
+- [x] commit the verified v1.5 phase 29 work
+
 - [x] finish v1.5 phase 28 by replacing the blunt watcher-triggered full rebuild path with a real queued watch scheduler and background refresh flow
 - [x] collapse bursty filesystem edits into one pending watch plan and cancel superseded queued watch jobs before they start
 - [x] separate watch-driven incremental refresh from full rebuild so normal code edits stay in the `refresh` lane while dependency or tooling config edits escalate to `index` with an explicit rebuild reason

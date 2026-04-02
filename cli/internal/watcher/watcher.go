@@ -1,3 +1,6 @@
+// Fsnotify-backed local watcher service for batched filesystem updates.
+// FEATURE: Debounced watcher batches with idempotent repeated shutdown.
+
 package watcher
 
 import (
@@ -6,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -18,11 +22,13 @@ type BatchEvent struct {
 }
 
 type Service struct {
-	root     string
-	debounce time.Duration
-	watcher  *fsnotify.Watcher
-	events   chan BatchEvent
-	stop     chan struct{}
+	root      string
+	debounce  time.Duration
+	watcher   *fsnotify.Watcher
+	events    chan BatchEvent
+	stop      chan struct{}
+	closeOnce sync.Once
+	closeErr  error
 }
 
 var ignoredPrefixes = []string{
@@ -59,8 +65,11 @@ func (s *Service) Events() <-chan BatchEvent {
 }
 
 func (s *Service) Close() error {
-	close(s.stop)
-	return s.watcher.Close()
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		s.closeErr = s.watcher.Close()
+	})
+	return s.closeErr
 }
 
 func (s *Service) addRecursive(root string) error {

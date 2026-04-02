@@ -18,12 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 29: Watcher Double-Close Bug
-
-- [ ] Fix the likely double-close panic around the watcher: pressing `q` in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go) closes the watcher, and [cli/cmd/contextplus-ui/main.go](/home/cesar514/Documents/agent_programming/contextplus/cli/cmd/contextplus-ui/main.go) closes the final model again after `program.Run()`.
-- [ ] Make [cli/internal/watcher/watcher.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/watcher/watcher.go) `Close()` idempotent so a second close cannot panic on `close(s.stop)`.
-- [ ] Add regression coverage for quitting through the UI while the watcher is active.
-
 ## Phase 30: Documentation And Rollout Truthfulness
 
 - [ ] Update [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) so it stops overselling the current human CLI once bridge parity and operator-console work land.

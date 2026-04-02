@@ -542,6 +542,25 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	}
 }
 
+func TestQuitKeyWhileWatcherActiveReturnsQuitCommand(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.watchEnabled = true
+	model.pendingPaths = []string{"src/app.ts"}
+	model.pendingJobKind = "refresh"
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Fatal("expected quit command when pressing q")
+	}
+	if _, ok := updated.(Model); !ok {
+		t.Fatalf("expected updated model value, got %T", updated)
+	}
+	message := cmd()
+	if _, ok := message.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", message)
+	}
+}
+
 func TestExportActionWritesResultsToExportsDirectory(t *testing.T) {
 	root := t.TempDir()
 	model := NewModel(root, nil)
