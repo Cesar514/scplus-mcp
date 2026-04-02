@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 15: Silent File Omission Bug
-
-- [ ] Fix the file omission bug in `refreshPersistedFileSearchState()` in [src/tools/semantic-search.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/semantic-search.ts), where changed files are re-added only when `doc` is truthy and are otherwise silently absent from `nextFiles`.
-- [ ] Replace silent omission with a loud failure or blocked refresh result so the operator knows the file could not be indexed.
-- [ ] Add explicit refresh diagnostics listing files that failed document construction, along with the reason.
-- [ ] Add regression coverage that proves a file cannot disappear from the live index without an explicit surfaced error.
-
 ## Phase 17: Ranking Misclassification Bug
 
 - [ ] Remove the brittle unified-ranking heuristic that treats chunk matches as files when `match.title === "file"`.

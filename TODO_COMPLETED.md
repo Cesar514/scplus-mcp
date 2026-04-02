@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] fix the file omission bug in `refreshPersistedFileSearchState()` in `src/tools/semantic-search.ts` so changed files cannot silently disappear from `nextFiles`
+- [x] replace silent omission with an explicit `FileSearchRefreshError` that blocks refresh and reports per-file reasons instead of returning a partially missing search state
+- [x] add explicit refresh diagnostics listing files that failed document construction or would silently disappear from the persisted file-search index
+- [x] add regression coverage proving a previously indexed file cannot disappear from the live file-search index without an explicit surfaced error
 - [x] audit `src/core/clustering.ts` and the semantic cluster artifact path to remove the current full affinity matrix, normalized Laplacian, eigen decomposition, and k-means pipeline as the default strategy
 - [x] replace spectral clustering with deterministic farthest-seed cosine k-means so semantic cluster building has a cost shape suitable for much larger repositories
 - [x] preserve semantic cluster artifact consumers by keeping cluster labels, related-file neighborhoods, subsystem summaries, and persisted cluster structure stable while swapping the algorithm underneath

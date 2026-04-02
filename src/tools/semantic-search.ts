@@ -49,6 +49,12 @@ export interface FileSearchIndexStats {
   reusedDocuments: number;
 }
 
+export interface FileSearchRefreshFailure {
+  path: string;
+  reason: string;
+  previousEntryExisted: boolean;
+}
+
 interface PersistedFileSearchEntry {
   contentHash: string;
   mtimeMs: number;
@@ -61,6 +67,11 @@ interface PersistedFileSearchState {
   generatedAt: string;
   files: Record<string, PersistedFileSearchEntry>;
 }
+
+type SearchDocumentBuildResult =
+  | { kind: "indexed"; doc: SearchDocument }
+  | { kind: "ignored"; reason: string }
+  | { kind: "failed"; reason: string };
 
 const SEARCH_INDEX_STATE_FILE = "file-search-index.json";
 const TEXT_INDEX_EXTENSIONS = new Set([
@@ -83,6 +94,19 @@ const DEFAULT_MAX_EMBED_FILE_SIZE = 50 * 1024;
 
 let cachedIndex: SearchIndex | null = null;
 let cachedRootDir: string | null = null;
+
+export class FileSearchRefreshError extends Error {
+  readonly rootDir: string;
+  readonly failures: FileSearchRefreshFailure[];
+
+  constructor(rootDir: string, failures: FileSearchRefreshFailure[]) {
+    const detail = failures.map((failure) => `${failure.path}: ${failure.reason}`).join("; ");
+    super(`File search refresh blocked for ${rootDir}: ${detail}`);
+    this.name = "FileSearchRefreshError";
+    this.rootDir = rootDir;
+    this.failures = failures;
+  }
+}
 
 function isTextIndexCandidate(filePath: string): boolean {
   return TEXT_INDEX_EXTENSIONS.has(extname(filePath).toLowerCase());
@@ -132,46 +156,74 @@ async function savePersistedFileSearchState(rootDir: string, state: PersistedFil
   await saveIndexArtifact(rootDir, "file-search-index", state);
 }
 
-async function buildSearchDocumentForFile(rootDir: string, relativePath: string): Promise<SearchDocument | null> {
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function buildSearchDocumentForFile(rootDir: string, relativePath: string): Promise<SearchDocumentBuildResult> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
 
   if (isTextIndexCandidate(fullPath)) {
     try {
-      if ((await stat(fullPath)).size > getMaxEmbedFileSize()) return null;
+      const fileSize = (await stat(fullPath)).size;
+      const maxEmbedFileSize = getMaxEmbedFileSize();
+      if (fileSize > maxEmbedFileSize) {
+        return {
+          kind: "ignored",
+          reason: `text index candidate exceeds max embed file size (${fileSize} > ${maxEmbedFileSize})`,
+        };
+      }
       const raw = await readFile(fullPath, "utf-8");
       const content = raw.slice(0, MAX_TEXT_DOC_CHARS);
       return {
-        path: normalized,
-        header: extractPlainTextHeader(content),
-        symbols: [],
-        content,
+        kind: "indexed",
+        doc: {
+          path: normalized,
+          header: extractPlainTextHeader(content),
+          symbols: [],
+          content,
+        },
       };
-    } catch {
-      return null;
+    } catch (error) {
+      return {
+        kind: "failed",
+        reason: `failed to build text search document: ${toErrorMessage(error)}`,
+      };
     }
   }
 
-  if (!isSupportedFile(fullPath)) return null;
+  if (!isSupportedFile(fullPath)) {
+    return {
+      kind: "ignored",
+      reason: `unsupported file extension for file search: ${extname(fullPath).toLowerCase() || "<none>"}`,
+    };
+  }
 
   try {
     const analysis = await analyzeFile(fullPath);
     const flatSymbols = flattenSymbols(analysis.symbols);
     return {
-      path: normalized,
-      header: analysis.header,
-      symbols: flatSymbols.map((symbol) => symbol.name),
-      symbolEntries: flatSymbols.map((symbol) => ({
-        name: symbol.name,
-        kind: symbol.kind,
-        line: symbol.line,
-        endLine: symbol.endLine,
-        signature: symbol.signature,
-      })),
-      content: flatSymbols.map((symbol) => symbol.signature).join(" "),
+      kind: "indexed",
+      doc: {
+        path: normalized,
+        header: analysis.header,
+        symbols: flatSymbols.map((symbol) => symbol.name),
+        symbolEntries: flatSymbols.map((symbol) => ({
+          name: symbol.name,
+          kind: symbol.kind,
+          line: symbol.line,
+          endLine: symbol.endLine,
+          signature: symbol.signature,
+        })),
+        content: flatSymbols.map((symbol) => symbol.signature).join(" "),
+      },
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      kind: "failed",
+      reason: `failed to analyze supported source file: ${toErrorMessage(error)}`,
+    };
   }
 }
 
@@ -183,6 +235,7 @@ async function refreshPersistedFileSearchState(
   const entries = await walkDirectory({ rootDir, depthLimit: 0 });
   const files = entries.filter((entry) => !entry.isDirectory);
   const nextFiles: Record<string, PersistedFileSearchEntry> = {};
+  const failures: FileSearchRefreshFailure[] = [];
   const seen = new Set<string>();
   let processedFiles = 0;
   let changedFiles = 0;
@@ -215,16 +268,30 @@ async function refreshPersistedFileSearchState(
           size,
         };
       } else {
-        const doc = await buildSearchDocumentForFile(rootDir, relativePath);
+        const buildResult = await buildSearchDocumentForFile(rootDir, relativePath);
         changedFiles++;
-        if (doc) {
+        if (buildResult.kind === "indexed") {
           nextFiles[relativePath] = {
             contentHash,
             mtimeMs,
             ctimeMs,
             size,
-            doc,
+            doc: buildResult.doc,
           };
+        } else if (buildResult.kind === "ignored") {
+          if (previousEntry) {
+            failures.push({
+              path: relativePath,
+              reason: `refresh would remove an indexed file without replacement: ${buildResult.reason}`,
+              previousEntryExisted: true,
+            });
+          }
+        } else {
+          failures.push({
+            path: relativePath,
+            reason: buildResult.reason,
+            previousEntryExisted: Boolean(previousEntry),
+          });
         }
       }
     }
@@ -241,6 +308,10 @@ async function refreshPersistedFileSearchState(
         indexedDocuments: Object.keys(nextFiles).length,
       });
     }
+  }
+
+  if (failures.length > 0) {
+    throw new FileSearchRefreshError(rootDir, failures);
   }
 
   const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
@@ -374,15 +445,32 @@ export async function refreshFileSearchEmbeddings(options: { rootDir: string; re
   if (uniquePaths.length === 0) return 0;
 
   let embeddedDocuments = 0;
+  const failures: FileSearchRefreshFailure[] = [];
   for (let i = 0; i < uniquePaths.length; i += getEmbeddingBatchSize()) {
     const batch = uniquePaths.slice(i, i + getEmbeddingBatchSize());
     const docs = await Promise.all(batch.map((relativePath) => buildSearchDocumentForFile(options.rootDir, relativePath)));
-    const validDocs = docs.filter((doc): doc is SearchDocument => doc !== null);
+    const validDocs: SearchDocument[] = [];
+    for (let index = 0; index < docs.length; index++) {
+      const result = docs[index];
+      if (result.kind === "indexed") {
+        validDocs.push(result.doc);
+      } else if (result.kind === "failed") {
+        failures.push({
+          path: batch[index],
+          reason: result.reason,
+          previousEntryExisted: false,
+        });
+      }
+    }
     if (validDocs.length > 0) {
       const index = new SearchIndex();
       const stats = await index.index(validDocs, options.rootDir);
       embeddedDocuments += stats.embeddedDocuments;
     }
+  }
+
+  if (failures.length > 0) {
+    throw new FileSearchRefreshError(options.rootDir, failures);
   }
 
   invalidateSearchCache();

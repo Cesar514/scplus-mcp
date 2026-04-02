@@ -6,10 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ollama } from "ollama";
 import {
+  FileSearchRefreshError,
   ensureFileSearchIndex,
   invalidateSearchCache,
   semanticCodeSearch,
 } from "../../build/tools/semantic-search.js";
+import {
+  resetTreeSitterRuntimeStateForTests,
+  setTreeSitterParserFactoryForTests,
+} from "../../build/core/tree-sitter.js";
 
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
@@ -247,6 +252,124 @@ describe("semantic-search", () => {
         assert.equal(touchedRefresh.stats.changedFiles, 0);
         assert.equal(touchedRefresh.stats.reusedDocuments, 1);
       } finally {
+        Ollama.prototype.embed = originalEmbed;
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("blocks refresh loudly when a previously indexed file would disappear because it now exceeds the size limit", async () => {
+      const rootDir = await mkdtemp(
+        join(tmpdir(), "contextplus-semantic-search-"),
+      );
+      const originalEmbed = Ollama.prototype.embed;
+      const previousSizeLimit = process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
+      const initialContent = [
+        "# Phase 15 fixture",
+        "",
+        "small content",
+        "",
+      ].join("\n");
+
+      Ollama.prototype.embed = async function ({ input }) {
+        const batch = Array.isArray(input) ? input : [input];
+        return {
+          embeddings: batch.map(() => [1, 0.2]),
+        };
+      };
+
+      process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = "1024";
+
+      try {
+        await writeFile(join(rootDir, "notes.md"), initialContent);
+
+        invalidateSearchCache();
+        await ensureFileSearchIndex(rootDir);
+        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const beforeState = readArtifactFromDb(dbPath, "file-search-index");
+        assert.equal(Boolean(beforeState.files["notes.md"]), true);
+
+        await writeFile(join(rootDir, "notes.md"), "x".repeat(2048));
+
+        await assert.rejects(
+          () => ensureFileSearchIndex(rootDir),
+          (error) => {
+            assert.ok(error instanceof FileSearchRefreshError);
+            assert.match(error.message, /notes\.md/);
+            assert.match(error.message, /refresh would remove an indexed file without replacement/);
+            assert.equal(error.failures[0].path, "notes.md");
+            return true;
+          },
+        );
+
+        const afterState = readArtifactFromDb(dbPath, "file-search-index");
+        assert.equal(afterState.files["notes.md"].doc.content, beforeState.files["notes.md"].doc.content);
+      } finally {
+        if (previousSizeLimit === undefined)
+          delete process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
+        else process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
+        Ollama.prototype.embed = originalEmbed;
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    it("surfaces supported-source document construction failures instead of silently dropping the file", async () => {
+      const rootDir = await mkdtemp(
+        join(tmpdir(), "contextplus-semantic-search-"),
+      );
+      const originalEmbed = Ollama.prototype.embed;
+      const sourceContent = [
+        "// File search fixture header line one two three four",
+        "// FEATURE: refresh failure coverage",
+        "export function greetAlpha(name: string): string {",
+        "  return `hello ${name}`;",
+        "}",
+        "",
+      ].join("\n");
+
+      Ollama.prototype.embed = async function ({ input }) {
+        const batch = Array.isArray(input) ? input : [input];
+        return {
+          embeddings: batch.map(() => [1, 0.3]),
+        };
+      };
+
+      try {
+        await writeFile(join(rootDir, "alpha.ts"), sourceContent);
+
+        invalidateSearchCache();
+        await ensureFileSearchIndex(rootDir);
+        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const beforeState = readArtifactFromDb(dbPath, "file-search-index");
+        assert.equal(Boolean(beforeState.files["alpha.ts"]), true);
+
+        await writeFile(
+          join(rootDir, "alpha.ts"),
+          sourceContent.replace("greetAlpha", "saluteAlpha"),
+        );
+        setTreeSitterParserFactoryForTests(() => ({
+          setLanguage() {},
+          parse() {
+            throw new Error("synthetic parse failure for phase 15");
+          },
+          delete() {},
+        }));
+
+        await assert.rejects(
+          () => ensureFileSearchIndex(rootDir),
+          (error) => {
+            assert.ok(error instanceof FileSearchRefreshError);
+            assert.match(error.message, /alpha\.ts/);
+            assert.match(error.message, /synthetic parse failure for phase 15/);
+            assert.equal(error.failures[0].path, "alpha.ts");
+            return true;
+          },
+        );
+
+        const afterState = readArtifactFromDb(dbPath, "file-search-index");
+        assert.match(afterState.files["alpha.ts"].doc.content, /greetAlpha/);
+        assert.doesNotMatch(afterState.files["alpha.ts"].doc.content, /saluteAlpha/);
+      } finally {
+        resetTreeSitterRuntimeStateForTests();
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
       }
