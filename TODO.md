@@ -18,12 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 10: Query Embedding Duplication
-
-- [ ] Audit unified search flow so the query embedding is computed exactly once per top-level query, not once in file search and again in hybrid search.
-- [ ] Pass a shared query vector through lexical-semantic ranking stages, hybrid retrieval, and any other semantic reranking stage that currently recomputes it.
-- [ ] Add a test or benchmark that asserts only one embedding request is issued per unified query in the expected path.
-
 ## Phase 11: Index Status Persistence Noise
 
 - [ ] Audit `indexCodebase()` progress callbacks and index-status writes so stage-state persistence is not triggered on every progress event.

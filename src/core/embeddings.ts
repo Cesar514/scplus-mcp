@@ -57,6 +57,7 @@ export interface SearchQueryOptions {
   minCombinedScore?: number;
   requireKeywordMatch?: boolean;
   requireSemanticMatch?: boolean;
+  queryVector?: number[];
 }
 
 export interface SearchIndexBuildStats {
@@ -74,6 +75,7 @@ interface ResolvedSearchQueryOptions {
   minCombinedScore: number;
   requireKeywordMatch: boolean;
   requireSemanticMatch: boolean;
+  queryVector?: number[];
 }
 
 interface EmbedRuntimeOptions {
@@ -414,6 +416,7 @@ function resolveSearchOptions(optionsOrTopK?: number | SearchQueryOptions): Reso
     minCombinedScore: normalizeThreshold(raw.minCombinedScore, 0.1),
     requireKeywordMatch: raw.requireKeywordMatch ?? false,
     requireSemanticMatch: raw.requireSemanticMatch ?? false,
+    queryVector: raw.queryVector,
   };
 }
 
@@ -836,7 +839,7 @@ export class SearchIndex {
 
   async search(query: string, optionsOrTopK?: number | SearchQueryOptions): Promise<SearchResult[]> {
     const options = resolveSearchOptions(optionsOrTopK);
-    const [queryVec] = await fetchEmbedding(query);
+    const queryVec = options.queryVector ?? (await fetchEmbedding(query))[0];
     const queryTerms = new Set(splitCamelCase(query));
     const scores: {
       idx: number;

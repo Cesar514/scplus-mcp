@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] audit the unified search flow so the query embedding is computed exactly once per top-level query instead of separately in file search and hybrid retrieval
+- [x] compute the unified query embedding once in `src/tools/unified-ranking.ts` and pass the shared query vector through file ranking and hybrid retrieval reranking stages
+- [x] extend `SearchIndex.search()` and hybrid retrieval query options so semantic reranking can consume a caller-supplied query vector instead of re-embedding internally
+- [x] add direct regression coverage proving one top-level unified query issues exactly one embedding request in the expected path
 - [x] remove the redundant `await readFile(wasmPath)` work from `loadGrammar()` in `src/core/tree-sitter.ts` and load WASM grammars directly through `Parser.Language.load(wasmPath)`
 - [x] stop creating a fresh parser instance per file in `parseWithTreeSitter()` by pooling parser instances per grammar within the backend session
 - [x] keep tree-sitter parser reuse deterministic and observable, including explicit pooled-parser reuse counters

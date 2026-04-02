@@ -90,6 +90,7 @@ export interface HybridSearchOptions {
   topK?: number;
   semanticWeight?: number;
   lexicalWeight?: number;
+  queryVector?: number[];
 }
 
 const MAX_LEXICAL_TERM_LENGTH = 64;
@@ -389,7 +390,7 @@ async function searchHybridState(
     };
   }
 
-  const [queryVector] = await fetchEmbedding(query);
+  const queryVector = options?.queryVector ?? (await fetchEmbedding(query))[0];
   const queryTerms = Array.from(new Set(splitTerms(query)));
   const topK = normalizeTopK(options?.topK, 5);
   const semanticWeight = normalizeWeight(options?.semanticWeight, 0.68);

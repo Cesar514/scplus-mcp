@@ -2,6 +2,7 @@
 // FEATURE: Canonical ranking layer for file and symbol search over sqlite state
 
 import { loadIndexArtifact } from "../core/index-database.js";
+import { fetchEmbedding } from "../core/embeddings.js";
 import { assertValidPreparedIndex } from "./index-reliability.js";
 import { ensureFileSearchIndex } from "./semantic-search.js";
 import { searchHybridChunkIndex, searchHybridIdentifierIndex, type HybridSearchMatch } from "./hybrid-retrieval.js";
@@ -409,12 +410,14 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
   const lexicalWeight = retrievalMode === "semantic" ? 0 : options.lexicalWeight;
   const structureState = await loadStructureState(rootDir);
   const candidates = new Map<string, Candidate>();
+  const [queryVector] = await fetchEmbedding(options.query);
 
   const { index } = await ensureFileSearchIndex(rootDir);
   const fileResults = await index.search(options.query, {
     topK: Math.max(topK * 8, 20),
     semanticWeight,
     keywordWeight: lexicalWeight,
+    queryVector,
   });
 
   for (const result of fileResults) {
@@ -433,6 +436,7 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
+    queryVector,
   });
   for (const match of chunkSearch.matches) {
     const candidateId = match.title === "file"
@@ -453,6 +457,7 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
+    queryVector,
   });
   for (const match of identifierSearch.matches) {
     const candidateId = getSymbolCandidateId(match.path, match.title, match.line);
