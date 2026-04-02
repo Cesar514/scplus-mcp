@@ -2,6 +2,9 @@
 
 ## v1.5
 
+- [x] retire the old `findBraceBlockEnd()`-style regex range path by removing the remaining regex parser implementation from `src/core/parser.ts`
+- [x] ensure symbol range computation no longer depends on raw brace counting, so braces inside strings and comments cannot shift `endLine`
+- [x] verify with built tree-sitter parsing that function ranges stay correct when source text contains `}` inside strings and comments
 - [x] fix the file omission bug in `refreshPersistedFileSearchState()` in `src/tools/semantic-search.ts` so changed files cannot silently disappear from `nextFiles`
 - [x] replace silent omission with an explicit `FileSearchRefreshError` that blocks refresh and reports per-file reasons instead of returning a partially missing search state
 - [x] add explicit refresh diagnostics listing files that failed document construction or would silently disappear from the persisted file-search index
