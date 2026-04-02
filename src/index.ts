@@ -277,7 +277,7 @@ server.tool(
 
 server.tool(
   "evaluate",
-  "Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, artifact freshness, and research output quality.",
+  "Run the built-in real benchmark harness across small, medium, monorepo, polyglot, ignored-tree, broken-state, and rename-freshness scenarios. Reports golden-query accuracy, validation rates, freshness reliability, and p50/p95/p99 query latency.",
   {},
   withRequestActivity(async () => ({
     content: [{

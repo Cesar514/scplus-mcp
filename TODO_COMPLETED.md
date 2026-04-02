@@ -2,6 +2,14 @@
 
 ## v1.5
 
+- [x] replace the current synthetic-only benchmark in `src/tools/evaluation.ts` with a real scenario-based benchmark harness instead of relying on one toy repo under `src/auth`, `src/ui`, `src/api`, and `docs`
+- [x] keep the old tiny synthetic repo only as the small/smoke scenario, not as the main retrieval, freshness, or performance gate
+- [x] add benchmark targets for a small repo, medium repo, large monorepo, polyglot repo, intentionally broken prepared state, and a repo with generated files plus ignored trees
+- [x] add rename-heavy and change-heavy freshness coverage that exercises stale-after-write behavior and restore correctness
+- [x] define a golden operator-question set with expected files, symbols, dependencies, and hub results across the benchmark scenarios
+- [x] measure exact lookup accuracy, related-search relevance, symbol resolution accuracy, dependency graph accuracy, hub suggestion quality, stale-after-write failure rate, restore correctness, and index validation false-positive and false-negative rates
+- [x] measure p50, p95, and p99 query latency for exact lookup, related search, and broad research in the built evaluation report
+- [x] update the public `evaluate` descriptions in `README.md` and `src/index.ts` so they describe the real benchmark harness truthfully
 - [x] formalize a three-layer query architecture for v1.5 with an explicit Layer A exact substrate, Layer B candidate substrate, and Layer C explanation substrate
 - [x] keep `symbol`, `word`, `outline`, `deps`, `status`, and `changes` as the exact deterministic first path while exposing that layer explicitly in the persisted query-engine contract
 - [x] keep lexical, semantic, structural, cluster, and hub-prior candidate generation in the prepared retrieval stack and make the layered contract point at those persisted artifacts

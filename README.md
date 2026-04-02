@@ -66,7 +66,7 @@ CONTEXTPLUS_EMBED_TRACKER = "lazy"
 | `changes`                   | Tiny git change summary, optionally scoped to one file, including line-range hunks when available. |
 | `search`                    | Query-intent router for repository search. Use `intent: "exact"` for deterministic fast-substrate answers when you already know the symbol or file target, and `intent: "related"` for ranked related-item and pattern discovery. `search_type` still selects `file`, `symbol`, or `mixed`, and related search now accepts explicit `retrieval_mode` values of `semantic`, `keyword`, or `both`. |
 | `research`                  | Broad repository research report. Use this for subsystem understanding after exact lookup and related-item search are no longer enough. |
-| `evaluate`                  | Run the built-in synthetic benchmark suite for retrieval quality, navigation quality, reindex speed, hot-query latency, estimated token cost, hybrid exact-vs-related efficiency, artifact freshness, and research output quality. |
+| `evaluate`                  | Run the built-in real benchmark harness across small, medium, monorepo, polyglot, ignored-tree, broken-state, and rename-freshness scenarios. Reports golden-query accuracy, validation rates, freshness reliability, and p50/p95/p99 query latency. |
 | `cluster`                   | Browse persisted semantic clusters from the full index. Renders labeled subsystem groupings, related files, and cluster summaries from sqlite-backed artifacts. |
 
 ### Analysis

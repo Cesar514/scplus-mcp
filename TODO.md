@@ -18,16 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 20: Real Benchmark Harness
-
-- [ ] Replace the current synthetic-only benchmark in [src/tools/evaluation.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/evaluation.ts), where `writeFixtureRepo()` creates only a small toy repo under `src/auth`, `src/ui`, `src/api`, and `docs`.
-- [ ] Keep the synthetic fixture only as a smoke test, not as the main performance or retrieval-quality gate.
-- [ ] Add benchmark targets for a small repo, medium repo, large monorepo, polyglot repo, intentionally broken repo, and a repo with generated files and ignored trees.
-- [ ] Add benchmark targets that exercise rename-heavy or change-heavy histories where stale-after-write behavior matters.
-- [ ] Define a golden operator-question set with expected files, symbols, dependencies, and hub results.
-- [ ] Measure exact lookup accuracy, related-search relevance, symbol resolution accuracy, dependency graph accuracy, hub suggestion quality, stale-after-write failure rate, restore correctness, and index validation false-positive and false-negative rates.
-- [ ] Measure p50, p95, and p99 query latency for exact lookup, related search, and broad research.
-
 ## Phase 21: Observability As A Product Feature
 
 - [ ] Add stage timing metrics for indexing, including files per second, chunks per second, embeds per second, and time per durable stage.
