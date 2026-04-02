@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -536,6 +537,7 @@ func renderTabs(current int) string {
 func (m Model) renderOverview() string {
 	doctorBody := "loading doctor report..."
 	if m.doctorLoaded {
+		stageMetrics := formatStageMetrics(m.doctor.Observability.Indexing.Stages)
 		indexLine := "index not ready"
 		if m.doctor.IndexValidation.OK {
 			indexLine = "prepared index OK"
@@ -555,6 +557,7 @@ func (m Model) renderOverview() string {
 			indexLine,
 			fmt.Sprintf("active gen %d | pending %s", m.doctor.Serving.ActiveGeneration, formatOptionalInt(m.doctor.Serving.PendingGeneration)),
 			fmt.Sprintf("freshness %s", m.doctor.Serving.ActiveGenerationFreshness),
+			fmt.Sprintf("stages %s", stageMetrics),
 			fmt.Sprintf(
 				"hybrid vectors chunk %d/%d %s | id %d/%d %s",
 				m.doctor.HybridVectors.Chunk.VectorCoverage.LoadedVectorCount,
@@ -565,16 +568,20 @@ func (m Model) renderOverview() string {
 				m.doctor.HybridVectors.Identifier.VectorCoverage.State,
 			),
 			fmt.Sprintf("tree-sitter failures %d | parser reuses %d", m.doctor.TreeSitter.TotalParseFailures, m.doctor.TreeSitter.TotalParserReuses),
+			fmt.Sprintf("parse failures by language %s", formatParseFailuresByLanguage(m.doctor.Observability.Integrity.ParseFailuresByLanguage)),
 			fmt.Sprintf(
-				"cache hits ns %d | vector %d | lexical candidates chunk %d | id %d",
+				"cache hits ns %d | vector %d | lexical chunk %d last %d | id %d last %d",
 				m.doctor.Observability.Caches.Embeddings.ProcessNamespaceHits,
 				m.doctor.Observability.Caches.Embeddings.ProcessVectorHits,
 				m.doctor.Observability.Caches.HybridSearch.Chunk.LastLexicalCandidateCount,
+				m.doctor.Observability.Caches.HybridSearch.Chunk.LexicalCandidateCount,
 				m.doctor.Observability.Caches.HybridSearch.Identifier.LastLexicalCandidateCount,
+				m.doctor.Observability.Caches.HybridSearch.Identifier.LexicalCandidateCount,
 			),
 			fmt.Sprintf(
-				"stale age %s ms | refresh failures file %d | write %d",
+				"stale age %s ms | fallback markers %d | refresh failures file %d | write %d",
 				formatOptionalInt(m.doctor.Observability.Integrity.StaleGenerationAgeMs),
+				m.doctor.Observability.Integrity.FallbackMarkerCount,
 				m.doctor.Observability.Integrity.RefreshFailures.FileSearch.RefreshFailures,
 				m.doctor.Observability.Integrity.RefreshFailures.WriteFreshness.RefreshFailures,
 			),
@@ -591,8 +598,8 @@ func (m Model) renderOverview() string {
 			fmt.Sprintf("indexing %s", map[bool]string{true: "running", false: "idle"}[m.indexing]),
 			fmt.Sprintf("backend %s", map[bool]string{true: "connected", false: "offline"}[m.backendOnline]),
 			fmt.Sprintf("phase %s", formatBlankAsNone(m.jobPhase)),
-			fmt.Sprintf("queue depth %d | max %d", m.queueDepth, m.doctor.Observability.Scheduler.MaxQueueDepth),
-			fmt.Sprintf("deduped %d | superseded %d", m.doctor.Observability.Scheduler.DedupedPathEvents, m.doctor.Observability.Scheduler.SupersededJobs),
+			fmt.Sprintf("queue depth %d | max %d | batches %d", m.queueDepth, m.doctor.Observability.Scheduler.MaxQueueDepth, m.doctor.Observability.Scheduler.BatchCount),
+			fmt.Sprintf("deduped %d | canceled %d | superseded %d", m.doctor.Observability.Scheduler.DedupedPathEvents, m.doctor.Observability.Scheduler.CanceledJobs, m.doctor.Observability.Scheduler.SupersededJobs),
 			fmt.Sprintf("rebuild reason %s", formatBlankAsNone(m.jobReason)),
 		}, "\n")
 	}
@@ -663,6 +670,7 @@ func (m Model) Close() error {
 }
 
 func RenderDoctorPlain(report backend.DoctorReport) string {
+	stageMetrics := formatStageMetrics(report.Observability.Indexing.Stages)
 	lines := []string{
 		fmt.Sprintf("Context+ CLI doctor for %s", report.Root),
 		fmt.Sprintf("Branch: %s", report.RepoStatus.Branch),
@@ -699,14 +707,25 @@ func RenderDoctorPlain(report backend.DoctorReport) string {
 			report.Observability.Caches.Embeddings.ProcessNamespaceHits,
 			report.Observability.Caches.Embeddings.ProcessVectorHits,
 		),
+		fmt.Sprintf("Stage metrics: %s", stageMetrics),
+		fmt.Sprintf("Parse failures by language: %s", formatParseFailuresByLanguage(report.Observability.Integrity.ParseFailuresByLanguage)),
+		fmt.Sprintf("Fallback markers: %d", report.Observability.Integrity.FallbackMarkerCount),
 		fmt.Sprintf(
-			"Scheduler: queue depth %d | max %d | deduped %d | superseded %d",
+			"Scheduler: queue depth %d | max %d | batches %d | deduped %d | canceled %d | superseded %d",
 			report.Observability.Scheduler.QueueDepth,
 			report.Observability.Scheduler.MaxQueueDepth,
+			report.Observability.Scheduler.BatchCount,
 			report.Observability.Scheduler.DedupedPathEvents,
+			report.Observability.Scheduler.CanceledJobs,
 			report.Observability.Scheduler.SupersededJobs,
 		),
 	)
+	if len(report.Observability.Scheduler.FullRebuildReasons) > 0 {
+		lines = append(lines, "Recent full rebuild reasons:")
+		for _, reason := range report.Observability.Scheduler.FullRebuildReasons {
+			lines = append(lines, "- "+reason)
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -744,4 +763,62 @@ func formatBlankAsNone(value string) string {
 		return "none"
 	}
 	return value
+}
+
+func formatParseFailuresByLanguage(values map[string]int) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	languages := make([]string, 0, len(values))
+	for language := range values {
+		languages = append(languages, language)
+	}
+	sort.Strings(languages)
+	parts := make([]string, 0, len(languages))
+	for _, language := range languages {
+		parts = append(parts, fmt.Sprintf("%s:%d", language, values[language]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatStageMetrics(stages map[string]struct {
+	DurationMs      int            `json:"durationMs"`
+	PhaseDurations  map[string]int `json:"phaseDurationsMs"`
+	ProcessedFiles  *int           `json:"processedFiles"`
+	IndexedChunks   *int           `json:"indexedChunks"`
+	EmbeddedCount   *int           `json:"embeddedCount"`
+	FilesPerSecond  *float64       `json:"filesPerSecond"`
+	ChunksPerSecond *float64       `json:"chunksPerSecond"`
+	EmbedsPerSecond *float64       `json:"embedsPerSecond"`
+}) string {
+	if len(stages) == 0 {
+		return "none"
+	}
+	order := []string{"bootstrap", "file-search", "identifier-search", "full-artifacts"}
+	parts := make([]string, 0, len(order))
+	for _, stage := range order {
+		metrics, ok := stages[stage]
+		if !ok {
+			continue
+		}
+		throughput := make([]string, 0, 3)
+		if metrics.FilesPerSecond != nil {
+			throughput = append(throughput, fmt.Sprintf("files/s %.2f", *metrics.FilesPerSecond))
+		}
+		if metrics.ChunksPerSecond != nil {
+			throughput = append(throughput, fmt.Sprintf("chunks/s %.2f", *metrics.ChunksPerSecond))
+		}
+		if metrics.EmbedsPerSecond != nil {
+			throughput = append(throughput, fmt.Sprintf("embeds/s %.2f", *metrics.EmbedsPerSecond))
+		}
+		part := fmt.Sprintf("%s %dms", stage, metrics.DurationMs)
+		if len(throughput) > 0 {
+			part += " (" + strings.Join(throughput, " | ") + ")"
+		}
+		parts = append(parts, part)
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return strings.Join(parts, " ; ")
 }

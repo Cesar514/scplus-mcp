@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 21: Observability As A Product Feature
-
-- [ ] Add stage timing metrics for indexing, including files per second, chunks per second, embeds per second, and time per durable stage.
-- [ ] Add cache observability for process-cache hits, vector-cache hits, parser-pool reuse, and lexical candidate counts before rerank.
-- [ ] Add integrity observability for vector coverage, parse failures by language, fallback counts, stale-generation age, and refresh failures.
-- [ ] Add scheduler observability for watcher queue depth, deduped batches, canceled jobs, superseded jobs, and reasons a full rebuild was required.
-- [ ] Surface these metrics through `doctor`, machine-readable debug JSON, backend logs, and the human CLI status area.
-
 ## Phase 22: TUI Architecture Reset
 
 - [ ] Rebuild the TUI around three layers: command layer, navigation layer, and job layer, so `contextplus-ui` becomes an operator console instead of a dashboard with text panes.

@@ -174,7 +174,7 @@ Config file locations:
 - `cluster [path] [--json]` - Render the persisted semantic cluster view for the prepared full index.
 - `hubs [path] [--query=<text>] [--feature-name=<name>] [--hub-path=<file>] [--show-orphans] [--json]` - Browse hub summaries, suggestions, and hub details from the terminal.
 - `restore-points [path] [--json]` - Print restore-point history for the repository.
-- `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, and Ollama runtime report.
+- `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, Ollama, and observability report, including stage timing, cache, integrity, and scheduler metrics.
 - `bridge <subcommand>` - Machine-readable JSON output for the human CLI and automation. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
 - `bridge-serve` - Persistent JSON-line session used by `contextplus-ui`. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
 - `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
@@ -197,6 +197,7 @@ The dashboard includes:
 
 - an animated magician header
 - repo, index, hub, restore-point, and Ollama health panels
+- observability details for stage timing, vector coverage, refresh failures, lexical candidate counts, and watcher scheduler state
 - full-text views for tree, hubs, restore points, and clusters
 - a persistent backend session shared through `bridge-serve`
 - a backend-owned watcher that streams change batches and index-job events to the UI

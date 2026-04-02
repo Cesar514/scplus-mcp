@@ -74,9 +74,14 @@ describe("cli bridge", () => {
       assert.equal(doctor.hybridVectors.identifier.vectorCoverage.state, "complete");
       assert.equal(doctor.observability.indexing.stages["file-search"].durationMs > 0, true);
       assert.equal(typeof doctor.observability.caches.embeddings.processNamespaceHits, "number");
+      assert.equal(typeof doctor.observability.caches.parserPoolReuseCount, "number");
       assert.equal(typeof doctor.observability.caches.hybridSearch.chunk.lexicalCandidateCount, "number");
+      assert.equal(typeof doctor.observability.caches.hybridSearch.chunk.lastLexicalCandidateCount, "number");
       assert.equal(doctor.observability.integrity.fallbackMarkerCount, 0);
+      assert.deepEqual(doctor.observability.integrity.parseFailuresByLanguage, {});
       assert.equal(typeof doctor.observability.scheduler.queueDepth, "number");
+      assert.equal(typeof doctor.observability.scheduler.batchCount, "number");
+      assert.equal(typeof doctor.observability.scheduler.canceledJobs, "number");
 
       const treePayload = await execBridge(cwd, "tree");
       assert.equal(treePayload.root, cwd);

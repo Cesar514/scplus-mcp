@@ -30,9 +30,29 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report.HybridVectors.Identifier.VectorCoverage.State = "complete"
 	report.Observability.Caches.Embeddings.ProcessNamespaceHits = 4
 	report.Observability.Caches.Embeddings.ProcessVectorHits = 6
+	report.Observability.Indexing.Stages = map[string]struct {
+		DurationMs      int            `json:"durationMs"`
+		PhaseDurations  map[string]int `json:"phaseDurationsMs"`
+		ProcessedFiles  *int           `json:"processedFiles"`
+		IndexedChunks   *int           `json:"indexedChunks"`
+		EmbeddedCount   *int           `json:"embeddedCount"`
+		FilesPerSecond  *float64       `json:"filesPerSecond"`
+		ChunksPerSecond *float64       `json:"chunksPerSecond"`
+		EmbedsPerSecond *float64       `json:"embedsPerSecond"`
+	}{
+		"file-search": {
+			DurationMs:      120,
+			FilesPerSecond:  floatPtr(12.5),
+			EmbedsPerSecond: floatPtr(8.5),
+		},
+	}
+	report.Observability.Integrity.ParseFailuresByLanguage = map[string]int{"typescript": 2}
+	report.Observability.Integrity.FallbackMarkerCount = 0
 	report.Observability.Scheduler.QueueDepth = 1
 	report.Observability.Scheduler.MaxQueueDepth = 2
+	report.Observability.Scheduler.BatchCount = 5
 	report.Observability.Scheduler.DedupedPathEvents = 3
+	report.Observability.Scheduler.CanceledJobs = 2
 	report.Observability.Scheduler.SupersededJobs = 1
 
 	rendered := RenderDoctorPlain(report)
@@ -46,10 +66,17 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 		"Hybrid vectors: chunk 3/3 complete | identifier 2/2 complete",
 		"Tree-sitter parse failures: 2",
 		"Embedding cache hits: namespace 4 | vector 6",
-		"Scheduler: queue depth 1 | max 2 | deduped 3 | superseded 1",
+		"Stage metrics: file-search 120ms (files/s 12.50 | embeds/s 8.50)",
+		"Parse failures by language: typescript:2",
+		"Fallback markers: 0",
+		"Scheduler: queue depth 1 | max 2 | batches 5 | deduped 3 | canceled 2 | superseded 1",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in rendered doctor output: %s", needle, rendered)
 		}
 	}
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
 }

@@ -10,7 +10,7 @@ import { DEFAULT_INDEX_MODE, type IndexMode } from "../tools/index-contract.js";
 import { indexCodebase } from "../tools/index-codebase.js";
 import { getContextTree } from "../tools/context-tree.js";
 import { getFeatureHub } from "../tools/feature-hub.js";
-import { buildDoctorReport } from "./reports.js";
+import { buildDoctorReport, type BridgeDoctorReport } from "./reports.js";
 
 const WATCH_IGNORE_PREFIXES = [
   ".contextplus/",
@@ -78,6 +78,52 @@ function firstNonEmptyLine(text: string): string {
 
 function formatFileFingerprint(size: number, mtimeMs: number): string {
   return `${size}:${mtimeMs}`;
+}
+
+function formatStageObservabilitySummary(report: BridgeDoctorReport): string {
+  const entries = Object.entries(report.observability.indexing.stages);
+  if (entries.length === 0) return "observability indexing: no completed stage metrics";
+  const stageParts = entries.map(([stage, metrics]) => {
+    const throughput = [
+      metrics.filesPerSecond ? `files/s=${metrics.filesPerSecond}` : "",
+      metrics.chunksPerSecond ? `chunks/s=${metrics.chunksPerSecond}` : "",
+      metrics.embedsPerSecond ? `embeds/s=${metrics.embedsPerSecond}` : "",
+    ].filter(Boolean).join(" | ");
+    return `${stage}=${metrics.durationMs}ms${throughput ? ` (${throughput})` : ""}`;
+  });
+  return `observability indexing: ${stageParts.join(" ; ")}`;
+}
+
+function formatIntegrityObservabilitySummary(report: BridgeDoctorReport): string {
+  const parseFailuresByLanguage = Object.entries(report.observability.integrity.parseFailuresByLanguage)
+    .map(([language, failures]) => `${language}:${failures}`)
+    .join(", ");
+  const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
+  const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;
+  return [
+    "observability integrity:",
+    `chunkVectors=${chunkCoverage.loadedVectorCount}/${chunkCoverage.requestedVectorCount} ${chunkCoverage.state}`,
+    `identifierVectors=${identifierCoverage.loadedVectorCount}/${identifierCoverage.requestedVectorCount} ${identifierCoverage.state}`,
+    `staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"}`,
+    `fallbackMarkers=${report.observability.integrity.fallbackMarkerCount}`,
+    `parseFailuresByLanguage=${parseFailuresByLanguage || "none"}`,
+    `fileRefreshFailures=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures}`,
+    `writeRefreshFailures=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
+  ].join(" | ");
+}
+
+function formatSchedulerObservabilitySummary(report: BridgeDoctorReport): string {
+  const scheduler = report.observability.scheduler;
+  return [
+    "observability scheduler:",
+    `watch=${scheduler.watchEnabled ? "enabled" : "disabled"}`,
+    `queueDepth=${scheduler.queueDepth}`,
+    `maxQueueDepth=${scheduler.maxQueueDepth}`,
+    `batches=${scheduler.batchCount}`,
+    `deduped=${scheduler.dedupedPathEvents}`,
+    `canceled=${scheduler.canceledJobs}`,
+    `superseded=${scheduler.supersededJobs}`,
+  ].join(" | ");
 }
 
 class BackendRootSession {
@@ -287,8 +333,9 @@ class BackendRootSession {
         });
       } else {
         this.supersededJobs++;
+        this.canceledJobs++;
         this.syncSchedulerObservability();
-        this.emitLog(`watch batch superseded an already queued rebuild: ${changedPaths.join(", ")}`);
+        this.emitLog(`watch batch superseded and canceled the previously queued rebuild: ${changedPaths.join(", ")}`);
       }
       return;
     }
@@ -409,6 +456,14 @@ class BackendRootSession {
         pending: this.queuedWatchIndex,
         message: summary,
       });
+      try {
+        const observabilityReport = await buildDoctorReport(this.rootDir);
+        this.emitLog(formatStageObservabilitySummary(observabilityReport));
+        this.emitLog(formatIntegrityObservabilitySummary(observabilityReport));
+        this.emitLog(formatSchedulerObservabilitySummary(observabilityReport));
+      } catch (error) {
+        this.emitLog(`observability summary unavailable: ${toErrorMessage(error)}`, "error");
+      }
       return output;
     } catch (error) {
       const message = toErrorMessage(error);

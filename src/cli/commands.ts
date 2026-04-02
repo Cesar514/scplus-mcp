@@ -294,6 +294,9 @@ function formatRestorePoints(points: Awaited<ReturnType<typeof listRestorePoints
 function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>): string {
   const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
   const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;
+  const parseFailuresByLanguage = Object.entries(report.observability.integrity.parseFailuresByLanguage)
+    .map(([language, failures]) => `${language}:${failures}`)
+    .join(", ");
   const indexingStages = Object.entries(report.observability.indexing.stages)
     .map(([stage, metrics]) => {
       const throughputParts = [
@@ -323,11 +326,11 @@ function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>
       ? `Ollama: ok | running models ${report.ollama.models.length}`
       : `Ollama: error | ${report.ollama.error}`,
     "",
-    `Observability: staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"} | fallback markers=${report.observability.integrity.fallbackMarkerCount}`,
-    `Refresh failures: file-search=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures} | write-refresh=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
+    `Observability: staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"} | fallback markers=${report.observability.integrity.fallbackMarkerCount} | parse failures by language=${parseFailuresByLanguage || "none"}`,
+    `Refresh failures: file-search=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures} | failed-files=${report.observability.integrity.refreshFailures.fileSearch.refreshFailedFiles} | write-refresh=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
     `Embedding cache: namespace hits=${report.observability.caches.embeddings.processNamespaceHits} | namespace misses=${report.observability.caches.embeddings.processNamespaceMisses} | vector hits=${report.observability.caches.embeddings.processVectorHits} | vector misses=${report.observability.caches.embeddings.processVectorMisses}`,
-    `Hybrid search runtime: chunk lexical=${report.observability.caches.hybridSearch.chunk.lexicalCandidateCount} | identifier lexical=${report.observability.caches.hybridSearch.identifier.lexicalCandidateCount}`,
-    `Scheduler: queueDepth=${report.observability.scheduler.queueDepth} | maxQueueDepth=${report.observability.scheduler.maxQueueDepth} | dedupedPathEvents=${report.observability.scheduler.dedupedPathEvents} | supersededJobs=${report.observability.scheduler.supersededJobs}`,
+    `Hybrid search runtime: chunk lexical=${report.observability.caches.hybridSearch.chunk.lexicalCandidateCount} | chunk last=${report.observability.caches.hybridSearch.chunk.lastLexicalCandidateCount} | identifier lexical=${report.observability.caches.hybridSearch.identifier.lexicalCandidateCount} | identifier last=${report.observability.caches.hybridSearch.identifier.lastLexicalCandidateCount}`,
+    `Scheduler: watch=${report.observability.scheduler.watchEnabled} | queueDepth=${report.observability.scheduler.queueDepth} | maxQueueDepth=${report.observability.scheduler.maxQueueDepth} | batches=${report.observability.scheduler.batchCount} | dedupedPathEvents=${report.observability.scheduler.dedupedPathEvents} | canceledJobs=${report.observability.scheduler.canceledJobs} | supersededJobs=${report.observability.scheduler.supersededJobs}`,
   ];
   if (indexingStages.length > 0) {
     lines.push("Index stages:");

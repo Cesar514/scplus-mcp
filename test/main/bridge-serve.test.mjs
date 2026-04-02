@@ -185,10 +185,33 @@ describe("bridge-serve", () => {
         assert.equal(typeof jobCompleted.queueDepth, "number");
         assert.equal(jobCompleted.rebuildReason.includes("watch-triggered full rebuild"), true);
 
+        const indexingLog = await session.waitForEvent((event) =>
+          event.kind === "log" &&
+          typeof event.message === "string" &&
+          event.message.startsWith("observability indexing:"),
+        );
+        assert.equal(indexingLog.root, cwd);
+
+        const integrityLog = await session.waitForEvent((event) =>
+          event.kind === "log" &&
+          typeof event.message === "string" &&
+          event.message.startsWith("observability integrity:"),
+        );
+        assert.equal(integrityLog.root, cwd);
+
+        const schedulerLog = await session.waitForEvent((event) =>
+          event.kind === "log" &&
+          typeof event.message === "string" &&
+          event.message.startsWith("observability scheduler:"),
+        );
+        assert.equal(schedulerLog.root, cwd);
+        assert.equal(schedulerLog.message.includes("queueDepth="), true);
+
         const doctorAfterWatch = await session.request("doctor", { root: cwd });
         assert.equal(doctorAfterWatch.root, cwd);
         assert.equal(doctorAfterWatch.indexValidation.ok, true);
         assert.equal(doctorAfterWatch.observability.scheduler.batchCount >= 1, true);
+        assert.equal(typeof doctorAfterWatch.observability.scheduler.canceledJobs, "number");
         assert.equal(doctorAfterWatch.observability.scheduler.fullRebuildReasons.some((reason) => reason.includes("watch-triggered full rebuild")), true);
       } finally {
         await session.close();

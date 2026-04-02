@@ -2,6 +2,15 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 21 by exposing stage timing, cache, integrity, and scheduler observability as first-class operator signals instead of scattered internal counters
+- [x] add stage timing metrics with per-stage duration plus files-per-second, chunks-per-second, and embeds-per-second observability in the persisted index status and doctor surfaces
+- [x] expose cache observability for process-cache hits, vector-cache hits, parser-pool reuse, and lexical candidate counts through doctor text, machine-readable doctor JSON, and the human CLI views
+- [x] expose integrity observability for vector coverage, parse failures by language, fallback marker counts, stale-generation age, and refresh failures through doctor text, machine-readable doctor JSON, backend logs, and the human CLI status area
+- [x] expose scheduler observability for watcher queue depth, batch counts, deduped path events, canceled jobs, superseded jobs, and full rebuild reasons through doctor text, machine-readable doctor JSON, backend logs, and the human CLI status area
+- [x] increment scheduler canceled-job tracking when a queued watcher rebuild is superseded by a newer change batch
+- [x] verify v1.5 phase 21 directly with focused bridge/index observability coverage, the Go CLI test suite, the full main suite, direct `doctor --json`, direct `contextplus-ui doctor`, and a live snapshot render on this repository
+- [x] commit the verified v1.5 phase 21 work
+
 - [x] replace the current synthetic-only benchmark in `src/tools/evaluation.ts` with a real scenario-based benchmark harness instead of relying on one toy repo under `src/auth`, `src/ui`, `src/api`, and `docs`
 - [x] keep the old tiny synthetic repo only as the small/smoke scenario, not as the main retrieval, freshness, or performance gate
 - [x] add benchmark targets for a small repo, medium repo, large monorepo, polyglot repo, intentionally broken prepared state, and a repo with generated files plus ignored trees
