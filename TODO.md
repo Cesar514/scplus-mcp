@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 27: Expose The Full Engine In The TUI
-
-- [ ] Stop limiting the human CLI backend to `doctor`, `tree`, `hubs`, `cluster`, `restore-points`, and `index`, because this keeps the UI strategically thin relative to the engine.
-- [ ] Add dedicated TUI actions and views for `symbol`, `word`, `search`, `research`, `lint`, `blast_radius`, `status`, `changes`, `checkpoint`, `restore`, and `find_hub`.
-- [ ] Add result ranking inspection so operators can understand why a search result ranked where it did.
-- [ ] Add dependency graph browsing, cluster drill-down, hub suggestion triage, diff viewing, and restore execution from inside the UI.
-
 ## Phase 28: Watcher And Scheduler Rework
 
 - [ ] Replace the current blunt watcher behavior in [cli/internal/watcher/watcher.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/watcher/watcher.go) and [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), where change bursts trigger loud full reindex behavior.

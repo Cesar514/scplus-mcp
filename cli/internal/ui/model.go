@@ -23,14 +23,23 @@ import (
 )
 
 const (
-	viewOverview = "overview"
-	viewTree     = "tree"
-	viewHubs     = "hubs"
-	viewRestore  = "restore"
-	viewCluster  = "cluster"
-	viewStatus   = "status"
-	viewChanges  = "changes"
-	viewResults  = "results"
+	viewOverview   = "overview"
+	viewTree       = "tree"
+	viewHubs       = "hubs"
+	viewFindHub    = "find-hub"
+	viewRestore    = "restore"
+	viewCluster    = "cluster"
+	viewDeps       = "deps"
+	viewStatus     = "status"
+	viewChanges    = "changes"
+	viewSearch     = "search"
+	viewSymbol     = "symbol"
+	viewWord       = "word"
+	viewOutline    = "outline"
+	viewResearch   = "research"
+	viewLint       = "lint"
+	viewBlast      = "blast-radius"
+	viewCheckpoint = "checkpoint"
 )
 
 const (
@@ -127,6 +136,7 @@ type hubCreatedMsg struct {
 
 type commandLoadedMsg struct {
 	jobID       string
+	viewID      string
 	title       string
 	subtitle    string
 	rawText     string
@@ -332,14 +342,23 @@ func NewModel(root string, client *backend.Client) Model {
 		focus:         focusSidebar,
 		jobTable:      jobTable,
 		sections: map[string]*sectionState{
-			viewOverview: newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
-			viewTree:     newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
-			viewHubs:     newListSection(viewHubs, "Hubs", "Feature hubs and suggestions", "Loading hub view..."),
-			viewRestore:  newListSection(viewRestore, "Restore", "Restore-point history", "Loading restore points..."),
-			viewCluster:  newListSection(viewCluster, "Cluster", "Persisted semantic cluster summaries", "Loading cluster view..."),
-			viewStatus:   newTableSection(viewStatus, "Status", "Git worktree status table", "Loading repo status...", []table.Column{{Title: "Path", Width: 32}, {Title: "Index", Width: 8}, {Title: "Worktree", Width: 10}}),
-			viewChanges:  newTableSection(viewChanges, "Changes", "Git change summary table", "Loading repo changes...", []table.Column{{Title: "Path", Width: 30}, {Title: "+/-", Width: 12}, {Title: "State", Width: 18}}),
-			viewResults:  newListSection(viewResults, "Results", "Palette-driven query and operator output", "Run a palette command to load results."),
+			viewOverview:   newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
+			viewTree:       newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
+			viewHubs:       newListSection(viewHubs, "Hubs", "Feature hubs and suggestions", "Loading hub view..."),
+			viewFindHub:    newListSection(viewFindHub, "Find hub", "Ranked hub discovery and suggestion triage", "Run a find-hub command to load results."),
+			viewRestore:    newListSection(viewRestore, "Restore", "Restore-point history", "Loading restore points..."),
+			viewCluster:    newListSection(viewCluster, "Cluster", "Persisted semantic cluster summaries", "Loading cluster view..."),
+			viewDeps:       newListSection(viewDeps, "Dependencies", "Direct and reverse dependency graph browsing", "Run a dependency command to load results."),
+			viewStatus:     newTableSection(viewStatus, "Status", "Git worktree status table", "Loading repo status...", []table.Column{{Title: "Path", Width: 32}, {Title: "Index", Width: 8}, {Title: "Worktree", Width: 10}}),
+			viewChanges:    newTableSection(viewChanges, "Changes", "Git change summary table", "Loading repo changes...", []table.Column{{Title: "Path", Width: 30}, {Title: "+/-", Width: 12}, {Title: "State", Width: 18}}),
+			viewSearch:     newListSection(viewSearch, "Search", "Exact and related ranked engine search results", "Run a search command to load results."),
+			viewSymbol:     newListSection(viewSymbol, "Symbol", "Exact symbol lookup output", "Run a symbol command to load results."),
+			viewWord:       newListSection(viewWord, "Word", "Exact word lookup output", "Run a word command to load results."),
+			viewOutline:    newListSection(viewOutline, "Outline", "Prepared file outline output", "Run an outline command to load results."),
+			viewResearch:   newListSection(viewResearch, "Research", "Broad explanation-backed research reports", "Run a research command to load results."),
+			viewLint:       newListSection(viewLint, "Lint", "Native lint diagnostics and scoring", "Run a lint command to load results."),
+			viewBlast:      newListSection(viewBlast, "Blast radius", "Symbol usage graph and blast radius output", "Run a blast-radius command to load results."),
+			viewCheckpoint: newListSection(viewCheckpoint, "Checkpoint", "Checkpoint write and restore-save output", "Run a checkpoint command to load results."),
 		},
 	}
 	model.overlay = newOverlayState()
@@ -430,11 +449,13 @@ func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{ID: "open-status", Title: "Open status", Subtitle: "Jump to the git worktree status table", Action: "open-status"},
 		{ID: "open-changes", Title: "Open changes", Subtitle: "Jump to changed-file stats and ranges", Action: "open-changes"},
+		{ID: "find-hub", Title: "Find hub", Subtitle: "Rank hubs by keyword and semantic relevance", Action: "find-hub", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
 		{ID: "exact-lookup", Title: "Exact lookup", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
 		{ID: "search-related", Title: "Search related", Subtitle: "Run related discovery over prepared ranked results", Action: "search-related", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
 		{ID: "research", Title: "Research", Subtitle: "Build the broad explanation-backed research report", Action: "research", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "operator console architecture"},
-		{ID: "go-file", Title: "Go to file", Subtitle: "Find an exact file/path hit and open it in Results", Action: "go-file", JobID: "query", RequiresInput: true, InputLabel: "File query: ", InputPlaceholder: "cli/internal/ui/model.go"},
-		{ID: "go-symbol", Title: "Go to symbol", Subtitle: "Find an exact symbol hit and open it in Results", Action: "go-symbol", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "go-file", Title: "Go to file", Subtitle: "Find an exact file/path hit and open it in Search", Action: "go-file", JobID: "query", RequiresInput: true, InputLabel: "File query: ", InputPlaceholder: "cli/internal/ui/model.go"},
+		{ID: "go-symbol", Title: "Go to symbol", Subtitle: "Find an exact symbol hit and open it in Search", Action: "go-symbol", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "symbol-lookup", Title: "Symbol lookup", Subtitle: "Run the exact symbol tool over the prepared substrate", Action: "symbol-lookup", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
 		{ID: "word-lookup", Title: "Word lookup", Subtitle: "Scan exact word hits in the prepared fast cache", Action: "word-lookup", JobID: "query", RequiresInput: true, InputLabel: "Word: ", InputPlaceholder: "watcher"},
 		{ID: "outline-file", Title: "Outline file", Subtitle: "Load the prepared file outline for one file", Action: "outline-file", JobID: "query", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "src/tools/query-intent.ts"},
 		{ID: "deps-file", Title: "Dependencies", Subtitle: "Load direct and reverse deps for one file", Action: "deps-file", JobID: "query", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "src/tools/query-intent.ts"},
@@ -925,8 +946,33 @@ func (m *Model) activePaletteCommand() (paletteCommand, bool) {
 	return commands[m.overlay.Selected], true
 }
 
-func (m *Model) showResults(title string, subtitle string, items []contentItem, rawText string) {
-	section := m.sections[viewResults]
+func buildItemsForCommandView(viewID string, title string, rawText string) []contentItem {
+	switch viewID {
+	case viewFindHub:
+		return buildFindHubItems(rawText)
+	case viewDeps:
+		return buildBlockItems("deps", rawText)
+	case viewSymbol:
+		return buildBlockItems("symbol", rawText)
+	case viewWord:
+		return buildBlockItems("word", rawText)
+	case viewOutline:
+		return buildBlockItems("outline", rawText)
+	case viewResearch:
+		return buildBlockItems("research", rawText)
+	case viewLint:
+		return buildBlockItems("lint", rawText)
+	case viewBlast:
+		return buildBlockItems("blast-radius", rawText)
+	case viewCheckpoint:
+		return buildBlockItems("checkpoint", rawText)
+	default:
+		return buildTextFallbackItems(title, rawText)
+	}
+}
+
+func (m *Model) showCommandSection(viewID string, title string, subtitle string, items []contentItem, rawText string) {
+	section := m.sections[viewID]
 	if section == nil {
 		return
 	}
@@ -934,8 +980,8 @@ func (m *Model) showResults(title string, subtitle string, items []contentItem, 
 	section.Subtitle = subtitle
 	section.EmptyMessage = "No results returned."
 	section.RawText = rawText
-	m.setListSectionItems(viewResults, items)
-	m.setActiveView(viewResults)
+	m.setListSectionItems(viewID, items)
+	m.setActiveView(viewID)
 	m.focus = focusContent
 	m.refreshSidebar()
 	m.recordNavigation()
@@ -964,7 +1010,7 @@ func (m *Model) finishOperatorJob(jobID string, state string, message string) {
 	m.refreshJobTable()
 }
 
-func runSearchCommandCmd(client *backend.Client, root string, query string, intent string, searchType string, title string, subtitle string) tea.Cmd {
+func runSearchCommandCmd(client *backend.Client, root string, query string, intent string, searchType string, viewID string, title string, subtitle string) tea.Cmd {
 	return func() tea.Msg {
 		payload, err := client.Search(context.Background(), root, query, intent, searchType, 8)
 		if err != nil {
@@ -972,6 +1018,7 @@ func runSearchCommandCmd(client *backend.Client, root string, query string, inte
 		}
 		return commandLoadedMsg{
 			jobID:      "query",
+			viewID:     viewID,
 			title:      title,
 			subtitle:   subtitle,
 			rawText:    payload.Text,
@@ -981,7 +1028,7 @@ func runSearchCommandCmd(client *backend.Client, root string, query string, inte
 	}
 }
 
-func runTextCommandCmd(jobID string, title string, subtitle string, refreshData bool, loader func() (backend.TextPayload, error)) tea.Cmd {
+func runTextCommandCmd(jobID string, viewID string, title string, subtitle string, refreshData bool, loader func() (backend.TextPayload, error)) tea.Cmd {
 	return func() tea.Msg {
 		payload, err := loader()
 		if err != nil {
@@ -989,10 +1036,11 @@ func runTextCommandCmd(jobID string, title string, subtitle string, refreshData 
 		}
 		return commandLoadedMsg{
 			jobID:       jobID,
+			viewID:      viewID,
 			title:       title,
 			subtitle:    subtitle,
 			rawText:     payload.Text,
-			items:       buildTextFallbackItems(title, payload.Text),
+			items:       buildItemsForCommandView(viewID, title, payload.Text),
 			logMessage:  title + " completed",
 			refreshData: refreshData,
 		}
@@ -1046,11 +1094,20 @@ func (m *Model) refreshSidebar() {
 		{ID: viewOverview, Title: "Overview", Subtitle: "Health, serving, and observability"},
 		{ID: viewTree, Title: "Tree", Subtitle: "Prepared tree and file topology"},
 		{ID: viewHubs, Title: "Hubs", Subtitle: "Manual and suggested hub views"},
+		{ID: viewFindHub, Title: "Find hub", Subtitle: "Ranked hub discovery and triage"},
 		{ID: viewRestore, Title: "Restore", Subtitle: "Checkpoint history and recovery"},
 		{ID: viewCluster, Title: "Cluster", Subtitle: "Cluster and subsystem summaries"},
+		{ID: viewDeps, Title: "Dependencies", Subtitle: "Direct and reverse dependency browsing"},
 		{ID: viewStatus, Title: "Status", Subtitle: "Git worktree status table"},
 		{ID: viewChanges, Title: "Changes", Subtitle: "Changed-file ranges and stats"},
-		{ID: viewResults, Title: "Results", Subtitle: "Palette query, lookup, lint, and restore output"},
+		{ID: viewSearch, Title: "Search", Subtitle: "Exact and related ranked search results"},
+		{ID: viewSymbol, Title: "Symbol", Subtitle: "Exact symbol lookup results"},
+		{ID: viewWord, Title: "Word", Subtitle: "Exact word lookup results"},
+		{ID: viewOutline, Title: "Outline", Subtitle: "Prepared file outline output"},
+		{ID: viewResearch, Title: "Research", Subtitle: "Broad explanation-backed reports"},
+		{ID: viewLint, Title: "Lint", Subtitle: "Native lint diagnostics"},
+		{ID: viewBlast, Title: "Blast radius", Subtitle: "Symbol usage graph and blast radius"},
+		{ID: viewCheckpoint, Title: "Checkpoint", Subtitle: "Checkpoint write results"},
 		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload backend snapshots", IsAction: true, Action: "refresh"},
 		{ID: "index", Title: indexLabel, Subtitle: indexSubtitle, IsAction: true, Action: "index"},
 		{ID: "retry-index", Title: "Retry last index", Subtitle: "Re-run the last index mode through the backend", IsAction: true, Action: "retry-index"},
@@ -1487,12 +1544,7 @@ func (m *Model) exportActiveContent() tea.Cmd {
 	case m.focus == focusLogs:
 		name = "logs"
 		content = strings.Join(m.logs, "\n")
-	case m.activeView == viewResults:
-		name = "results"
-		if section := m.sections[viewResults]; section != nil && strings.TrimSpace(section.RawText) != "" {
-			content = section.RawText
-		}
-	case m.focus == focusContent:
+	case m.focus == focusContent || m.focus == focusDetail:
 		name = m.activeView
 		if section := m.activeSection(); section != nil && strings.TrimSpace(section.RawText) != "" {
 			content = section.RawText
@@ -1509,46 +1561,56 @@ func (m *Model) executePromptCommand(command paletteCommand, primary string, sec
 		return nil
 	}
 	switch command.Action {
+	case "find-hub":
+		m.startOperatorJob("query", "find-hub", "find-hub requested", primary)
+		return runTextCommandCmd("query", viewFindHub, "Find hub", fmt.Sprintf("Ranked hub matches for %q", primary), false, func() (backend.TextPayload, error) {
+			return m.client.FindHub(context.Background(), m.root, primary, "both")
+		})
 	case "exact-lookup":
 		m.startOperatorJob("query", "exact", "exact lookup requested", primary)
-		return runSearchCommandCmd(m.client, m.root, primary, "exact", "mixed", "Exact lookup", fmt.Sprintf("Exact mixed lookup for %q", primary))
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "mixed", viewSearch, "Exact lookup", fmt.Sprintf("Exact mixed lookup for %q", primary))
 	case "search-related":
 		m.startOperatorJob("query", "related", "related search requested", primary)
-		return runSearchCommandCmd(m.client, m.root, primary, "related", "mixed", "Related search", fmt.Sprintf("Related ranked search for %q", primary))
+		return runSearchCommandCmd(m.client, m.root, primary, "related", "mixed", viewSearch, "Related search", fmt.Sprintf("Related ranked search for %q", primary))
 	case "research":
 		m.startOperatorJob("query", "research", "research requested", primary)
-		return runTextCommandCmd("query", "Research", fmt.Sprintf("Broad research report for %q", primary), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("query", viewResearch, "Research", fmt.Sprintf("Broad research report for %q", primary), false, func() (backend.TextPayload, error) {
 			return m.client.Research(context.Background(), m.root, primary)
 		})
 	case "go-file":
 		m.startOperatorJob("query", "go-file", "file lookup requested", primary)
-		return runSearchCommandCmd(m.client, m.root, primary, "exact", "file", "Go to file", fmt.Sprintf("Exact file lookup for %q", primary))
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "file", viewSearch, "Go to file", fmt.Sprintf("Exact file lookup for %q", primary))
 	case "go-symbol":
 		m.startOperatorJob("query", "go-symbol", "symbol lookup requested", primary)
-		return runSearchCommandCmd(m.client, m.root, primary, "exact", "symbol", "Go to symbol", fmt.Sprintf("Exact symbol lookup for %q", primary))
+		return runSearchCommandCmd(m.client, m.root, primary, "exact", "symbol", viewSearch, "Go to symbol", fmt.Sprintf("Exact symbol lookup for %q", primary))
+	case "symbol-lookup":
+		m.startOperatorJob("query", "symbol", "symbol lookup requested", primary)
+		return runTextCommandCmd("query", viewSymbol, "Symbol", fmt.Sprintf("Exact symbol hits for %q", primary), false, func() (backend.TextPayload, error) {
+			return m.client.Symbol(context.Background(), m.root, primary, 8)
+		})
 	case "word-lookup":
 		m.startOperatorJob("query", "word", "word lookup requested", primary)
-		return runTextCommandCmd("query", "Word lookup", fmt.Sprintf("Word hits for %q", primary), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("query", viewWord, "Word lookup", fmt.Sprintf("Word hits for %q", primary), false, func() (backend.TextPayload, error) {
 			return m.client.Word(context.Background(), m.root, primary, 8)
 		})
 	case "outline-file":
 		m.startOperatorJob("query", "outline", "outline requested", primary)
-		return runTextCommandCmd("query", "Outline", fmt.Sprintf("Prepared outline for %s", primary), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("query", viewOutline, "Outline", fmt.Sprintf("Prepared outline for %s", primary), false, func() (backend.TextPayload, error) {
 			return m.client.Outline(context.Background(), m.root, primary)
 		})
 	case "deps-file":
 		m.startOperatorJob("query", "deps", "dependency info requested", primary)
-		return runTextCommandCmd("query", "Dependencies", fmt.Sprintf("Dependency graph for %s", primary), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("query", viewDeps, "Dependencies", fmt.Sprintf("Dependency graph for %s", primary), false, func() (backend.TextPayload, error) {
 			return m.client.Deps(context.Background(), m.root, primary)
 		})
 	case "lint":
 		m.startOperatorJob("lint", "lint", "lint requested", formatBlankAsNone(primary))
-		return runTextCommandCmd("lint", "Lint", fmt.Sprintf("Native lint report for %s", formatBlankAsNone(primary)), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("lint", viewLint, "Lint", fmt.Sprintf("Native lint report for %s", formatBlankAsNone(primary)), false, func() (backend.TextPayload, error) {
 			return m.client.Lint(context.Background(), m.root, primary)
 		})
 	case "blast-radius":
 		m.startOperatorJob("query", "blast-radius", "blast radius requested", primary)
-		return runTextCommandCmd("query", "Blast radius", fmt.Sprintf("Blast radius for %s", primary), false, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("query", viewBlast, "Blast radius", fmt.Sprintf("Blast radius for %s", primary), false, func() (backend.TextPayload, error) {
 			return m.client.BlastRadius(context.Background(), m.root, primary, secondary)
 		})
 	case "checkpoint-detail":
@@ -1558,12 +1620,12 @@ func (m *Model) executePromptCommand(command paletteCommand, primary string, sec
 			return nil
 		}
 		m.startOperatorJob("restore", "checkpoint", "checkpoint requested", primary)
-		return runTextCommandCmd("restore", "Checkpoint", fmt.Sprintf("Checkpointed detail into %s", primary), true, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("restore", viewCheckpoint, "Checkpoint", fmt.Sprintf("Checkpointed detail into %s", primary), true, func() (backend.TextPayload, error) {
 			return m.client.Checkpoint(context.Background(), m.root, primary, detailContent)
 		})
 	case "restore-point":
 		m.startOperatorJob("restore", "restore", "restore requested", primary)
-		return runTextCommandCmd("restore", "Restore", fmt.Sprintf("Restored point %s", primary), true, func() (backend.TextPayload, error) {
+		return runTextCommandCmd("restore", "", "Restore", fmt.Sprintf("Restored point %s", primary), true, func() (backend.TextPayload, error) {
 			return m.client.Restore(context.Background(), m.root, primary)
 		})
 	default:
@@ -1900,7 +1962,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.finishOperatorJob(message.jobID, "completed", message.logMessage)
-		m.showResults(message.title, message.subtitle, message.items, message.rawText)
+		if strings.TrimSpace(message.viewID) != "" {
+			m.showCommandSection(message.viewID, message.title, message.subtitle, message.items, message.rawText)
+		}
 		m.appendLog(message.logMessage)
 		m.syncDetailViewport()
 		if message.refreshData {
@@ -2080,6 +2144,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "n":
 			m.sidebarIndex = m.findSidebarAction("hub-create")
 			return m, m.executeSidebarSelection()
+		case "u":
+			if m.focus == focusContent && m.activeView == viewRestore {
+				section := m.activeSection()
+				if len(section.Items) == 0 {
+					return m, nil
+				}
+				pointID := strings.TrimSpace(section.Items[section.Selected].ID)
+				if pointID == "" {
+					return m, nil
+				}
+				m.startOperatorJob("restore", "restore", "restore requested", pointID)
+				return m, runTextCommandCmd("restore", "", "Restore", fmt.Sprintf("Restored point %s", pointID), true, func() (backend.TextPayload, error) {
+					return m.client.Restore(context.Background(), m.root, pointID)
+				})
+			}
 		case "1":
 			m.setActiveView(viewOverview)
 			m.focus = focusContent
@@ -2109,7 +2188,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focus = focusContent
 			return m, nil
 		case "8":
-			m.setActiveView(viewResults)
+			m.setActiveView(viewSearch)
+			m.focus = focusContent
+			return m, nil
+		case "9":
+			m.setActiveView(viewSymbol)
 			m.focus = focusContent
 			return m, nil
 		}
@@ -2423,8 +2506,9 @@ func (m Model) renderOverlayCard(width int) string {
 			"",
 			"Commands",
 			"  : or Ctrl+P opens the command palette",
-			"  1-8 jump directly to overview, tree, hubs, restore, cluster, status, changes, and results",
+			"  1-9 jump directly to overview, tree, hubs, restore, cluster, status, changes, search, and symbol",
 			"  i/t/x/s/r/w keep the existing index, retry, cancel, supersede, refresh, and watcher actions",
+			"  u restores the selected restore point from the Restore section",
 			"",
 			"Filters and export",
 			"  / opens the current-section filter box",
@@ -2512,6 +2596,8 @@ func (m Model) View() string {
 		footer = footerStyle.Render("Filter: type to narrow current section | Enter apply | Esc cancel")
 	} else if m.overlay.Mode == overlayHelp {
 		footer = footerStyle.Render("Help: Enter or Esc closes | mouse click focuses panes | wheel scrolls active panes")
+	} else if m.activeView == viewRestore && m.focus == focusContent {
+		footer = footerStyle.Render("Restore: Up/Down select point | u restore selected point | Enter detail | / filter | e export | q quit")
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -2787,6 +2873,10 @@ func buildChangesRows(summary backend.RepoChangesSummary) ([]contentItem, []tabl
 		if len(rangeLines) == 0 {
 			rangeLines = append(rangeLines, "No diff ranges recorded.")
 		}
+		patch := strings.TrimSpace(file.Patch)
+		if patch == "" {
+			patch = "No patch text recorded."
+		}
 		items = append(items, contentItem{
 			ID:      file.Path,
 			Title:   file.Path,
@@ -2800,6 +2890,9 @@ func buildChangesRows(summary backend.RepoChangesSummary) ([]contentItem, []tabl
 				fmt.Sprintf("Unstaged status: %s", renderGitStatusCode(file.Unstaged)),
 				"Ranges:",
 				strings.Join(rangeLines, "\n"),
+				"",
+				"Patch:",
+				patch,
 			}, "\n"),
 		})
 		rows = append(rows, table.Row{
@@ -2813,13 +2906,16 @@ func buildChangesRows(summary backend.RepoChangesSummary) ([]contentItem, []tabl
 
 func buildSearchItems(payload backend.SearchResultPayload) []contentItem {
 	items := make([]contentItem, 0, len(payload.SymbolHits)+len(payload.PathHits)+len(payload.WordHits)+len(payload.Hits))
+	total := len(payload.SymbolHits) + len(payload.PathHits) + len(payload.WordHits) + len(payload.Hits)
+	rank := 1
 	for _, hit := range payload.SymbolHits {
 		items = append(items, contentItem{
 			ID:      fmt.Sprintf("%s:%d", hit.Path, hit.Line),
 			Title:   hit.Name,
-			Summary: fmt.Sprintf("%s | %s:%d-%d", hit.Kind, hit.Path, hit.Line, hit.EndLine),
-			Badge:   "exact-symbol",
+			Summary: fmt.Sprintf("rank #%d/%d | %s | %s:%d-%d", rank, total, hit.Kind, hit.Path, hit.Line, hit.EndLine),
+			Badge:   fmt.Sprintf("exact-symbol #%d", rank),
 			Detail: strings.Join([]string{
+				fmt.Sprintf("Rank: %d of %d", rank, total),
 				fmt.Sprintf("Path: %s", hit.Path),
 				fmt.Sprintf("Kind: %s", hit.Kind),
 				fmt.Sprintf("Range: %d-%d", hit.Line, hit.EndLine),
@@ -2827,23 +2923,29 @@ func buildSearchItems(payload backend.SearchResultPayload) []contentItem {
 				fmt.Sprintf("Header: %s", hit.Header),
 			}, "\n"),
 		})
+		rank++
 	}
 	for _, path := range payload.PathHits {
 		items = append(items, contentItem{
 			ID:      path,
 			Title:   path,
-			Summary: "Exact path match",
-			Badge:   "exact-path",
-			Detail:  fmt.Sprintf("Path hit: %s", path),
+			Summary: fmt.Sprintf("rank #%d/%d | exact path match", rank, total),
+			Badge:   fmt.Sprintf("exact-path #%d", rank),
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Rank: %d of %d", rank, total),
+				fmt.Sprintf("Path hit: %s", path),
+			}, "\n"),
 		})
+		rank++
 	}
 	for _, hit := range payload.WordHits {
 		items = append(items, contentItem{
 			ID:      fmt.Sprintf("%s:%d:%s", hit.Path, hit.Line, hit.Token),
 			Title:   hit.Title,
-			Summary: fmt.Sprintf("%s | %s", hit.Path, truncate(hit.Snippet, 72)),
-			Badge:   "word-" + hit.Kind,
+			Summary: fmt.Sprintf("rank #%d/%d | %.2f | %s", rank, total, hit.Score, hit.Path),
+			Badge:   fmt.Sprintf("word-%s #%d", hit.Kind, rank),
 			Detail: strings.Join([]string{
+				fmt.Sprintf("Rank: %d of %d", rank, total),
 				fmt.Sprintf("Token: %s", hit.Token),
 				fmt.Sprintf("Kind: %s", hit.Kind),
 				fmt.Sprintf("Path: %s", hit.Path),
@@ -2852,14 +2954,16 @@ func buildSearchItems(payload backend.SearchResultPayload) []contentItem {
 				fmt.Sprintf("Snippet: %s", hit.Snippet),
 			}, "\n"),
 		})
+		rank++
 	}
 	for _, hit := range payload.Hits {
 		items = append(items, contentItem{
 			ID:      fmt.Sprintf("%s:%d:%s", hit.Path, hit.Line, hit.EntityType),
 			Title:   hit.Title,
-			Summary: fmt.Sprintf("%s | %s", hit.Path, truncate(hit.Snippet, 72)),
-			Badge:   "related-" + hit.EntityType,
+			Summary: fmt.Sprintf("rank #%d/%d | score %.2f | %s", rank, total, hit.Score, hit.Path),
+			Badge:   fmt.Sprintf("related-%s #%d", hit.EntityType, rank),
 			Detail: strings.Join([]string{
+				fmt.Sprintf("Rank: %d of %d", rank, total),
 				fmt.Sprintf("Entity type: %s", hit.EntityType),
 				fmt.Sprintf("Kind: %s", hit.Kind),
 				fmt.Sprintf("Path: %s", hit.Path),
@@ -2868,8 +2972,42 @@ func buildSearchItems(payload backend.SearchResultPayload) []contentItem {
 				fmt.Sprintf("Snippet: %s", hit.Snippet),
 			}, "\n"),
 		})
+		rank++
 	}
 	return items
+}
+
+func buildFindHubItems(text string) []contentItem {
+	blocks := splitBlocks(text)
+	items := make([]contentItem, 0, len(blocks))
+	for index, block := range blocks {
+		lines := splitNonEmptyLines(block)
+		if len(lines) == 0 || !strings.Contains(lines[0], ". ") {
+			continue
+		}
+		title := strings.TrimSpace(lines[0])
+		summary := ""
+		if len(lines) > 2 {
+			summary = strings.TrimSpace(lines[2])
+		} else if len(lines) > 1 {
+			summary = strings.TrimSpace(lines[1])
+		}
+		badge := "manual"
+		if strings.Contains(title, "[suggested]") {
+			badge = "suggested"
+		}
+		items = append(items, contentItem{
+			ID:      fmt.Sprintf("find-hub-%d", index),
+			Title:   truncate(title, 88),
+			Summary: truncate(summary, 96),
+			Badge:   badge,
+			Detail:  strings.Join(lines, "\n"),
+		})
+	}
+	if len(items) > 0 {
+		return items
+	}
+	return buildBlockItems("find-hub", text)
 }
 
 type indexedItem struct {

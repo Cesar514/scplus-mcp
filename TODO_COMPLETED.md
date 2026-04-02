@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 27 by exposing the full engine through dedicated human-CLI views instead of routing most operator actions into one generic results pane
+- [x] stop limiting the human CLI backend model to the original dashboard subset by wiring dedicated TUI sections for ranked `find-hub`, dependencies, search, symbol, word, outline, research, lint, blast-radius, checkpoint, status, changes, restore, tree, hubs, and cluster output
+- [x] add explicit ranking inspection for search results so operators can see rank order and score context directly in the Search section detail pane
+- [x] add dependency graph browsing, ranked hub suggestion triage, diff patch viewing, and direct restore execution from inside the UI
+- [x] verify v1.5 phase 27 directly with focused Go UI coverage, focused bridge and exact-query coverage, the built `contextplus-ui` binary on this repository, direct snapshot inspection, and touched-file lint/build checks
+- [x] commit the verified v1.5 phase 27 work
+
 - [x] finish v1.5 phase 26 by adding a real navigation, search, and command surface to `contextplus-ui`
 - [x] add back and forward navigation history over active view, focused pane, and selected section row state instead of relying only on direct tab or pane switching
 - [x] add a command palette bound to `:` and `Ctrl+P` that exposes exact lookup, related search, research, go-to file, go-to symbol, lint, blast-radius, checkpoint-detail, restore-point, status, and changes workflows

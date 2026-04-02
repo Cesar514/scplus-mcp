@@ -129,9 +129,11 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"Operator console with navigation history, command palette, and export layers",
 		"Navigation",
 		"Overview",
+		"Find hub",
 		"Status",
 		"Changes",
-		"Results",
+		"Search",
+		"Symbol",
 		"Detail",
 		"Jobs",
 		"Logs",
@@ -286,6 +288,7 @@ func TestChangesSectionRendersBubbleTable(t *testing.T) {
 				Ranges: []backend.ChangeRange{
 					{OldStart: 10, OldLines: 2, NewStart: 10, NewLines: 6},
 				},
+				Patch: "@@ -10,2 +10,6 @@\n-const oldValue = 1\n+const oldValue = 2",
 			},
 		},
 	})
@@ -303,6 +306,35 @@ func TestChangesSectionRendersBubbleTable(t *testing.T) {
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in changes content panel: %s", needle, rendered)
+		}
+	}
+}
+
+func TestChangesDetailIncludesPatchPreview(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.setChangesSummary(backend.RepoChangesSummary{
+		ChangedFiles: 1,
+		Files: []backend.ChangeEntry{
+			{
+				Path:      "src/tools/exact-query.ts",
+				Staged:    "M",
+				Unstaged:  " ",
+				Additions: 8,
+				Deletions: 1,
+				Patch:     "@@ -1,3 +1,9 @@\n-interface ChangeEntry {\n+interface ChangeEntry {\n+  patch?: string;",
+			},
+		},
+	})
+	model.setActiveView(viewChanges)
+
+	detail := model.buildDetailContent()
+	for _, needle := range []string{
+		"Patch:",
+		"interface ChangeEntry",
+		"patch?: string;",
+	} {
+		if !strings.Contains(detail, needle) {
+			t.Fatalf("expected %q in change detail patch preview: %s", needle, detail)
 		}
 	}
 }
@@ -396,10 +428,16 @@ func TestBuildSearchItemsCoversExactAndRelatedResults(t *testing.T) {
 	if len(items) != 4 {
 		t.Fatalf("expected 4 search items, got %d", len(items))
 	}
+	if !strings.Contains(items[0].Summary, "rank #1/4") {
+		t.Fatalf("expected explicit rank metadata in first search summary: %#v", items[0])
+	}
+	if !strings.Contains(items[len(items)-1].Detail, "Rank: 4 of 4") {
+		t.Fatalf("expected explicit rank metadata in ranked result detail: %#v", items[len(items)-1])
+	}
 	for _, badge := range []string{"exact-symbol", "exact-path", "word-symbol", "related-file"} {
 		found := false
 		for _, item := range items {
-			if item.Badge == badge {
+			if strings.HasPrefix(item.Badge, badge) {
 				found = true
 				break
 			}
@@ -419,13 +457,13 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
+		"Find hub",
 		"Exact lookup",
 		"Go to file",
 		"Go to symbol",
+		"Symbol lookup",
 		"Lint",
 		"Blast radius",
-		"Checkpoint detail",
-		"Restore point",
 		"Palette: type to filter | Up/Down select | Enter run | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -499,7 +537,7 @@ func TestExportActionWritesResultsToExportsDirectory(t *testing.T) {
 	model := NewModel(root, nil)
 	model.width = 120
 	model.height = 24
-	model.showResults("Results", "Exact file lookup", []contentItem{
+	model.showCommandSection(viewSearch, "Search", "Exact file lookup", []contentItem{
 		{ID: "1", Title: "cli/internal/ui/model.go", Summary: "Exact path hit", Detail: "Detail line", Badge: "exact-path"},
 	}, "Exact file matches for cli/internal/ui/model.go")
 
@@ -521,6 +559,47 @@ func TestExportActionWritesResultsToExportsDirectory(t *testing.T) {
 	}
 	if filepath.Dir(exported.path) != filepath.Join(root, ".contextplus", "exports") {
 		t.Fatalf("expected export path under .contextplus/exports, got %s", exported.path)
+	}
+}
+
+func TestFindHubItemsPreserveSuggestedBadge(t *testing.T) {
+	items := buildFindHubItems(strings.Join([]string{
+		`Ranked hubs for: "scheduler observability"`,
+		`Ranking mode: both`,
+		`Candidates: 2`,
+		``,
+		`1. .contextplus/hubs/observability.md [manual] score=0.931`,
+		`   Title: Observability`,
+		`   Keyword: 0.800 | Semantic: 0.990`,
+		``,
+		`2. .contextplus/hubs/scheduler-ops.md [suggested] score=0.812`,
+		`   Title: Scheduler Ops`,
+		`   Keyword: 0.700 | Semantic: 0.872`,
+	}, "\n"))
+	if len(items) != 2 {
+		t.Fatalf("expected 2 ranked hub items, got %d", len(items))
+	}
+	if items[1].Badge != "suggested" {
+		t.Fatalf("expected suggested badge for ranked suggested hub: %#v", items[1])
+	}
+}
+
+func TestRestoreShortcutRunsSelectedPointFromRestoreView(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.setRestorePoints([]backend.RestorePoint{
+		{ID: "rp-123", Timestamp: 1, Message: "before refactor", Files: []string{"src/index.ts"}},
+	})
+	model.setActiveView(viewRestore)
+	model.focus = focusContent
+	model.client = nil
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	if cmd == nil {
+		t.Fatalf("expected restore shortcut to dispatch a restore command")
+	}
+	next := updated.(Model)
+	if next.job("restore").Phase != "restore" {
+		t.Fatalf("expected restore job to enter restore phase, got %#v", next.job("restore"))
 	}
 }
 

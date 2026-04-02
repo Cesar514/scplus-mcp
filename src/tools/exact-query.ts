@@ -211,6 +211,7 @@ export interface ChangeEntry {
   additions: number;
   deletions: number;
   ranges?: ChangeRange[];
+  patch?: string;
 }
 
 export interface RepoChangesSummary {
@@ -235,6 +236,7 @@ interface CachedRepoState {
   status: RepoStatusSummary;
   changes: RepoChangesSummary;
   fileRanges: Map<string, ChangeRange[]>;
+  filePatches: Map<string, string>;
 }
 
 const stateCache = new Map<string, FastQueryState>();
@@ -621,12 +623,17 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
   }
 
   const fileRanges = new Map<string, ChangeRange[]>();
+  const filePatches = new Map<string, string>();
   for (const path of changeMap.keys()) {
     const diff = await git.diff(["--unified=0", "--no-ext-diff", "--", path]);
     const ranges = parseDiffRanges(diff);
     if (ranges.length > 0) fileRanges.set(path, ranges);
+    const patch = await git.diff(["--no-ext-diff", "HEAD", "--", path]);
+    const normalizedPatch = patch.trim();
+    if (normalizedPatch.length > 0) filePatches.set(path, normalizedPatch);
     const current = changeMap.get(path);
     if (current && ranges.length > 0) current.ranges = ranges;
+    if (current && normalizedPatch.length > 0) current.patch = normalizedPatch;
   }
 
   const changes: RepoChangesSummary = {
@@ -642,6 +649,7 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
     status: statusSummary,
     changes,
     fileRanges,
+    filePatches,
   };
   repoCache.set(normalizedRootDir, repoState);
   return repoState;
@@ -746,6 +754,7 @@ export async function getRepoChanges(rootDir: string, options?: { path?: string;
     files: [{
       ...entry,
       ranges: repoState.fileRanges.get(entry.path) ?? entry.ranges,
+      patch: repoState.filePatches.get(entry.path) ?? entry.patch,
     }],
   };
 }

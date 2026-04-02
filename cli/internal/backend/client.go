@@ -54,6 +54,7 @@ type ChangeEntry struct {
 	Additions int           `json:"additions"`
 	Deletions int           `json:"deletions"`
 	Ranges    []ChangeRange `json:"ranges"`
+	Patch     string        `json:"patch"`
 }
 
 type RepoChangesSummary struct {
@@ -592,6 +593,19 @@ func (c *Client) Tree(ctx context.Context, root string) (TextPayload, error) {
 func (c *Client) Hubs(ctx context.Context, root string) (TextPayload, error) {
 	var payload TextPayload
 	err := c.call(ctx, "hubs", map[string]any{"root": root}, &payload)
+	return payload, err
+}
+
+func (c *Client) FindHub(ctx context.Context, root string, query string, rankingMode string) (TextPayload, error) {
+	var payload TextPayload
+	args := map[string]any{
+		"root":  root,
+		"query": query,
+	}
+	if rankingMode != "" {
+		args["rankingMode"] = rankingMode
+	}
+	err := c.call(ctx, "find-hub", args, &payload)
 	return payload, err
 }
 

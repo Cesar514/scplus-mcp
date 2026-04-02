@@ -126,6 +126,10 @@ describe("cli bridge", () => {
       assert.equal(researchPayload.text.includes("Explanation context:"), true);
       assert.equal(researchPayload.text.includes("Change risk:"), true);
 
+      const findHubPayload = await execBridge(cwd, "find-hub", "--query", "app entrypoint", "--ranking-mode", "both");
+      assert.equal(findHubPayload.root, cwd);
+      assert.equal(findHubPayload.text.includes('Ranked hubs for: "app entrypoint"'), true);
+
       const lintPayload = await execBridge(cwd, "lint");
       assert.equal(lintPayload.report.filesInspected >= 2, true);
       assert.equal(lintPayload.text.includes("Lint target"), true);
@@ -150,6 +154,7 @@ describe("cli bridge", () => {
       const changesPayload = await execBridge(cwd, "changes", "--path", "src/runner.ts");
       assert.equal(changesPayload.changedFiles, 1);
       assert.equal(changesPayload.files[0].path, "src/runner.ts");
+      assert.equal(changesPayload.files[0].patch.includes("runApp() + 1"), true);
 
       const restorePoints = await execBridge(cwd, "restore-points");
       assert.equal(restorePoints.length, 1);

@@ -142,6 +142,8 @@ describe("exact-query", () => {
       assert.equal(fileChanges.files.length, 1);
       assert.equal(fileChanges.files[0].path, "src/auth/session.ts");
       assert.equal((fileChanges.files[0].ranges?.length ?? 0) > 0, true);
+      assert.equal(fileChanges.files[0].patch.includes("createSession"), true);
+      assert.equal(fileChanges.files[0].patch.includes(":changed"), true);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
