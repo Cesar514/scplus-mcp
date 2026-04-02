@@ -18,14 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 25: Logs, Jobs, And Progress Model
-
-- [ ] Replace the current `appendLog()` behavior in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), which keeps only 12 log lines, with a real scrollable log panel.
-- [ ] Add structured job rows for indexing, refresh, restore, lint, and query tasks instead of burying state only in log lines.
-- [ ] Add stage name, percent complete where available, current file, elapsed time, and queue depth to the indexing model instead of a boolean `indexing` flag.
-- [ ] Add cancel, supersede, and retry controls for long-running or stale jobs.
-- [ ] Stream job and log updates from the persistent backend instead of synthesizing them only in the UI.
-
 ## Phase 26: Navigation, Search, And Command Surface
 
 - [ ] Add a real navigation model with focused pane, selected row, open detail, and back or forward history instead of only tab switching.

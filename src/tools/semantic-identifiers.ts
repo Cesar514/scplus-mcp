@@ -70,6 +70,7 @@ export interface IdentifierIndexProgress {
   changedFiles: number;
   removedFiles: number;
   indexedIdentifiers: number;
+  currentFile?: string;
 }
 
 export interface IdentifierIndexStats {
@@ -258,6 +259,7 @@ async function refreshPersistedIdentifierIndexState(
         changedFiles,
         removedFiles: 0,
         indexedIdentifiers: Object.values(nextFiles).reduce((sum, entry) => sum + entry.docs.length, 0),
+        currentFile: relativePath,
       });
     }
   }
@@ -313,6 +315,7 @@ async function buildIdentifierIndex(
         changedFiles: refreshStats.changedFiles,
         removedFiles: refreshStats.removedFiles,
         indexedIdentifiers: docs.length,
+        currentFile: docs.length > 0 ? docs[docs.length - 1]?.path : undefined,
       });
     }
     return {
@@ -391,6 +394,7 @@ async function buildIdentifierIndex(
       changedFiles: refreshStats.changedFiles,
       removedFiles: refreshStats.removedFiles,
       indexedIdentifiers: docs.length,
+      currentFile: docs.length > 0 ? docs[docs.length - 1]?.path : undefined,
     });
   }
   return {

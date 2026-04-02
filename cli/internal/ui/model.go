@@ -34,15 +34,18 @@ const (
 	focusSidebar = iota
 	focusContent
 	focusDetail
+	focusJobs
+	focusLogs
 	focusWizard
 )
 
 const (
-	logLimit         = 12
 	minSidebarWidth  = 26
 	minContentWidth  = 32
 	minDetailWidth   = 36
 	minJobsHeight    = 7
+	minJobsWidth     = 48
+	minLogsWidth     = 42
 	narrowLayoutCut  = 112
 	stackedHeightCut = 30
 )
@@ -177,46 +180,82 @@ type sectionState struct {
 	EmptyMessage string
 }
 
+type jobState struct {
+	ID             string
+	Title          string
+	State          string
+	Phase          string
+	Message        string
+	CurrentFile    string
+	Percent        *int
+	ElapsedMs      int
+	QueueDepth     int
+	Source         string
+	Mode           string
+	RebuildReason  string
+	Pending        bool
+	LastUpdatedAt  time.Time
+	LastSuccessful string
+}
+
 type Model struct {
-	root          string
-	client        *backend.Client
-	width         int
-	height        int
-	magicianFrame int
-	doctor        backend.DoctorReport
-	doctorLoaded  bool
-	restorePoints []backend.RestorePoint
-	detail        viewport.Model
-	logs          []string
-	lastError     string
-	indexing      bool
-	watchEnabled  bool
-	backendOnline bool
-	jobPhase      string
-	jobMessage    string
-	queueDepth    int
-	jobReason     string
-	focus         int
-	activeView    string
-	sidebarIndex  int
-	sidebar       []navigationEntry
-	sections      map[string]*sectionState
-	wizard        wizardState
+	root           string
+	client         *backend.Client
+	width          int
+	height         int
+	magicianFrame  int
+	doctor         backend.DoctorReport
+	doctorLoaded   bool
+	restorePoints  []backend.RestorePoint
+	detail         viewport.Model
+	logViewport    viewport.Model
+	logs           []string
+	lastError      string
+	watchEnabled   bool
+	backendOnline  bool
+	queueDepth     int
+	focus          int
+	activeView     string
+	sidebarIndex   int
+	sidebar        []navigationEntry
+	sections       map[string]*sectionState
+	jobs           map[string]*jobState
+	jobOrder       []string
+	jobTable       table.Model
+	refreshPending int
+	wizard         wizardState
 }
 
 func NewModel(root string, client *backend.Client) Model {
 	detail := viewport.New(60, 20)
+	logViewport := viewport.New(60, 8)
+	jobTable := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Task", Width: 10},
+			{Title: "State", Width: 11},
+			{Title: "Phase", Width: 18},
+			{Title: "%", Width: 4},
+			{Title: "Current", Width: 26},
+			{Title: "Elapsed", Width: 9},
+			{Title: "Q", Width: 4},
+		}),
+		table.WithRows(nil),
+		table.WithHeight(7),
+		table.WithFocused(true),
+	)
 	model := Model{
 		root:          root,
 		client:        client,
 		width:         120,
 		height:        38,
 		detail:        detail,
+		logViewport:   logViewport,
 		logs:          []string{"Context+ CLI started."},
 		wizard:        newWizardState(),
 		backendOnline: true,
 		activeView:    viewOverview,
 		focus:         focusSidebar,
+		jobTable:      jobTable,
 		sections: map[string]*sectionState{
 			viewOverview: newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
 			viewTree:     newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
@@ -227,8 +266,10 @@ func NewModel(root string, client *backend.Client) Model {
 			viewChanges:  newTableSection(viewChanges, "Changes", "Git change summary table", "Loading repo changes...", []table.Column{{Title: "Path", Width: 30}, {Title: "+/-", Width: 12}, {Title: "State", Width: 18}}),
 		},
 	}
+	model.seedJobs()
 	model.refreshSidebar()
 	model.syncDetailViewport()
+	model.syncLogViewport(true)
 	return model
 }
 
@@ -269,6 +310,14 @@ func newTableSection(id string, title string, subtitle string, empty string, col
 	}
 }
 
+func newJobState(id string, title string) *jobState {
+	return &jobState{
+		ID:    id,
+		Title: title,
+		State: "idle",
+	}
+}
+
 func newWizardState() wizardState {
 	title := textinput.New()
 	title.Placeholder = "Hub title"
@@ -283,6 +332,148 @@ func newWizardState() wizardState {
 	return wizardState{
 		inputs: []textinput.Model{title, summary, files},
 	}
+}
+
+func (m *Model) seedJobs() {
+	m.jobOrder = []string{"index", "refresh", "restore", "lint", "query"}
+	m.jobs = map[string]*jobState{
+		"index":   newJobState("index", "Index"),
+		"refresh": newJobState("refresh", "Refresh"),
+		"restore": newJobState("restore", "Restore"),
+		"lint":    newJobState("lint", "Lint"),
+		"query":   newJobState("query", "Query"),
+	}
+	m.refreshJobTable()
+}
+
+func (m *Model) job(id string) *jobState {
+	if m.jobs == nil {
+		m.seedJobs()
+	}
+	job, ok := m.jobs[id]
+	if ok {
+		return job
+	}
+	job = newJobState(id, titleFromID(id))
+	m.jobs[id] = job
+	m.jobOrder = append(m.jobOrder, id)
+	return job
+}
+
+func (m *Model) refreshJobTable() {
+	rows := make([]table.Row, 0, len(m.jobOrder))
+	for _, id := range m.jobOrder {
+		job := m.jobs[id]
+		if job == nil {
+			continue
+		}
+		rows = append(rows, table.Row{
+			job.Title,
+			jobStateLabel(job),
+			truncate(formatBlankAsNone(job.Phase), 18),
+			formatJobPercent(job.Percent),
+			truncate(formatBlankAsNone(job.CurrentFile), 26),
+			formatElapsedMs(job.ElapsedMs),
+			fmt.Sprintf("%d", job.QueueDepth),
+		})
+	}
+	m.jobTable.SetRows(rows)
+	if len(rows) == 0 {
+		m.jobTable.SetCursor(0)
+		return
+	}
+	if m.jobTable.Cursor() >= len(rows) {
+		m.jobTable.SetCursor(len(rows) - 1)
+	}
+}
+
+func (m *Model) selectedJob() *jobState {
+	if len(m.jobOrder) == 0 {
+		return nil
+	}
+	cursor := m.jobTable.Cursor()
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= len(m.jobOrder) {
+		cursor = len(m.jobOrder) - 1
+	}
+	return m.jobs[m.jobOrder[cursor]]
+}
+
+func (m *Model) syncLogViewport(follow bool) {
+	previousOffset := m.logViewport.YOffset
+	width := m.width - minJobsWidth - 8
+	if m.useStackedLayout() {
+		width = m.width - 4
+	}
+	if width < minLogsWidth {
+		width = minLogsWidth
+	}
+	height := max(6, m.height/4)
+	if m.useStackedLayout() {
+		height = max(6, m.height/5)
+	}
+	m.logViewport.Width = width
+	m.logViewport.Height = height
+	if len(m.logs) == 0 {
+		m.logViewport.SetContent("No backend activity yet.")
+		return
+	}
+	m.logViewport.SetContent(strings.Join(m.logs, "\n"))
+	if follow {
+		m.logViewport.GotoBottom()
+		return
+	}
+	m.logViewport.SetYOffset(previousOffset)
+}
+
+func (m *Model) startRefreshJob(message string, pending int) {
+	job := m.job("refresh")
+	job.State = "running"
+	job.Phase = "snapshot-refresh"
+	job.Message = message
+	job.ElapsedMs = 0
+	job.QueueDepth = m.queueDepth
+	job.Percent = intPtr(0)
+	job.CurrentFile = fmt.Sprintf("%d backend reads queued", pending)
+	job.LastUpdatedAt = time.Now()
+	m.refreshPending = pending
+	m.refreshJobTable()
+}
+
+func (m *Model) finishRefreshSubtask(task string, err error) {
+	if m.refreshPending <= 0 {
+		return
+	}
+	m.refreshPending--
+	job := m.job("refresh")
+	job.LastUpdatedAt = time.Now()
+	if err != nil {
+		job.State = "failed"
+		job.Message = err.Error()
+		job.Phase = task
+		job.Percent = nil
+		job.CurrentFile = task
+		m.refreshPending = 0
+		m.refreshJobTable()
+		return
+	}
+	completed := 7 - m.refreshPending
+	if completed < 0 {
+		completed = 0
+	}
+	job.Phase = task
+	job.Message = "backend snapshots refreshed"
+	job.CurrentFile = task
+	job.Percent = intPtr(min(100, (completed*100)/7))
+	if m.refreshPending == 0 {
+		job.State = "completed"
+		job.ElapsedMs = 0
+		job.LastSuccessful = time.Now().Format(time.RFC3339)
+		job.CurrentFile = "doctor/tree/hubs/cluster/restore/status/changes"
+	}
+	m.refreshJobTable()
 }
 
 func animateCmd() tea.Cmd {
@@ -385,10 +576,8 @@ func (m Model) Init() tea.Cmd {
 
 func (m *Model) appendLog(line string) {
 	timestamp := time.Now().Format("15:04:05")
-	m.logs = append([]string{fmt.Sprintf("[%s] %s", timestamp, line)}, m.logs...)
-	if len(m.logs) > logLimit {
-		m.logs = m.logs[:logLimit]
-	}
+	m.logs = append(m.logs, fmt.Sprintf("[%s] %s", timestamp, line))
+	m.syncLogViewport(true)
 }
 
 func (m *Model) setError(err error) {
@@ -407,11 +596,24 @@ func (m *Model) refreshSidebar() {
 		watchLabel = "Disable watcher"
 		watchSubtitle = "Stop watcher-driven refresh jobs"
 	}
+	indexJob := m.job("index")
 	indexLabel := "Run full index"
 	indexSubtitle := "Start a full engine refresh"
-	if m.indexing {
+	if isActiveJobState(indexJob.State) {
 		indexLabel = "Index running"
-		indexSubtitle = "Watch the job layer for progress"
+		indexSubtitle = fmt.Sprintf("Phase %s | queue %d", formatBlankAsNone(indexJob.Phase), indexJob.QueueDepth)
+	}
+	cancelLabel := "Cancel pending job"
+	cancelSubtitle := "Clear queued watch work before it starts"
+	if m.queueDepth == 0 {
+		cancelLabel = "No pending job"
+		cancelSubtitle = "Queued watch work will appear here"
+	}
+	supersedeLabel := "Supersede pending job"
+	supersedeSubtitle := "Replace stale queued work with the latest changes"
+	if m.queueDepth == 0 {
+		supersedeLabel = "No stale job"
+		supersedeSubtitle = "Supersede becomes available after queued changes"
 	}
 	m.sidebar = []navigationEntry{
 		{ID: viewOverview, Title: "Overview", Subtitle: "Health, serving, and observability"},
@@ -423,6 +625,9 @@ func (m *Model) refreshSidebar() {
 		{ID: viewChanges, Title: "Changes", Subtitle: "Changed-file ranges and stats"},
 		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload backend snapshots", IsAction: true, Action: "refresh"},
 		{ID: "index", Title: indexLabel, Subtitle: indexSubtitle, IsAction: true, Action: "index"},
+		{ID: "retry-index", Title: "Retry last index", Subtitle: "Re-run the last index mode through the backend", IsAction: true, Action: "retry-index"},
+		{ID: "cancel-pending", Title: cancelLabel, Subtitle: cancelSubtitle, IsAction: true, Action: "cancel-pending"},
+		{ID: "supersede-pending", Title: supersedeLabel, Subtitle: supersedeSubtitle, IsAction: true, Action: "supersede-pending"},
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
 		{ID: "hub-create", Title: "New hub", Subtitle: "Create a manual feature hub", IsAction: true, Action: "hub-create"},
 	}
@@ -463,6 +668,7 @@ func (m *Model) syncDetailViewport() {
 	m.detail.Width = width
 	m.detail.Height = height
 	m.detail.SetContent(m.buildDetailContent())
+	m.syncLogViewport(false)
 }
 
 func (m *Model) ensureSectionSelection(section *sectionState) {
@@ -699,7 +905,7 @@ func (m *Model) moveContent(delta int) {
 }
 
 func (m *Model) cycleFocus(delta int) {
-	order := []int{focusSidebar, focusContent, focusDetail}
+	order := []int{focusSidebar, focusContent, focusDetail, focusJobs, focusLogs}
 	if m.wizard.active {
 		order = append(order, focusWizard)
 	}
@@ -732,17 +938,63 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 	}
 	switch entry.Action {
 	case "refresh":
+		m.startRefreshJob("manual refresh requested", 7)
 		m.appendLog("manual refresh requested")
 		return refreshAllCmd(m.client, m.root)
 	case "index":
-		if m.indexing {
+		if isActiveJobState(m.job("index").State) {
 			m.appendLog("index already running")
 			return nil
 		}
-		m.indexing = true
+		m.job("index").State = "queued"
+		m.job("index").Phase = "bootstrap"
+		m.job("index").Message = "manual full index requested"
+		m.job("index").Percent = intPtr(0)
+		m.job("index").QueueDepth = m.queueDepth
+		m.job("index").LastUpdatedAt = time.Now()
+		m.refreshJobTable()
 		m.refreshSidebar()
 		m.appendLog("manual full index requested")
 		return runIndexCmd(m.client, m.root)
+	case "retry-index":
+		if m.client == nil {
+			return nil
+		}
+		result, err := m.client.ControlJob(context.Background(), m.root, "retry-last")
+		if err != nil {
+			m.setError(err)
+			return nil
+		}
+		m.queueDepth = result.QueueDepth
+		m.appendLog(result.Message)
+		m.refreshSidebar()
+		return nil
+	case "cancel-pending":
+		if m.queueDepth == 0 || m.client == nil {
+			return nil
+		}
+		result, err := m.client.ControlJob(context.Background(), m.root, "cancel-pending")
+		if err != nil {
+			m.setError(err)
+			return nil
+		}
+		m.queueDepth = result.QueueDepth
+		m.appendLog(result.Message)
+		m.refreshSidebar()
+		return nil
+	case "supersede-pending":
+		if m.queueDepth == 0 || m.client == nil {
+			return nil
+		}
+		result, err := m.client.ControlJob(context.Background(), m.root, "supersede-pending")
+		if err != nil {
+			m.setError(err)
+			return nil
+		}
+		m.queueDepth = result.QueueDepth
+		m.appendLog(result.Message)
+		m.refreshSidebar()
+		return nil
 	case "watch":
 		return m.toggleWatcher()
 	case "hub-create":
@@ -788,6 +1040,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if message.err != nil {
 			m.backendOnline = false
 			m.setError(message.err)
+			m.finishRefreshSubtask("doctor", message.err)
 			return m, nil
 		}
 		m.backendOnline = true
@@ -795,45 +1048,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.doctorLoaded = true
 		m.watchEnabled = message.report.Observability.Scheduler.WatchEnabled
 		m.queueDepth = message.report.Observability.Scheduler.QueueDepth
+		m.job("index").QueueDepth = m.queueDepth
 		m.refreshOverviewSection()
 		m.refreshSidebar()
 		m.syncDetailViewport()
 		m.appendLog("doctor report refreshed")
+		m.finishRefreshSubtask("doctor", nil)
 		return m, nil
 	case textLoadedMsg:
 		if message.err != nil {
 			m.setError(message.err)
+			m.finishRefreshSubtask(message.kind, message.err)
 			return m, nil
 		}
 		m.setTextSection(message.kind, message.text)
 		m.syncDetailViewport()
+		m.finishRefreshSubtask(message.kind, nil)
 		return m, nil
 	case restoreLoadedMsg:
 		if message.err != nil {
 			m.setError(message.err)
+			m.finishRefreshSubtask("restore-points", message.err)
 			return m, nil
 		}
 		m.setRestorePoints(message.points)
 		m.syncDetailViewport()
+		m.finishRefreshSubtask("restore-points", nil)
 		return m, nil
 	case statusLoadedMsg:
 		if message.err != nil {
 			m.setError(message.err)
+			m.finishRefreshSubtask("status", message.err)
 			return m, nil
 		}
 		m.setStatusSummary(message.summary)
 		m.syncDetailViewport()
+		m.finishRefreshSubtask("status", nil)
 		return m, nil
 	case changesLoadedMsg:
 		if message.err != nil {
 			m.setError(message.err)
+			m.finishRefreshSubtask("changes", message.err)
 			return m, nil
 		}
 		m.setChangesSummary(message.summary)
 		m.syncDetailViewport()
+		m.finishRefreshSubtask("changes", nil)
 		return m, nil
 	case indexFinishedMsg:
-		m.indexing = false
 		m.refreshSidebar()
 		if message.err != nil {
 			m.setError(message.err)
@@ -870,18 +1132,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "watch-state":
 			m.watchEnabled = message.event.Enabled
 			m.queueDepth = message.event.QueueDepth
+			m.job("index").QueueDepth = m.queueDepth
+			m.refreshJobTable()
 			m.refreshSidebar()
 		case "watch-batch":
 			m.queueDepth = message.event.QueueDepth
+			m.job("index").QueueDepth = m.queueDepth
+			m.refreshJobTable()
 			if len(message.event.ChangedPaths) > 0 {
 				m.appendLog("detected changes: " + strings.Join(message.event.ChangedPaths, ", "))
 			}
 		case "job":
-			m.jobPhase = message.event.Phase
-			m.jobMessage = message.event.Message
-			m.jobReason = message.event.RebuildReason
+			indexJob := m.job("index")
+			indexJob.State = message.event.State
+			indexJob.Phase = message.event.Phase
+			indexJob.Message = message.event.Message
+			indexJob.RebuildReason = message.event.RebuildReason
+			indexJob.QueueDepth = message.event.QueueDepth
+			indexJob.ElapsedMs = message.event.ElapsedMs
+			indexJob.Source = message.event.Source
+			indexJob.Mode = message.event.Mode
+			indexJob.Pending = message.event.Pending
+			indexJob.CurrentFile = message.event.CurrentFile
+			if message.event.PercentComplete > 0 || message.event.TotalItems > 0 {
+				indexJob.Percent = intPtr(message.event.PercentComplete)
+			} else if message.event.State == "completed" {
+				indexJob.Percent = intPtr(100)
+			} else {
+				indexJob.Percent = nil
+			}
+			indexJob.LastUpdatedAt = time.Now()
+			if message.event.State == "completed" {
+				indexJob.LastSuccessful = time.Now().Format(time.RFC3339)
+			}
 			m.queueDepth = message.event.QueueDepth
-			m.indexing = message.event.State == "running" || message.event.State == "progress" || message.event.State == "queued"
+			m.refreshJobTable()
 			m.refreshSidebar()
 		}
 		m.refreshOverviewSection()
@@ -905,6 +1190,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusSidebar
 			} else if m.focus == focusDetail {
 				m.focus = focusContent
+			} else if m.focus == focusLogs {
+				m.focus = focusJobs
 			}
 			return m, nil
 		case "right":
@@ -912,6 +1199,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusContent
 			} else if m.focus == focusContent {
 				m.focus = focusDetail
+			} else if m.focus == focusJobs {
+				m.focus = focusLogs
 			}
 			return m, nil
 		case "up", "k":
@@ -923,6 +1212,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.moveContent(-1)
 				return m, nil
 			}
+			if m.focus == focusJobs {
+				m.jobTable.SetCursor(max(0, m.jobTable.Cursor()-1))
+				return m, nil
+			}
 		case "down", "j":
 			if m.focus == focusSidebar {
 				m.moveSidebar(1)
@@ -930,6 +1223,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == focusContent {
 				m.moveContent(1)
+				return m, nil
+			}
+			if m.focus == focusJobs {
+				maxCursor := max(0, len(m.jobOrder)-1)
+				m.jobTable.SetCursor(min(maxCursor, m.jobTable.Cursor()+1))
 				return m, nil
 			}
 		case "enter":
@@ -940,6 +1238,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusDetail
 				return m, nil
 			}
+		case "x":
+			m.sidebarIndex = m.findSidebarAction("cancel-pending")
+			return m, m.executeSidebarSelection()
+		case "s":
+			m.sidebarIndex = m.findSidebarAction("supersede-pending")
+			return m, m.executeSidebarSelection()
+		case "t":
+			m.sidebarIndex = m.findSidebarAction("retry-index")
+			return m, m.executeSidebarSelection()
 		case "i":
 			m.sidebarIndex = m.findSidebarAction("index")
 			return m, m.executeSidebarSelection()
@@ -983,6 +1290,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.focus == focusDetail {
 			m.detail, cmd = m.detail.Update(message)
+			return m, cmd
+		}
+		if m.focus == focusLogs {
+			m.logViewport, cmd = m.logViewport.Update(message)
 			return m, cmd
 		}
 	}
@@ -1187,24 +1498,36 @@ func (m Model) renderDetailPanel(width int, height int) string {
 }
 
 func (m Model) renderJobsPanel(width int, height int) string {
-	lines := []string{
-		renderPaneTitle("Jobs", false),
-		subtitleStyle.Render("Command layer, job layer, and recent backend activity"),
-		"",
-		fmt.Sprintf("Indexing: %s", map[bool]string{true: "running", false: "idle"}[m.indexing]),
-		fmt.Sprintf("Watcher: %s", map[bool]string{true: "enabled", false: "disabled"}[m.watchEnabled]),
-		fmt.Sprintf("Backend: %s", map[bool]string{true: "connected", false: "offline"}[m.backendOnline]),
-		fmt.Sprintf("Phase: %s", formatBlankAsNone(m.jobPhase)),
-		fmt.Sprintf("Message: %s", formatBlankAsNone(m.jobMessage)),
-		fmt.Sprintf("Queue depth: %d", m.queueDepth),
-		fmt.Sprintf("Rebuild reason: %s", formatBlankAsNone(m.jobReason)),
-		"",
-		"Recent log lines:",
-	}
-	if len(m.logs) == 0 {
-		lines = append(lines, "No activity yet.")
+	selectedJob := m.selectedJob()
+	tableHeight := max(4, height-9)
+	m.jobTable.SetWidth(max(12, width-4))
+	m.jobTable.SetHeight(tableHeight)
+	if m.focus == focusJobs {
+		m.jobTable.Focus()
 	} else {
-		lines = append(lines, m.logs...)
+		m.jobTable.Blur()
+	}
+	lines := []string{
+		renderPaneTitle("Jobs", m.focus == focusJobs),
+		subtitleStyle.Render("Structured backend and operator task state"),
+		"",
+		m.jobTable.View(),
+	}
+	if selectedJob != nil {
+		lines = append(lines, "")
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf(
+			"%s | phase=%s | percent=%s | queue=%d | file=%s",
+			selectedJob.Title,
+			formatBlankAsNone(selectedJob.Phase),
+			formatJobPercent(selectedJob.Percent),
+			selectedJob.QueueDepth,
+			truncate(formatBlankAsNone(selectedJob.CurrentFile), max(18, width/3)),
+		)))
+		lines = append(lines, truncate(formatBlankAsNone(selectedJob.Message), max(20, width-6)))
+		if strings.TrimSpace(selectedJob.RebuildReason) != "" {
+			lines = append(lines, subtitleStyle.Render("reason: "+truncate(selectedJob.RebuildReason, max(20, width-8))))
+		}
+		lines = append(lines, subtitleStyle.Render("controls: i run | t retry | x cancel pending | s supersede pending"))
 	}
 	if m.lastError != "" {
 		lines = append(lines, "", errorStyle.Render("Last error: "+m.lastError))
@@ -1212,18 +1535,28 @@ func (m Model) renderJobsPanel(width int, height int) string {
 	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 }
 
+func (m Model) renderLogsPanel(width int, height int) string {
+	viewportCopy := m.logViewport
+	viewportCopy.Width = max(12, width-4)
+	viewportCopy.Height = max(4, height-4)
+	body := []string{
+		renderPaneTitle("Logs", m.focus == focusLogs),
+		subtitleStyle.Render(fmt.Sprintf("Scrollable backend log stream (%d lines)", len(m.logs))),
+		"",
+		viewportCopy.View(),
+	}
+	return cardStyle.Width(width).Height(height).Render(strings.Join(body, "\n"))
+}
+
 func (m Model) renderStatusLine() string {
 	watcherState := "off"
 	if m.watchEnabled {
 		watcherState = "on"
 	}
-	stage := strings.TrimSpace(m.jobPhase)
+	indexJob := m.job("index")
+	stage := strings.TrimSpace(indexJob.Phase)
 	if stage == "" {
-		if m.indexing {
-			stage = "queued"
-		} else {
-			stage = "idle"
-		}
+		stage = map[bool]string{true: "running", false: "idle"}[isActiveJobState(indexJob.State)]
 	}
 	backendState := "connected"
 	if !m.backendOnline {
@@ -1250,8 +1583,9 @@ func (m Model) View() string {
 		sidebar := m.renderSidebarPanel(max(32, m.width-4))
 		content := m.renderContentPanel(max(32, m.width-4), max(12, m.height/3))
 		detail := m.renderDetailPanel(max(36, m.width-4), max(10, m.height/3))
-		jobs := m.renderJobsPanel(max(36, m.width-4), max(minJobsHeight, m.height/4))
-		body = lipgloss.JoinVertical(lipgloss.Left, sidebar, content, detail, jobs)
+		jobs := m.renderJobsPanel(max(36, m.width-4), max(minJobsHeight, m.height/5))
+		logs := m.renderLogsPanel(max(36, m.width-4), max(minJobsHeight, m.height/5))
+		body = lipgloss.JoinVertical(lipgloss.Left, sidebar, content, detail, jobs, logs)
 	} else {
 		jobsHeight := max(minJobsHeight, m.height/4)
 		mainHeight := max(16, m.height-jobsHeight-8)
@@ -1264,11 +1598,15 @@ func (m Model) View() string {
 			m.renderContentPanel(contentWidth, mainHeight),
 			m.renderDetailPanel(detailWidth, mainHeight),
 		)
-		jobs := m.renderJobsPanel(max(70, m.width-2), jobsHeight)
-		body = lipgloss.JoinVertical(lipgloss.Left, top, jobs)
+		jobsWidth := max(minJobsWidth, m.width/2)
+		logsWidth := max(minLogsWidth, m.width-jobsWidth-4)
+		jobs := m.renderJobsPanel(jobsWidth, jobsHeight)
+		logs := m.renderLogsPanel(logsWidth, jobsHeight)
+		bottom := lipgloss.JoinHorizontal(lipgloss.Top, jobs, logs)
+		body = lipgloss.JoinVertical(lipgloss.Left, top, bottom)
 	}
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Up/Down move | Tab focus | Enter select/action | i index | r refresh | w watcher | n new hub | q quit")
+	footer := footerStyle.Render("Up/Down move | Tab focus | Enter select/action | i index | t retry | x cancel | s supersede | r refresh | w watcher | n new hub | q quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
 	}
@@ -1356,12 +1694,15 @@ func RenderSnapshot(root string, client *backend.Client) (string, error) {
 	model.doctor = report
 	model.doctorLoaded = true
 	model.watchEnabled = report.Observability.Scheduler.WatchEnabled
+	model.queueDepth = report.Observability.Scheduler.QueueDepth
 	model.refreshOverviewSection()
 	model.logs = []string{"Snapshot rendered from live backend data."}
 	model.width = 120
 	model.height = 38
 	model.refreshSidebar()
 	model.syncDetailViewport()
+	model.syncLogViewport(true)
+	model.refreshJobTable()
 	return model.View(), nil
 }
 
@@ -1852,6 +2193,53 @@ func formatOllamaSummary(status backend.OllamaRuntimeStatus) string {
 		return "offline"
 	}
 	return status.Error
+}
+
+func titleFromID(value string) string {
+	parts := strings.Fields(strings.ReplaceAll(value, "-", " "))
+	for index, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[index] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func jobStateLabel(job *jobState) string {
+	if job == nil {
+		return "idle"
+	}
+	state := strings.TrimSpace(job.State)
+	if state == "" {
+		return "idle"
+	}
+	if job.Pending && state == "running" {
+		return "running*"
+	}
+	return state
+}
+
+func isActiveJobState(state string) bool {
+	return state == "progress" || state == "queued" || state == "running"
+}
+
+func formatJobPercent(value *int) string {
+	if value == nil {
+		return "--"
+	}
+	return fmt.Sprintf("%d", *value)
+}
+
+func formatElapsedMs(value int) string {
+	if value <= 0 {
+		return "--"
+	}
+	return fmt.Sprintf("%.1fs", float64(value)/1000)
+}
+
+func intPtr(value int) *int {
+	return &value
 }
 
 func truncate(value string, limit int) string {

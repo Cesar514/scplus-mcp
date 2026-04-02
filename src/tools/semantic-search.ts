@@ -36,6 +36,7 @@ export interface FileSearchIndexProgress {
   changedFiles: number;
   removedFiles: number;
   indexedDocuments: number;
+  currentFile?: string;
 }
 
 export interface FileSearchIndexStats {
@@ -341,6 +342,7 @@ async function refreshPersistedFileSearchState(
         changedFiles,
         removedFiles: 0,
         indexedDocuments: Object.keys(nextFiles).length,
+        currentFile: relativePath,
       });
     }
   }
@@ -405,6 +407,7 @@ export async function ensureFileSearchIndex(
         changedFiles: refreshStats.changedFiles,
         removedFiles: refreshStats.removedFiles,
         indexedDocuments: docs.length,
+        currentFile: docs.length > 0 ? docs[docs.length - 1]?.path : undefined,
       });
     }
     return {
@@ -428,6 +431,7 @@ export async function ensureFileSearchIndex(
       changedFiles: refreshStats.changedFiles,
       removedFiles: refreshStats.removedFiles,
       indexedDocuments: docs.length,
+      currentFile: docs.length > 0 ? docs[docs.length - 1]?.path : undefined,
     });
   }
 

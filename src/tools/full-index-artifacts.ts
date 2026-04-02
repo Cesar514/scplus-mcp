@@ -37,6 +37,7 @@ export interface FullIndexProgress {
   indexedClusters: number;
   indexedHubSuggestions: number;
   indexedQueryExplanations: number;
+  currentFile?: string;
 }
 
 export interface StructureArtifactStats {
@@ -501,6 +502,7 @@ export async function refreshStructureIndexState(
         indexedClusters: 0,
         indexedHubSuggestions: 0,
         indexedQueryExplanations: 0,
+        currentFile: relativePath,
       });
   }
   }

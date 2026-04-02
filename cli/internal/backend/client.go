@@ -286,22 +286,38 @@ type WatchState struct {
 	Enabled bool   `json:"enabled"`
 }
 
+type JobControlResult struct {
+	Root           string   `json:"root"`
+	Action         string   `json:"action"`
+	Message        string   `json:"message"`
+	QueueDepth     int      `json:"queueDepth"`
+	IndexRunning   bool     `json:"indexRunning"`
+	Queued         bool     `json:"queued"`
+	PendingPaths   []string `json:"pendingPaths"`
+	LastWatchBatch []string `json:"lastWatchBatch"`
+	LastMode       string   `json:"lastMode"`
+}
+
 type Event struct {
-	Kind          string   `json:"kind"`
-	Root          string   `json:"root"`
-	Message       string   `json:"message"`
-	Level         string   `json:"level"`
-	Job           string   `json:"job"`
-	State         string   `json:"state"`
-	Mode          string   `json:"mode"`
-	Phase         string   `json:"phase"`
-	Source        string   `json:"source"`
-	ElapsedMs     int      `json:"elapsedMs"`
-	Pending       bool     `json:"pending"`
-	Enabled       bool     `json:"enabled"`
-	ChangedPaths  []string `json:"changedPaths"`
-	QueueDepth    int      `json:"queueDepth"`
-	RebuildReason string   `json:"rebuildReason"`
+	Kind            string   `json:"kind"`
+	Root            string   `json:"root"`
+	Message         string   `json:"message"`
+	Level           string   `json:"level"`
+	Job             string   `json:"job"`
+	State           string   `json:"state"`
+	Mode            string   `json:"mode"`
+	Phase           string   `json:"phase"`
+	Source          string   `json:"source"`
+	ElapsedMs       int      `json:"elapsedMs"`
+	Pending         bool     `json:"pending"`
+	Enabled         bool     `json:"enabled"`
+	ChangedPaths    []string `json:"changedPaths"`
+	QueueDepth      int      `json:"queueDepth"`
+	RebuildReason   string   `json:"rebuildReason"`
+	ProcessedItems  int      `json:"processedItems"`
+	TotalItems      int      `json:"totalItems"`
+	PercentComplete int      `json:"percentComplete"`
+	CurrentFile     string   `json:"currentFile"`
 }
 
 type bridgeCallResult struct {
@@ -632,6 +648,15 @@ func (c *Client) SetWatchEnabled(ctx context.Context, root string, enabled bool)
 		"enabled": enabled,
 	}, &state)
 	return state, err
+}
+
+func (c *Client) ControlJob(ctx context.Context, root string, action string) (JobControlResult, error) {
+	var result JobControlResult
+	err := c.call(ctx, "job-control", map[string]any{
+		"root":   root,
+		"action": action,
+	}, &result)
+	return result, err
 }
 
 func (c *Client) Index(ctx context.Context, root string, mode string) (string, error) {

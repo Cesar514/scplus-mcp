@@ -117,6 +117,20 @@ class BridgeSession {
   }
 }
 
+async function requestWithRetry(session, command, args, predicate, attempts = 6, delayMs = 250) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await session.request(command, args);
+    } catch (error) {
+      lastError = error;
+      if (!predicate(error) || attempt === attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 describe("bridge-serve", () => {
   it("keeps one backend process alive across requests and streams watcher-driven index events", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-serve-"));
@@ -175,6 +189,20 @@ describe("bridge-serve", () => {
         assert.equal(batchEvent.root, cwd);
         assert.equal(typeof batchEvent.queueDepth, "number");
 
+        const jobProgress = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "progress" &&
+          event.job === "index" &&
+          event.source === "watch" &&
+          typeof event.currentFile === "string" &&
+          event.currentFile.length > 0 &&
+          typeof event.percentComplete === "number",
+        );
+        assert.equal(jobProgress.root, cwd);
+        assert.equal(jobProgress.percentComplete >= 0, true);
+        assert.equal(typeof jobProgress.processedItems, "number");
+        assert.equal(typeof jobProgress.totalItems, "number");
+
         const jobCompleted = await session.waitForEvent((event) =>
           event.kind === "job" &&
           event.state === "completed" &&
@@ -213,6 +241,97 @@ describe("bridge-serve", () => {
         assert.equal(doctorAfterWatch.observability.scheduler.batchCount >= 1, true);
         assert.equal(typeof doctorAfterWatch.observability.scheduler.canceledJobs, "number");
         assert.equal(doctorAfterWatch.observability.scheduler.fullRebuildReasons.some((reason) => reason.includes("watch-triggered full rebuild")), true);
+      } finally {
+        await session.close();
+      }
+    } finally {
+        await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes pending-job cancel, supersede, and retry controls over the persistent session", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-controls-"));
+    const filePath = join(cwd, "src", "app.ts");
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        filePath,
+        "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function run() {\n  return 1;\n}\n",
+      );
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const session = new BridgeSession(cwd);
+      try {
+        await session.request("watch-set", { root: cwd, enabled: true, debounceMs: 500 });
+        await session.waitForEvent((event) => event.kind === "watch-state" && event.enabled === true);
+
+        await writeFile(
+          filePath,
+          "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function rerun() {\n  return 2;\n}\n",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        const cancelResult = await session.request("job-control", { root: cwd, action: "cancel-pending" });
+        assert.equal(cancelResult.action, "cancel-pending");
+        assert.equal(cancelResult.queueDepth, 0);
+        assert.equal(cancelResult.message.includes("canceled"), true);
+
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const doctorAfterCancel = await session.request("doctor", { root: cwd });
+        assert.equal(doctorAfterCancel.observability.scheduler.queueDepth, 0);
+
+        await writeFile(
+          filePath,
+          "// Bridge control fixture for pending job commands\n// FEATURE: Verify cancel, supersede, and retry controls on the persistent backend\n\nexport function rerunAgain() {\n  return 3;\n}\n",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        const supersedeResult = await session.request("job-control", { root: cwd, action: "supersede-pending" });
+        assert.equal(supersedeResult.action, "supersede-pending");
+        assert.equal(supersedeResult.message.includes("superseded"), true);
+
+        const watchCompleted = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "completed" &&
+          event.job === "index" &&
+          event.source === "watch",
+        );
+        assert.equal(watchCompleted.root, cwd);
+        await session.request("watch-set", { root: cwd, enabled: false });
+        await session.waitForEvent((event) => event.kind === "watch-state" && event.enabled === false);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+
+        const retryResult = await requestWithRetry(
+          session,
+          "job-control",
+          { root: cwd, action: "retry-last" },
+          (error) => error instanceof Error && error.message.includes("while another run is active"),
+        );
+        assert.equal(retryResult.action, "retry-last");
+        assert.equal(retryResult.lastMode, "full");
+
+        const manualCompleted = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "completed" &&
+          event.job === "index" &&
+          event.source === "manual",
+        );
+        assert.equal(manualCompleted.root, cwd);
       } finally {
         await session.close();
       }

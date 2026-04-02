@@ -605,6 +605,11 @@ function normalizeDebounceMs(value: unknown): number | undefined {
   return Math.floor(value);
 }
 
+function assertJobControlAction(value: unknown): "cancel-pending" | "retry-last" | "supersede-pending" {
+  if (value === "cancel-pending" || value === "retry-last" || value === "supersede-pending") return value;
+  throw new Error(`Persistent bridge command received invalid job action "${String(value)}".`);
+}
+
 function normalizeBridgeCommand(command: string): string {
   return command.replace(/_/g, "-");
 }
@@ -645,6 +650,9 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
     return {
       output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizePersistentIndexMode(rawArgs.mode)),
     };
+  }
+  if (normalizedCommand === "job-control") {
+    return bridgeServiceCore.controlJob(assertString(rawArgs.root, "root"), assertJobControlAction(rawArgs.action));
   }
   if (normalizedCommand === "status") {
     return getRepoStatus(assertString(rawArgs.root, "root"));

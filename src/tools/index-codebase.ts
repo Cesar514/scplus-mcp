@@ -32,6 +32,10 @@ export interface IndexCodebaseProgressEvent {
   phase: string;
   rootDir: string;
   mode: IndexMode;
+  processedItems?: number;
+  totalItems?: number;
+  percentComplete?: number;
+  currentFile?: string;
 }
 
 interface StageTimingRecorder {
@@ -161,6 +165,12 @@ function formatProgressPrefix(startedAtMs: number): string {
   return `[${((Date.now() - startedAtMs) / 1000).toFixed(1)}s]`;
 }
 
+function calculatePercentComplete(processedItems: number | undefined, totalItems: number | undefined): number | undefined {
+  if (processedItems === undefined || totalItems === undefined || totalItems <= 0) return undefined;
+  const raw = Math.round((processedItems / totalItems) * 100);
+  return Math.max(0, Math.min(100, raw));
+}
+
 function formatFileProgress(progress: FileSearchIndexProgress): string {
   return [
     progress.phase,
@@ -222,7 +232,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
   status.completedAt = undefined;
   status.failedGeneration = undefined;
 
-  const appendProgress = (message: string): void => {
+  const appendProgress = (
+    message: string,
+    progress: Partial<Pick<IndexCodebaseProgressEvent, "processedItems" | "totalItems" | "currentFile">> = {},
+  ): void => {
     progressLog.push(`${formatProgressPrefix(startedAtMs)} ${message}`);
     void options.onProgress?.({
       elapsedMs: Date.now() - startedAtMs,
@@ -230,6 +243,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       phase: status.phase,
       rootDir,
       mode,
+      processedItems: progress.processedItems,
+      totalItems: progress.totalItems,
+      currentFile: progress.currentFile,
+      percentComplete: calculatePercentComplete(progress.processedItems, progress.totalItems),
     });
   };
 
@@ -255,7 +272,13 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       stage: "bootstrap",
       persist: persistStatusImmediately,
       });
-      appendProgress(`bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`);
+      appendProgress(
+        `bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`,
+        {
+          processedItems: status.bootstrap?.files,
+          totalItems: status.bootstrap?.files,
+        },
+      );
       status.observability!.stages.bootstrap = buildStageObservabilityStatus("bootstrap", finalizeStageTiming(bootstrapTiming), status);
       await persistStatusImmediately();
 
@@ -277,7 +300,11 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           removedFiles: progress.removedFiles,
           indexedDocuments: progress.indexedDocuments,
         };
-        appendProgress(formatFileProgress(progress));
+        appendProgress(formatFileProgress(progress), {
+          processedItems: progress.processedFiles,
+          totalItems: progress.totalFiles,
+          currentFile: progress.currentFile,
+        });
         await progressPersistence.persist(status.phase);
       },
       });
@@ -285,6 +312,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       appendProgress(
         `file-ready | ${status.fileSearch?.indexedDocuments ?? 0} docs | ` +
         `${status.fileSearch?.embeddedDocuments ?? 0} embedded | ${status.fileSearch?.reusedDocuments ?? 0} reused`,
+        {
+          processedItems: status.fileSearch?.processedFiles,
+          totalItems: status.fileSearch?.totalFiles,
+        },
       );
       status.observability!.stages["file-search"] = buildStageObservabilityStatus("file-search", finalizeStageTiming(fileSearchTiming), status);
       await persistStatusImmediately();
@@ -307,7 +338,11 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           removedFiles: progress.removedFiles,
           indexedIdentifiers: progress.indexedIdentifiers,
         };
-        appendProgress(formatIdentifierProgress(progress));
+        appendProgress(formatIdentifierProgress(progress), {
+          processedItems: progress.processedFiles,
+          totalItems: progress.totalFiles,
+          currentFile: progress.currentFile,
+        });
         await progressPersistence.persist(status.phase);
       },
       });
@@ -315,6 +350,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
       appendProgress(
         `identifier-ready | ${status.identifierSearch?.indexedIdentifiers ?? 0} identifiers | ` +
         `${status.identifierSearch?.embeddedIdentifiers ?? 0} embedded | ${status.identifierSearch?.reusedIdentifiers ?? 0} reused`,
+        {
+          processedItems: status.identifierSearch?.processedFiles,
+          totalItems: status.identifierSearch?.totalFiles,
+        },
       );
       status.observability!.stages["identifier-search"] = buildStageObservabilityStatus("identifier-search", finalizeStageTiming(identifierTiming), status);
     });
@@ -365,7 +404,11 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
               fileCardCount: progress.indexedQueryExplanations,
             },
           };
-          appendProgress(formatFullProgress(progress));
+          appendProgress(formatFullProgress(progress), {
+            processedItems: progress.processedFiles,
+            totalItems: progress.totalFiles,
+            currentFile: progress.currentFile,
+          });
           await progressPersistence.persist(status.phase);
         },
         });
@@ -377,6 +420,10 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
           `${status.fullIndex?.hybridChunkIndex?.indexedDocuments ?? 0} hybrid chunk docs | ` +
           `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs | ` +
           `${status.fullIndex?.queryExplanationIndex?.fileCardCount ?? 0} explanation cards`,
+          {
+            processedItems: status.fullIndex?.chunkIndex?.processedFiles ?? status.fullIndex?.structureIndex?.processedFiles,
+            totalItems: status.fullIndex?.chunkIndex?.totalFiles ?? status.fullIndex?.structureIndex?.totalFiles,
+          },
         );
         status.observability!.stages["full-artifacts"] = buildStageObservabilityStatus("full-artifacts", finalizeStageTiming(fullArtifactsTiming), status);
       });

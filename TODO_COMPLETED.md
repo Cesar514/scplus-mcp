@@ -2,6 +2,14 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 25 by replacing the bottom-pane string summary with a real jobs-and-logs operator surface in `contextplus-ui`
+- [x] replace the fixed 12-line `appendLog()` buffer with a scrollable log viewport fed by the persistent backend session
+- [x] add structured job rows for index, refresh, restore, lint, and query task slots instead of relying on ad hoc log-only state
+- [x] add index progress metadata for stage, percent complete, current file, elapsed time, queue depth, pending state, and rebuild reason across the backend event bridge and TUI model
+- [x] add explicit cancel-pending, supersede-pending, and retry-last index controls through the persistent backend bridge and human CLI sidebar
+- [x] verify v1.5 phase 25 directly with focused Go UI coverage, persistent `bridge-serve` integration coverage, the Go CLI build, direct `contextplus-ui snapshot` inspection on this repository, direct `contextplus-ui doctor`, and touched-file lint/build checks
+- [x] commit the verified v1.5 phase 25 work
+
 - [x] finish v1.5 phase 24 by replacing the remaining raw text view path in `contextplus-ui` with typed Bubble list and table state
 - [x] stop feeding tree, hubs, restore points, and cluster views through generic raw text splitting by adding typed list renderers for each section
 - [x] add typed Bubble table sections for git status and repo changes, backed by structured bridge payloads in the Go backend client

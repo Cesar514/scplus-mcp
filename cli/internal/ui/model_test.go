@@ -108,10 +108,18 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		IndexValidation: backend.IndexValidationReport{OK: true},
 	}
 	model.watchEnabled = true
-	model.jobPhase = "identifier-search"
+	indexJob := model.job("index")
+	indexJob.State = "running"
+	indexJob.Phase = "identifier-search"
+	indexJob.Percent = intPtr(62)
+	indexJob.CurrentFile = "src/tools/query-intent.ts"
+	indexJob.QueueDepth = 1
+	model.queueDepth = 1
+	model.refreshJobTable()
 	model.refreshOverviewSection()
 	model.refreshSidebar()
 	model.syncDetailViewport()
+	model.appendLog("observability indexing: identifier-search 62%")
 
 	rendered := model.View()
 	for _, needle := range []string{
@@ -122,14 +130,22 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"Changes",
 		"Detail",
 		"Jobs",
+		"Logs",
 		"Refresh data",
-		"Run full index",
+		"Index running",
+		"Retry last index",
+		"Cancel pending job",
+		"Supersede pending job",
 		"Disable watcher",
 		"watcher: on",
 		"stage: identifier-search",
 		"backend: connected",
 		"repo: /tmp/contextplus",
 		"generation: 7",
+		"Index",
+		"running",
+		"62",
+		"observability indexing: identifier-search 62%",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in operator console view: %s", needle, rendered)
@@ -160,6 +176,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 		"Stacked operator console for narrow terminals",
 		"Navigation",
 		"Jobs",
+		"Logs",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
@@ -281,6 +298,54 @@ func TestChangesSectionRendersBubbleTable(t *testing.T) {
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in changes content panel: %s", needle, rendered)
+		}
+	}
+}
+
+func TestLogsViewportRetainsFullHistory(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 32
+	for i := 0; i < 24; i++ {
+		model.appendLog("log line " + titleFromID("entry"))
+	}
+	rendered := model.renderLogsPanel(72, 12)
+	if !strings.Contains(rendered, "Scrollable backend log stream (25 lines)") {
+		t.Fatalf("expected full log history to be retained in logs panel: %s", rendered)
+	}
+}
+
+func TestJobsPanelShowsStructuredJobRows(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 144
+	model.height = 36
+	indexJob := model.job("index")
+	indexJob.State = "progress"
+	indexJob.Phase = "file-scan"
+	indexJob.Percent = intPtr(40)
+	indexJob.CurrentFile = "src/cli/backend-core.ts"
+	indexJob.ElapsedMs = 2800
+	indexJob.QueueDepth = 2
+	indexJob.Message = "file-scan | 40/100 files"
+	indexJob.RebuildReason = "watch-triggered full rebuild for src/cli/backend-core.ts"
+	indexJob.Pending = true
+	model.refreshJobTable()
+
+	rendered := model.renderJobsPanel(84, 14)
+	for _, needle := range []string{
+		"Structured backend and operator task state",
+		"Task",
+		"State",
+		"Current",
+		"Index",
+		"progress",
+		"file-scan",
+		"40",
+		"src/cli/backend-core.ts",
+		"controls: i run | t retry | x cancel pending | s supersede pending",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in jobs panel: %s", needle, rendered)
 		}
 	}
 }

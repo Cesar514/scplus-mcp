@@ -46,6 +46,7 @@ export interface ChunkIndexProgress {
   changedFiles: number;
   removedFiles: number;
   indexedChunks: number;
+  currentFile?: string;
 }
 
 export interface ChunkArtifactStats {
@@ -214,6 +215,7 @@ export async function refreshChunkIndexState(
         changedFiles,
         removedFiles: 0,
         indexedChunks: Object.values(nextFiles).reduce((sum, entry) => sum + entry.chunks.length, 0),
+        currentFile: relativePath,
       });
     }
   }
@@ -245,14 +247,14 @@ export async function warmChunkEmbeddings(
   onProgress?: (progress: ChunkIndexProgress) => Promise<void> | void,
 ): Promise<{ embeddedChunks: number; reusedChunks: number }> {
   const cache = await loadEmbeddingCache(rootDir, CHUNK_CACHE_FILE);
-  const pending: { key: string; hash: string; text: string }[] = [];
+  const pending: { key: string; hash: string; text: string; path: string }[] = [];
   let reusedChunks = 0;
 
   for (const doc of docs) {
     const text = `${doc.header} ${doc.symbolName ?? ""} ${doc.signature ?? ""} ${doc.path} ${doc.content}`;
     const hash = buildEmbeddingCacheHash(text);
     if (cache[doc.id]?.hash === hash) reusedChunks++;
-    else pending.push({ key: doc.id, hash, text });
+    else pending.push({ key: doc.id, hash, text, path: doc.path });
   }
 
   const batchSize = getEmbeddingBatchSize();
@@ -270,6 +272,7 @@ export async function warmChunkEmbeddings(
         changedFiles: pending.length,
         removedFiles: 0,
         indexedChunks: docs.length,
+        currentFile: batch.length > 0 ? batch[batch.length - 1]?.path : undefined,
       });
     }
   }
