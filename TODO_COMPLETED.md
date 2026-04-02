@@ -383,3 +383,10 @@
 - [x] Keep file-heavy sections searchable in place and preserve detail/back navigation with `Enter` and `Esc`.
 - [x] Remove the shell-script parser failure from the prepared-index path so `install-contextplusplus.sh` no longer poisons the initial index state.
 - [x] Verify the updated CLI and refreshed index directly with focused Go UI tests, the full Go CLI suite, a TypeScript build, a targeted tree-sitter test run, a built snapshot render, and a fresh full index on this repository.
+
+## activity shell refinement completed
+
+- [x] Change the default human CLI boot screen from the 8-row overview summary to an activity-first slash-command shell.
+- [x] Make slash commands the primary navigation surface with explicit entries like `/overview` and `/index`, and keep the slash editable instead of hard-coding it as an unremovable prompt.
+- [x] Keep the magician pet visible inside the main activity shell while preserving direct detail/back navigation for content windows.
+- [x] Verify the updated slash-command flow directly with focused Go UI tests, the full Go CLI suite, and rebuilt snapshot renders.

@@ -129,13 +129,16 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	model.refreshSidebar()
 	model.syncDetailViewport()
 	model.appendLog("observability indexing: identifier-search 62%")
+	model.commandBar.SetValue("/ov")
 
 	rendered := model.View()
 	for _, needle := range []string{
 		"Operator console with navigation history, command palette, and export layers",
 		"/\\_",
-		"Overview",
 		"Activity",
+		"Slash-command console",
+		"/overview",
+		"/index",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -145,7 +148,6 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"history: 1/1",
 		"Index",
 		"running",
-		"62",
 		"observability indexing: identifier-search 62%",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -175,8 +177,8 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Stacked operator console for narrow terminals",
-		"Overview",
 		"Activity",
+		"/overview",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
@@ -218,6 +220,7 @@ func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
 		RestorePointCount: 4,
 	}
 	model.refreshOverviewSection()
+	model.setActiveView(viewOverview)
 	section := model.sections[viewOverview]
 	section.Selected = len(section.Items) - 1
 
@@ -451,14 +454,13 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
-		"Open overview",
-		"Open tree",
-		"Find hub",
-		"Exact lookup",
-		"Open search",
-		"Open symbol",
-		"Search related",
-		"Research",
+		"/overview",
+		"/tree",
+		"/search",
+		"/symbol",
+		"/index",
+		"/refresh",
+		"/watch",
 		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -508,6 +510,7 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 		},
 	}
 	model.refreshOverviewSection()
+	model.setActiveView(viewOverview)
 	model.openSectionSearchOverlay()
 	model.overlay.Input.SetValue("sched")
 	updated, cmd := model.updateOverlay(tea.KeyMsg{Type: tea.KeyEnter})
@@ -527,15 +530,15 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	}
 }
 
-func TestSlashOpensCommandPalette(t *testing.T) {
+func TestSlashTypesIntoActivityCommandBar(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
-	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if cmd != nil {
-		t.Fatalf("expected command palette open without extra command")
-	}
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
 	next := updated.(Model)
-	if next.overlay.Mode != overlayPalette {
-		t.Fatalf("expected / to open the command palette, got %#v", next.overlay.Mode)
+	if next.overlay.Mode != overlayNone {
+		t.Fatalf("expected activity view to stay in-place, got overlay %#v", next.overlay.Mode)
+	}
+	if next.commandBar.Value() != "/" {
+		t.Fatalf("expected slash to be editable command-bar input, got %q", next.commandBar.Value())
 	}
 }
 
@@ -550,6 +553,44 @@ func TestPaletteLeadingSlashStillShowsCommands(t *testing.T) {
 	}
 	if commands[0].Action != "open-tree" {
 		t.Fatalf("expected /tr to match open-tree first, got %s", commands[0].Action)
+	}
+}
+
+func TestActivityCommandBarRunsOverviewCommand(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.commandBar.SetValue("/overview")
+
+	cmd := model.submitCommandBar()
+	if cmd != nil {
+		t.Fatalf("expected /overview to switch views without async command")
+	}
+	if model.activeView != viewOverview {
+		t.Fatalf("expected /overview to activate overview, got %s", model.activeView)
+	}
+}
+
+func TestActivityCommandBarAllowsRemovingSlash(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	next := updated.(Model)
+	if next.commandBar.Value() != "" {
+		t.Fatalf("expected backspace to remove the slash, got %q", next.commandBar.Value())
+	}
+}
+
+func TestSlashOpensCommandPaletteFromNonActivityView(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.setActiveView(viewOverview)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if cmd != nil {
+		t.Fatalf("expected command palette open without extra command")
+	}
+	next := updated.(Model)
+	if next.overlay.Mode != overlayPalette {
+		t.Fatalf("expected / to open the command palette outside the activity view, got %#v", next.overlay.Mode)
 	}
 }
 
@@ -611,16 +652,16 @@ func TestQNoLongerQuitsWhileWatcherActive(t *testing.T) {
 	model.pendingPaths = []string{"src/app.ts"}
 	model.pendingJobKind = "refresh"
 
-	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	if cmd != nil {
-		t.Fatalf("expected q to remain available for typing, got command %v", cmd)
-	}
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	next, ok := updated.(Model)
 	if !ok {
 		t.Fatalf("expected updated model value, got %T", updated)
 	}
 	if next.focus != model.focus {
 		t.Fatalf("expected q to leave focus unchanged, got %d", next.focus)
+	}
+	if next.commandBar.Value() != "q" {
+		t.Fatalf("expected q to remain available for typing, got %q", next.commandBar.Value())
 	}
 }
 
