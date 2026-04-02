@@ -1,3 +1,5 @@
+// Regression coverage for the human CLI operator console.
+// FEATURE: verifies doctor output, pane layout, status lines, and overview navigation.
 package ui
 
 import (
@@ -83,11 +85,21 @@ func floatPtr(value float64) *float64 {
 
 func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
-	model.width = 140
+	model.width = 160
 	model.height = 40
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
 		Root: "/tmp/contextplus",
+		Serving: struct {
+			ActiveGeneration              int    `json:"activeGeneration"`
+			PendingGeneration             *int   `json:"pendingGeneration"`
+			LatestGeneration              int    `json:"latestGeneration"`
+			ActiveGenerationValidatedAt   string `json:"activeGenerationValidatedAt"`
+			ActiveGenerationFreshness     string `json:"activeGenerationFreshness"`
+			ActiveGenerationBlockedReason string `json:"activeGenerationBlockedReason"`
+		}{
+			ActiveGeneration: 7,
+		},
 		RepoStatus: backend.RepoStatusSummary{
 			Branch:         "main",
 			UnstagedCount:  1,
@@ -95,6 +107,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		},
 		IndexValidation: backend.IndexValidationReport{OK: true},
 	}
+	model.watchEnabled = true
+	model.jobPhase = "identifier-search"
 	model.refreshOverviewSection()
 	model.refreshSidebar()
 	model.syncDetailViewport()
@@ -108,7 +122,12 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"Jobs",
 		"Refresh data",
 		"Run full index",
-		"Enable watcher",
+		"Disable watcher",
+		"watcher: on",
+		"stage: identifier-search",
+		"backend: connected",
+		"repo: /tmp/contextplus",
+		"generation: 7",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in operator console view: %s", needle, rendered)
@@ -143,5 +162,57 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
 		}
+	}
+}
+
+func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 10
+	model.doctorLoaded = true
+	model.doctor = backend.DoctorReport{
+		Root:        "/tmp/contextplus",
+		GeneratedAt: "2026-04-02T08:00:00Z",
+		Serving: struct {
+			ActiveGeneration              int    `json:"activeGeneration"`
+			PendingGeneration             *int   `json:"pendingGeneration"`
+			LatestGeneration              int    `json:"latestGeneration"`
+			ActiveGenerationValidatedAt   string `json:"activeGenerationValidatedAt"`
+			ActiveGenerationFreshness     string `json:"activeGenerationFreshness"`
+			ActiveGenerationBlockedReason string `json:"activeGenerationBlockedReason"`
+		}{
+			ActiveGeneration:          3,
+			ActiveGenerationFreshness: "fresh",
+		},
+		RepoStatus: backend.RepoStatusSummary{
+			Branch:         "main",
+			UnstagedCount:  1,
+			UntrackedCount: 0,
+		},
+		Ollama: backend.OllamaRuntimeStatus{
+			OK: true,
+			Models: []backend.OllamaRuntimeModel{
+				{Name: "qwen3-embedding"},
+			},
+		},
+		IndexValidation:   backend.IndexValidationReport{OK: true},
+		RestorePointCount: 4,
+	}
+	model.refreshOverviewSection()
+	section := model.sections[viewOverview]
+	section.Selected = len(section.Items) - 1
+
+	rendered := model.renderContentPanel(56)
+	for _, needle := range []string{
+		"Selected 8/8",
+		"... 2 earlier items hidden",
+		"Scheduler",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in overview content panel: %s", needle, rendered)
+		}
+	}
+	if strings.Contains(rendered, "Repository") {
+		t.Fatalf("expected earliest overview row to be scrolled out of the visible window: %s", rendered)
 	}
 }

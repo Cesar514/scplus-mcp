@@ -1,3 +1,5 @@
+// Human CLI operator console state and rendering.
+// FEATURE: keeps pane layout, typed section state, and backend-driven actions.
 package ui
 
 import (
@@ -64,6 +66,7 @@ var (
 	subtitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("111"))
 	cardStyle        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(0, 1)
 	footerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	statusLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("238")).Padding(0, 1)
 	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
 	sidebarActive    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229")).Background(lipgloss.Color("62")).Padding(0, 1)
 	sidebarIdle      = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Padding(0, 1)
@@ -428,6 +431,21 @@ func (m *Model) refreshOverviewSection() {
 			}, "\n"),
 		},
 		{
+			ID:      "worktree",
+			Title:   "Worktree",
+			Summary: fmt.Sprintf("ahead %d | behind %d | staged %d | conflicted %d", m.doctor.RepoStatus.Ahead, m.doctor.RepoStatus.Behind, m.doctor.RepoStatus.StagedCount, m.doctor.RepoStatus.ConflictedCount),
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Ahead: %d", m.doctor.RepoStatus.Ahead),
+				fmt.Sprintf("Behind: %d", m.doctor.RepoStatus.Behind),
+				fmt.Sprintf("Staged files: %d", m.doctor.RepoStatus.StagedCount),
+				fmt.Sprintf("Modified files: %d", m.doctor.RepoStatus.ModifiedCount),
+				fmt.Sprintf("Created files: %d", m.doctor.RepoStatus.CreatedCount),
+				fmt.Sprintf("Deleted files: %d", m.doctor.RepoStatus.DeletedCount),
+				fmt.Sprintf("Renamed files: %d", m.doctor.RepoStatus.RenamedCount),
+				fmt.Sprintf("Conflicted files: %d", m.doctor.RepoStatus.ConflictedCount),
+			}, "\n"),
+		},
+		{
 			ID:      "serving",
 			Title:   "Serving generation",
 			Summary: fmt.Sprintf("active %d | pending %s | freshness %s", m.doctor.Serving.ActiveGeneration, formatOptionalInt(m.doctor.Serving.PendingGeneration), m.doctor.Serving.ActiveGenerationFreshness),
@@ -438,6 +456,19 @@ func (m *Model) refreshOverviewSection() {
 				fmt.Sprintf("Freshness: %s", m.doctor.Serving.ActiveGenerationFreshness),
 				fmt.Sprintf("Validated at: %s", formatBlankAsNone(m.doctor.Serving.ActiveGenerationValidatedAt)),
 				fmt.Sprintf("Blocked reason: %s", formatBlankAsNone(m.doctor.Serving.ActiveGenerationBlockedReason)),
+			}, "\n"),
+		},
+		{
+			ID:      "runtime",
+			Title:   "Runtime",
+			Summary: fmt.Sprintf("generated %s | ollama %s | restore points %d", formatBlankAsNone(m.doctor.GeneratedAt), formatOllamaSummary(m.doctor.Ollama), m.doctor.RestorePointCount),
+			Detail: strings.Join([]string{
+				fmt.Sprintf("Generated at: %s", formatBlankAsNone(m.doctor.GeneratedAt)),
+				fmt.Sprintf("Ollama: %s", formatOllamaSummary(m.doctor.Ollama)),
+				fmt.Sprintf("Tree-sitter parse failures: %d", m.doctor.TreeSitter.TotalParseFailures),
+				fmt.Sprintf("Hub suggestions: %d", m.doctor.HubSummary.SuggestionCount),
+				fmt.Sprintf("Feature groups: %d", m.doctor.HubSummary.FeatureGroupCount),
+				fmt.Sprintf("Restore points: %d", m.doctor.RestorePointCount),
 			}, "\n"),
 		},
 		{
@@ -956,16 +987,22 @@ func (m Model) renderSidebarPanel(width int) string {
 
 func (m Model) renderContentPanel(width int) string {
 	section := m.activeSection()
+	windowSize := max(6, m.height/2)
+	start, end := visibleRange(len(section.Items), section.Selected, windowSize)
 	lines := []string{
 		renderPaneTitle(section.Title, m.focus == focusContent),
 		subtitleStyle.Render(section.Subtitle),
+		subtitleStyle.Render(fmt.Sprintf("Selected %d/%d", min(section.Selected+1, max(1, len(section.Items))), max(1, len(section.Items)))),
 		"",
 	}
 	if len(section.Items) == 0 {
 		lines = append(lines, section.EmptyMessage)
 		return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 	}
-	for _, item := range visibleItems(section.Items, section.Selected, max(6, m.height/2)) {
+	if start > 0 {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier items hidden", start)))
+	}
+	for _, item := range visibleItems(section.Items, section.Selected, windowSize) {
 		style := contentIdle
 		if item.index == section.Selected {
 			style = contentSelected
@@ -978,6 +1015,9 @@ func (m Model) renderContentPanel(width int) string {
 		if item.value.Summary != "" {
 			lines = append(lines, subtitleStyle.Render("  "+truncate(item.value.Summary, width-6)))
 		}
+	}
+	if end < len(section.Items) {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more items hidden", len(section.Items)-end)))
 	}
 	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -1021,6 +1061,37 @@ func (m Model) renderJobsPanel(width int, height int) string {
 	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
 }
 
+func (m Model) renderStatusLine() string {
+	watcherState := "off"
+	if m.watchEnabled {
+		watcherState = "on"
+	}
+	stage := strings.TrimSpace(m.jobPhase)
+	if stage == "" {
+		if m.indexing {
+			stage = "queued"
+		} else {
+			stage = "idle"
+		}
+	}
+	backendState := "connected"
+	if !m.backendOnline {
+		backendState = "offline"
+	}
+	generation := "unknown"
+	if m.doctorLoaded {
+		generation = fmt.Sprintf("%d", m.doctor.Serving.ActiveGeneration)
+	}
+	status := strings.Join([]string{
+		"watcher: " + watcherState,
+		"stage: " + stage,
+		"backend: " + backendState,
+		"repo: " + truncate(m.root, max(24, m.width/3)),
+		"generation: " + generation,
+	}, " | ")
+	return statusLineStyle.Width(max(0, m.width-2)).Render(status)
+}
+
 func (m Model) View() string {
 	header := m.renderHeader()
 	var body string
@@ -1045,6 +1116,7 @@ func (m Model) View() string {
 		jobs := m.renderJobsPanel(max(70, m.width-2), jobsHeight)
 		body = lipgloss.JoinVertical(lipgloss.Left, top, jobs)
 	}
+	status := m.renderStatusLine()
 	footer := footerStyle.Render("Up/Down move | Tab focus | Enter select/action | i index | r refresh | w watcher | n new hub | q quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
@@ -1055,6 +1127,7 @@ func (m Model) View() string {
 		"",
 		body,
 		"",
+		status,
 		footer,
 	)
 }
@@ -1213,27 +1286,38 @@ func visibleItems(items []contentItem, selected int, maxRows int) []indexedItem 
 	if len(items) == 0 {
 		return nil
 	}
-	if maxRows <= 0 || len(items) <= maxRows {
+	start, end := visibleRange(len(items), selected, maxRows)
+	if start == 0 && end == len(items) {
 		result := make([]indexedItem, 0, len(items))
 		for index, item := range items {
 			result = append(result, indexedItem{index: index, value: item})
 		}
 		return result
 	}
-	start := selected - maxRows/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxRows
-	if end > len(items) {
-		end = len(items)
-		start = max(0, end-maxRows)
-	}
 	result := make([]indexedItem, 0, end-start)
 	for index := start; index < end; index++ {
 		result = append(result, indexedItem{index: index, value: items[index]})
 	}
 	return result
+}
+
+func visibleRange(total int, selected int, maxRows int) (int, int) {
+	if total <= 0 {
+		return 0, 0
+	}
+	if maxRows <= 0 || total <= maxRows {
+		return 0, total
+	}
+	start := selected - maxRows/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxRows
+	if end > total {
+		end = total
+		start = max(0, end-maxRows)
+	}
+	return start, end
 }
 
 func splitBlocks(text string) []string {
@@ -1327,6 +1411,16 @@ func formatFullRebuildReasons(reasons []string) string {
 		lines = append(lines, "- "+reason)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatOllamaSummary(status backend.OllamaRuntimeStatus) string {
+	if status.OK {
+		return fmt.Sprintf("%d models", len(status.Models))
+	}
+	if strings.TrimSpace(status.Error) == "" {
+		return "offline"
+	}
+	return status.Error
 }
 
 func truncate(value string, limit int) string {

@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 23: Overview Screen And Layout Fixes
-
-- [ ] Make the Overview screen scrollable instead of a static string render in `renderOverview()` inside [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go).
-- [ ] Stop using only horizontal cards with width formulas based on terminal width in `renderOverview()`, because this is fragile and cramped on smaller terminals.
-- [ ] Add a real bottom status line showing watcher on or off, current index stage, backend connectivity, active repo, and active generation.
-- [ ] Preserve the header and mascot if desired, but stop letting the overview be a static card wall with no navigation.
-
 ## Phase 24: Raw Text View Replacement
 
 - [ ] Replace the `syncViewport()` pattern in [cli/internal/ui/model.go](/home/cesar514/Documents/agent_programming/contextplus/cli/internal/ui/model.go), which currently pushes raw `treeText`, `hubsText`, restore text, and `clusterText` into `viewport.SetContent()`.

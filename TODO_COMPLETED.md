@@ -2,6 +2,14 @@
 
 ## v1.5
 
+- [x] finish v1.5 phase 23 by making the operator overview a real navigable list with a shipped bottom status line instead of leaving the old static-overview TODO open
+- [x] keep the animated header while making the overview pane show typed rows, selection state, and a visible scroll window rather than a static card wall with no navigation
+- [x] expand the overview section into enough typed operator rows to exercise selection and scrolling inside the center content pane
+- [x] add a real bottom status line showing watcher state, current index stage, backend connectivity, active repo, and active generation in `contextplus-ui`
+- [x] update the human CLI docs so the README describes the status line and overview navigation truthfully
+- [x] verify v1.5 phase 23 directly with focused Go UI tests, the full Go CLI test suite, direct `contextplus-ui snapshot` inspection on this repository, and direct `contextplus-ui doctor`
+- [x] commit the verified v1.5 phase 23 work
+
 - [x] finish v1.5 phase 22 by rebuilding `contextplus-ui` around a real operator-console layout with distinct command, navigation, and job layers
 - [x] replace the tab-only overview wall with a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
 - [x] add a stacked vertical fallback layout for narrow terminals instead of relying on fragile horizontal card formulas
