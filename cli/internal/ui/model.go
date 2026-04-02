@@ -548,6 +548,15 @@ func (m Model) renderOverview() string {
 			indexLine,
 			fmt.Sprintf("active gen %d | pending %s", m.doctor.Serving.ActiveGeneration, formatOptionalInt(m.doctor.Serving.PendingGeneration)),
 			fmt.Sprintf("freshness %s", m.doctor.Serving.ActiveGenerationFreshness),
+			fmt.Sprintf(
+				"hybrid vectors chunk %d/%d %s | id %d/%d %s",
+				m.doctor.HybridVectors.Chunk.VectorCoverage.LoadedVectorCount,
+				m.doctor.HybridVectors.Chunk.VectorCoverage.RequestedVectorCount,
+				m.doctor.HybridVectors.Chunk.VectorCoverage.State,
+				m.doctor.HybridVectors.Identifier.VectorCoverage.LoadedVectorCount,
+				m.doctor.HybridVectors.Identifier.VectorCoverage.RequestedVectorCount,
+				m.doctor.HybridVectors.Identifier.VectorCoverage.State,
+			),
 			fmt.Sprintf("tree-sitter failures %d | parser reuses %d", m.doctor.TreeSitter.TotalParseFailures, m.doctor.TreeSitter.TotalParserReuses),
 			ollamaLine,
 		}, "\n")
@@ -652,6 +661,15 @@ func RenderDoctorPlain(report backend.DoctorReport) string {
 	lines = append(lines,
 		fmt.Sprintf("Hub suggestions: %d", report.HubSummary.SuggestionCount),
 		fmt.Sprintf("Restore points: %d", report.RestorePointCount),
+		fmt.Sprintf(
+			"Hybrid vectors: chunk %d/%d %s | identifier %d/%d %s",
+			report.HybridVectors.Chunk.VectorCoverage.LoadedVectorCount,
+			report.HybridVectors.Chunk.VectorCoverage.RequestedVectorCount,
+			report.HybridVectors.Chunk.VectorCoverage.State,
+			report.HybridVectors.Identifier.VectorCoverage.LoadedVectorCount,
+			report.HybridVectors.Identifier.VectorCoverage.RequestedVectorCount,
+			report.HybridVectors.Identifier.VectorCoverage.State,
+		),
 		fmt.Sprintf("Tree-sitter parse failures: %d", report.TreeSitter.TotalParseFailures),
 	)
 	return strings.Join(lines, "\n")

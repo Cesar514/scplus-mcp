@@ -90,6 +90,32 @@ type DoctorReport struct {
 		Suggestions       []string `json:"suggestions"`
 		FeatureGroups     []string `json:"featureGroups"`
 	} `json:"hubSummary"`
+	HybridVectors struct {
+		Chunk struct {
+			Source         string `json:"source"`
+			TotalDocuments int    `json:"totalDocuments"`
+			VectorCoverage struct {
+				State                string   `json:"state"`
+				RequestedVectorCount int      `json:"requestedVectorCount"`
+				LoadedVectorCount    int      `json:"loadedVectorCount"`
+				MissingVectorCount   int      `json:"missingVectorCount"`
+				CoverageRatio        float64  `json:"coverageRatio"`
+				MissingVectorIDs     []string `json:"missingVectorIds"`
+			} `json:"vectorCoverage"`
+		} `json:"chunk"`
+		Identifier struct {
+			Source         string `json:"source"`
+			TotalDocuments int    `json:"totalDocuments"`
+			VectorCoverage struct {
+				State                string   `json:"state"`
+				RequestedVectorCount int      `json:"requestedVectorCount"`
+				LoadedVectorCount    int      `json:"loadedVectorCount"`
+				MissingVectorCount   int      `json:"missingVectorCount"`
+				CoverageRatio        float64  `json:"coverageRatio"`
+				MissingVectorIDs     []string `json:"missingVectorIds"`
+			} `json:"vectorCoverage"`
+		} `json:"identifier"`
+	} `json:"hybridVectors"`
 	TreeSitter struct {
 		TotalParseCalls          int `json:"totalParseCalls"`
 		TotalParsersCreated      int `json:"totalParsersCreated"`

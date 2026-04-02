@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadHubSuggestionState } from "../tools/hub-suggestions.js";
 import { getRepoStatus, type RepoStatusSummary } from "../tools/exact-query.js";
+import { inspectHybridVectorCoverage, type HybridVectorCoverageSummary } from "../tools/hybrid-retrieval.js";
 import { validatePreparedIndex, type IndexValidationReport } from "../tools/index-reliability.js";
 import { listRestorePoints } from "../git/shadow.js";
 import { getTreeSitterRuntimeStats, type TreeSitterRuntimeStats } from "../core/tree-sitter.js";
@@ -44,6 +45,10 @@ export interface BridgeDoctorReport {
     suggestions: string[];
     featureGroups: string[];
   };
+  hybridVectors: {
+    chunk: HybridVectorCoverageSummary;
+    identifier: HybridVectorCoverageSummary;
+  };
   treeSitter: TreeSitterRuntimeStats;
   restorePointCount: number;
   ollama: OllamaRuntimeStatus;
@@ -73,13 +78,14 @@ async function getOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
 }
 
 export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorReport> {
-  const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter] = await Promise.all([
+  const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter, hybridVectors] = await Promise.all([
     getRepoStatus(rootDir),
     validatePreparedIndex({ rootDir, mode: "full" }),
     loadHubSuggestionState(rootDir),
     listRestorePoints(rootDir),
     getOllamaRuntimeStatus(),
     Promise.resolve(getTreeSitterRuntimeStats()),
+    inspectHybridVectorCoverage(rootDir),
   ]);
   return {
     generatedAt: new Date().toISOString(),
@@ -100,6 +106,7 @@ export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorRe
       suggestions: Object.values(hubState.suggestions).map((entry) => entry.label).sort(),
       featureGroups: Object.values(hubState.featureGroups).map((entry) => entry.label).sort(),
     },
+    hybridVectors,
     treeSitter,
     restorePointCount: restorePoints.length,
     ollama,

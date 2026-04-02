@@ -6,6 +6,7 @@ import {
   deleteVectorEntries,
   getIndexGenerationContext,
   loadIndexServingState,
+  loadPresentVectorEntryIds,
   loadVectorCollection,
   loadVectorEntriesById,
   loadVectorCollectionMap,
@@ -89,6 +90,14 @@ interface EmbedRuntimeOptions {
 
 export interface EmbeddingCache {
   [path: string]: { hash: string; vector: number[] };
+}
+
+export interface EmbeddingCacheCoverage {
+  requestedEntryCount: number;
+  availableEntryCount: number;
+  missingEntryCount: number;
+  coverageRatio: number;
+  missingEntryIds: string[];
 }
 
 interface EmbeddingCacheValue {
@@ -640,6 +649,46 @@ export async function loadEmbeddingCacheEntries(
   }
 
   return cache;
+}
+
+export async function inspectEmbeddingCacheCoverage(
+  rootDir: string,
+  fileName: string,
+  entryIds: string[],
+): Promise<EmbeddingCacheCoverage> {
+  const namespaces = resolveEmbeddingNamespaces(fileName);
+  const uniqueEntryIds = Array.from(new Set(entryIds));
+  if (uniqueEntryIds.length === 0) {
+    return {
+      requestedEntryCount: 0,
+      availableEntryCount: 0,
+      missingEntryCount: 0,
+      coverageRatio: 1,
+      missingEntryIds: [],
+    };
+  }
+
+  const primaryEntryIds = namespaces.secondary
+    ? uniqueEntryIds.filter((entryId) => !entryId.startsWith("callsite:"))
+    : uniqueEntryIds;
+  const secondaryEntryIds = namespaces.secondary
+    ? uniqueEntryIds.filter((entryId) => entryId.startsWith("callsite:"))
+    : [];
+  const presentEntryIds = new Set<string>();
+  const primaryPresent = await loadPresentVectorEntryIds(rootDir, namespaces.primary, primaryEntryIds);
+  for (const entryId of primaryPresent) presentEntryIds.add(entryId);
+  if (namespaces.secondary && secondaryEntryIds.length > 0) {
+    const secondaryPresent = await loadPresentVectorEntryIds(rootDir, namespaces.secondary, secondaryEntryIds);
+    for (const entryId of secondaryPresent) presentEntryIds.add(entryId);
+  }
+  const missingEntryIds = uniqueEntryIds.filter((entryId) => !presentEntryIds.has(entryId));
+  return {
+    requestedEntryCount: uniqueEntryIds.length,
+    availableEntryCount: presentEntryIds.size,
+    missingEntryCount: missingEntryIds.length,
+    coverageRatio: uniqueEntryIds.length === 0 ? 1 : presentEntryIds.size / uniqueEntryIds.length,
+    missingEntryIds,
+  };
 }
 
 export async function upsertEmbeddingCacheEntries(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {

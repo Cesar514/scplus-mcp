@@ -292,6 +292,8 @@ function formatRestorePoints(points: Awaited<ReturnType<typeof listRestorePoints
 }
 
 function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>): string {
+  const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
+  const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;
   const lines = [
     `Doctor: ${report.root}`,
     "",
@@ -306,6 +308,7 @@ function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>
     `Hub suggestions: ${report.hubSummary.suggestionCount}`,
     `Feature groups: ${report.hubSummary.featureGroupCount}`,
     `Restore points: ${report.restorePointCount}`,
+    `Hybrid vectors: chunk ${chunkCoverage.loadedVectorCount}/${chunkCoverage.requestedVectorCount} ${chunkCoverage.state} | identifier ${identifierCoverage.loadedVectorCount}/${identifierCoverage.requestedVectorCount} ${identifierCoverage.state}`,
     `Tree-sitter: parses=${report.treeSitter.totalParseCalls} | parse failures=${report.treeSitter.totalParseFailures} | grammar load failures=${report.treeSitter.totalGrammarLoadFailures} | parser reuses=${report.treeSitter.totalParserReuses}`,
     report.ollama.ok
       ? `Ollama: ok | running models ${report.ollama.models.length}`

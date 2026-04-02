@@ -118,6 +118,7 @@ describe("query-intent", () => {
       }));
       assert.match(relatedResult, /\[file\]|\[symbol\]/);
       assert.match(relatedResult, /evidence file=/);
+      assert.match(relatedResult, /Vector coverage:/);
 
       const researchResult = getTextResult(await client.callTool({
         name: "research",

@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] change `searchHybridState()` in `src/tools/hybrid-retrieval.ts` so missing rerank vectors are no longer silently converted into `semanticScore = 0`
+- [x] add an explicit `HybridVectorIntegrityError` and fail loudly when hybrid semantic or mixed retrieval encounters stale, corrupt, or refresh-incomplete vector state
+- [x] make keyword-only continuation explicit by reporting `explicit-lexical-only` vector coverage instead of silently treating missing vectors as acceptable
+- [x] surface hybrid vector-coverage diagnostics through related-search output, bridge payloads, `doctor`, and the human CLI doctor overview so stale namespaces are obvious to operators
 - [x] remove the brittle unified-ranking heuristic in `src/tools/unified-ranking.ts` that treated chunk matches as files when `match.title === "file"`
 - [x] replace that heuristic with explicit typed metadata on hybrid ranking entities and matches in `src/tools/hybrid-retrieval.ts` so real symbols named `file` are handled correctly
 - [x] bump the persisted full-index artifact version so stale hybrid artifacts without explicit entity typing fail validation instead of being silently reused

@@ -3,12 +3,15 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+const execFileAsync = promisify(execFile);
 
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
@@ -184,6 +187,103 @@ describe("hybrid-retrieval", () => {
       assert.ok(symbolMatch);
       assert.equal(symbolMatch.entityType, "symbol");
       assert.equal(symbolMatch.kind, "function");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports keyword retrieval as explicit lexical-only mode instead of silently treating vectors as optional", async () => {
+    const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
+    const { refreshHybridChunkIndex, searchHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-keyword-mode-"));
+    try {
+      await mkdir(join(rootDir, "src"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "greeter.ts"),
+        [
+          "// Hybrid retrieval fixture for explicit lexical-only reporting",
+          "// FEATURE: keyword-only retrieval must be reported explicitly",
+          "export function shoutGreeting(name: string): string {",
+          "  return `HELLO ${name.toUpperCase()}`;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const chunkRefresh = await refreshChunkIndexState(rootDir);
+      const chunks = Object.values(chunkRefresh.state.files).flatMap((entry) => entry.chunks);
+      await warmChunkEmbeddings(rootDir, chunks);
+      await refreshHybridChunkIndex(rootDir, chunkRefresh.state);
+
+      const result = await searchHybridChunkIndex(rootDir, "shout greeting", {
+        topK: 2,
+        semanticWeight: 0,
+        lexicalWeight: 1,
+      });
+      assert.equal(result.diagnostics.retrievalMode, "keyword");
+      assert.equal(result.diagnostics.vectorCoverage.state, "explicit-lexical-only");
+      assert.equal(result.diagnostics.vectorCoverage.requestedVectorCount, 0);
+      assert.equal(result.matches[0].lexicalScore > 0, true);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails loudly when a rerank candidate vector is missing", async () => {
+    const { deleteVectorEntries } = await import("../../build/core/index-database.js");
+    const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
+    const { refreshHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-missing-vector-"));
+    try {
+      await mkdir(join(rootDir, "src"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "greeter.ts"),
+        [
+          "// Hybrid retrieval fixture for missing vector integrity errors",
+          "// FEATURE: missing vectors must fail loudly during rerank",
+          "export function shoutGreeting(name: string): string {",
+          "  return `HELLO ${name.toUpperCase()}`;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const chunkRefresh = await refreshChunkIndexState(rootDir);
+      const chunks = Object.values(chunkRefresh.state.files).flatMap((entry) => entry.chunks);
+      await warmChunkEmbeddings(rootDir, chunks);
+      await refreshHybridChunkIndex(rootDir, chunkRefresh.state);
+      const symbolChunk = chunks.find((chunk) => chunk.symbolName === "shoutGreeting");
+      assert.ok(symbolChunk);
+      await deleteVectorEntries(rootDir, "chunk-search", [symbolChunk.id]);
+
+      const script = `
+        process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+        const { searchHybridChunkIndex } = await import(${JSON.stringify(join(process.cwd(), "build", "tools", "hybrid-retrieval.js"))});
+        try {
+          await searchHybridChunkIndex(process.env.TEST_ROOT, "shout greeting upper case", { topK: 2 });
+          console.log(JSON.stringify({ ok: true }));
+        } catch (error) {
+          console.log(JSON.stringify({
+            ok: false,
+            name: error?.name,
+            source: error?.source,
+            state: error?.diagnostics?.state,
+            missingVectorCount: error?.diagnostics?.missingVectorCount,
+            missingVectorIds: error?.diagnostics?.missingVectorIds ?? [],
+          }));
+        }
+      `;
+      const { stdout } = await execFileAsync(process.execPath, ["--input-type=module", "--eval", script], {
+        env: {
+          ...process.env,
+          TEST_ROOT: rootDir,
+        },
+      });
+      const result = JSON.parse(stdout.trim());
+      assert.equal(result.ok, false);
+      assert.equal(result.name, "HybridVectorIntegrityError");
+      assert.equal(result.source, "chunk");
+      assert.equal(result.state, "missing-vectors");
+      assert.equal(result.missingVectorCount, 1);
+      assert.equal(result.missingVectorIds.includes(symbolChunk.id), true);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

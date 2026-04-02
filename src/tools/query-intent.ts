@@ -12,9 +12,10 @@ import {
   lookupWord,
 } from "./exact-query.js";
 import {
+  buildUnifiedSearchReport,
   formatUnifiedSearchResults,
-  rankUnifiedSearch,
   type RetrievalMode,
+  type UnifiedSearchDiagnostics,
   type UnifiedRankedHit,
 } from "./unified-ranking.js";
 
@@ -51,6 +52,7 @@ export interface RelatedSearchReport {
   includeKinds?: string[];
   retrievalMode: RetrievalMode;
   hits: UnifiedRankedHit[];
+  diagnostics: UnifiedSearchDiagnostics;
   text: string;
 }
 
@@ -148,7 +150,7 @@ async function buildRelatedSearchReport(options: SearchIntentOptions): Promise<R
   const topK = options.topK ?? 5;
   const retrievalMode = normalizeRelatedRetrievalMode(options.retrievalMode);
   const entityTypes: Array<"file" | "symbol"> = options.searchType === "mixed" ? ["file", "symbol"] : [options.searchType];
-  const hits = await rankUnifiedSearch({
+  const unifiedReport = await buildUnifiedSearchReport({
     rootDir: options.rootDir,
     query: options.query,
     topK,
@@ -156,6 +158,7 @@ async function buildRelatedSearchReport(options: SearchIntentOptions): Promise<R
     includeKinds: options.includeKinds,
     retrievalMode,
   });
+  const hits = unifiedReport.hits;
   return {
     intent: "related",
     searchType: options.searchType,
@@ -164,7 +167,8 @@ async function buildRelatedSearchReport(options: SearchIntentOptions): Promise<R
     includeKinds: options.includeKinds,
     retrievalMode,
     hits,
-    text: formatUnifiedSearchResults(options.query, entityTypes, hits, retrievalMode),
+    diagnostics: unifiedReport.diagnostics,
+    text: formatUnifiedSearchResults(options.query, entityTypes, hits, retrievalMode, unifiedReport.diagnostics),
   };
 }
 

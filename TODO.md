@@ -18,13 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 18: Missing Vector Integrity Bug
-
-- [ ] Change `searchHybridState()` in [src/tools/hybrid-retrieval.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/hybrid-retrieval.ts) so missing vectors are not silently assigned `semanticScore = 0`.
-- [ ] Treat missing vectors as an explicit stale-state, corruption, or refresh-incomplete condition and report that condition loudly.
-- [ ] Ensure lexical-only continuation is an explicit reported mode, never a silent one.
-- [ ] Include vector-coverage diagnostics in query output and observability panels so stale namespaces are obvious.
-
 ## Phase 19: Query Engine Stack
 
 - [ ] Formalize a three-layer query architecture for v1.5 and wire the code to match it.

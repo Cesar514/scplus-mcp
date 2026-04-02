@@ -1,7 +1,12 @@
 // Persisted hybrid retrieval indexes for chunk and identifier artifacts
 // FEATURE: SQLite-backed lexical plus dense retrieval state for full-engine search
 
-import { fetchEmbedding, loadEmbeddingCacheEntries } from "../core/embeddings.js";
+import {
+  fetchEmbedding,
+  inspectEmbeddingCacheCoverage,
+  loadEmbeddingCacheEntries,
+  type EmbeddingCacheCoverage,
+} from "../core/embeddings.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
 import type { ChunkArtifact, PersistedChunkIndexState } from "./chunk-index.js";
@@ -103,11 +108,54 @@ export interface HybridSearchDiagnostics {
   lexicalCandidateCount: number;
   rerankCandidateCount: number;
   finalResultCount: number;
+  retrievalMode: "semantic" | "keyword" | "both";
+  vectorCoverage: HybridVectorCoverageDiagnostics;
 }
 
 export interface HybridSearchResult {
   matches: HybridSearchMatch[];
   diagnostics: HybridSearchDiagnostics;
+}
+
+export interface HybridVectorCoverageDiagnostics {
+  state: "complete" | "explicit-lexical-only" | "missing-vectors";
+  requestedVectorCount: number;
+  loadedVectorCount: number;
+  missingVectorCount: number;
+  coverageRatio: number;
+  missingVectorIds: string[];
+}
+
+export interface HybridVectorCoverageSummary {
+  source: "chunk" | "identifier";
+  totalDocuments: number;
+  vectorCoverage: HybridVectorCoverageDiagnostics;
+}
+
+export class HybridVectorIntegrityError extends Error {
+  readonly rootDir: string;
+  readonly source: "chunk" | "identifier";
+  readonly retrievalMode: "semantic" | "keyword" | "both";
+  readonly diagnostics: HybridVectorCoverageDiagnostics;
+
+  constructor(
+    rootDir: string,
+    source: "chunk" | "identifier",
+    retrievalMode: "semantic" | "keyword" | "both",
+    diagnostics: HybridVectorCoverageDiagnostics,
+  ) {
+    const preview = diagnostics.missingVectorIds.slice(0, 5).join(", ");
+    super(
+      `Hybrid ${source} search cannot continue: missing ${diagnostics.missingVectorCount}/${diagnostics.requestedVectorCount} vectors ` +
+      `for retrievalMode=${retrievalMode}. Coverage=${diagnostics.coverageRatio.toFixed(2)}.` +
+      (preview ? ` Missing ids: ${preview}` : ""),
+    );
+    this.name = "HybridVectorIntegrityError";
+    this.rootDir = rootDir;
+    this.source = source;
+    this.retrievalMode = retrievalMode;
+    this.diagnostics = diagnostics;
+  }
 }
 
 function clamp01(value: number): number {
@@ -124,6 +172,12 @@ function normalizeWeight(value: number | undefined, fallback: number): number {
 function normalizeTopK(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.max(1, Math.floor(value));
+}
+
+function resolveHybridRetrievalMode(semanticWeight: number, lexicalWeight: number): "semantic" | "keyword" | "both" {
+  if (semanticWeight > 0 && lexicalWeight > 0) return "both";
+  if (semanticWeight > 0) return "semantic";
+  return "keyword";
 }
 
 function hashText(text: string): string {
@@ -382,6 +436,9 @@ async function searchHybridState(
   options?: HybridSearchOptions,
 ): Promise<HybridSearchResult> {
   const documents = Object.values(state.documents);
+  const semanticWeight = normalizeWeight(options?.semanticWeight, 0.68);
+  const lexicalWeight = normalizeWeight(options?.lexicalWeight, 0.32);
+  const retrievalMode = resolveHybridRetrievalMode(semanticWeight, lexicalWeight);
   if (documents.length === 0) {
     return {
       matches: [],
@@ -390,15 +447,24 @@ async function searchHybridState(
         lexicalCandidateCount: 0,
         rerankCandidateCount: 0,
         finalResultCount: 0,
+        retrievalMode,
+        vectorCoverage: {
+          state: retrievalMode === "keyword" ? "explicit-lexical-only" : "complete",
+          requestedVectorCount: 0,
+          loadedVectorCount: 0,
+          missingVectorCount: 0,
+          coverageRatio: 1,
+          missingVectorIds: [],
+        },
       },
     };
   }
 
-  const queryVector = options?.queryVector ?? (await fetchEmbedding(query))[0];
+  const queryVector = retrievalMode === "keyword"
+    ? null
+    : (options?.queryVector ?? (await fetchEmbedding(query))[0]);
   const queryTerms = Array.from(new Set(splitTerms(query)));
   const topK = normalizeTopK(options?.topK, 5);
-  const semanticWeight = normalizeWeight(options?.semanticWeight, 0.68);
-  const lexicalWeight = normalizeWeight(options?.lexicalWeight, 0.32);
   const totalWeight = semanticWeight + lexicalWeight;
   const candidateAccumulator = new Map<string, { matchedTerms: Set<string>; frequencyBoost: number }>();
   for (const term of queryTerms) {
@@ -428,17 +494,43 @@ async function searchHybridState(
     .sort((left, right) => right.lexicalScore - left.lexicalScore || left.document.path.localeCompare(right.document.path));
   const rerankCandidateCount = Math.min(lexicalCandidates.length, Math.max(topK * 12, 64));
   const selectedCandidates = lexicalCandidates.slice(0, rerankCandidateCount);
-  const candidateVectors = await loadEmbeddingCacheEntries(
-    rootDir,
-    fileName,
-    selectedCandidates.map((candidate) => candidate.document.embeddingCacheKey),
-  );
+  const candidateVectorIds = selectedCandidates.map((candidate) => candidate.document.embeddingCacheKey);
+  const candidateVectors = retrievalMode === "keyword"
+    ? {}
+    : await loadEmbeddingCacheEntries(
+      rootDir,
+      fileName,
+      candidateVectorIds,
+    );
+  const missingVectorIds = retrievalMode === "keyword"
+    ? []
+    : candidateVectorIds.filter((entryId) => !candidateVectors[entryId]);
+  const vectorCoverage: HybridVectorCoverageDiagnostics = retrievalMode === "keyword"
+    ? {
+      state: "explicit-lexical-only",
+      requestedVectorCount: 0,
+      loadedVectorCount: 0,
+      missingVectorCount: 0,
+      coverageRatio: 1,
+      missingVectorIds: [],
+    }
+    : {
+      state: missingVectorIds.length > 0 ? "missing-vectors" : "complete",
+      requestedVectorCount: candidateVectorIds.length,
+      loadedVectorCount: candidateVectorIds.length - missingVectorIds.length,
+      missingVectorCount: missingVectorIds.length,
+      coverageRatio: candidateVectorIds.length === 0 ? 1 : (candidateVectorIds.length - missingVectorIds.length) / candidateVectorIds.length,
+      missingVectorIds,
+    };
+  if (vectorCoverage.state === "missing-vectors") {
+    throw new HybridVectorIntegrityError(rootDir, state.source, retrievalMode, vectorCoverage);
+  }
 
   const ranked: HybridSearchMatch[] = [];
   for (const candidate of selectedCandidates) {
     const { document } = candidate;
     const vector = candidateVectors[document.embeddingCacheKey]?.vector;
-    const semanticScore = vector ? Math.max(cosine(queryVector, vector), 0) : 0;
+    const semanticScore = queryVector && vector ? Math.max(cosine(queryVector, vector), 0) : 0;
     const score = totalWeight > 0
       ? clamp01((semanticWeight * semanticScore + lexicalWeight * candidate.lexicalScore) / totalWeight)
       : semanticScore;
@@ -468,7 +560,37 @@ async function searchHybridState(
       lexicalCandidateCount: lexicalCandidates.length,
       rerankCandidateCount: selectedCandidates.length,
       finalResultCount: matches.length,
+      retrievalMode,
+      vectorCoverage,
     },
+  };
+}
+
+function mapCoverageToDiagnostics(coverage: EmbeddingCacheCoverage): HybridVectorCoverageDiagnostics {
+  return {
+    state: coverage.missingEntryCount > 0 ? "missing-vectors" : "complete",
+    requestedVectorCount: coverage.requestedEntryCount,
+    loadedVectorCount: coverage.availableEntryCount,
+    missingVectorCount: coverage.missingEntryCount,
+    coverageRatio: coverage.coverageRatio,
+    missingVectorIds: coverage.missingEntryIds,
+  };
+}
+
+async function inspectSingleHybridVectorCoverage(
+  rootDir: string,
+  state: PersistedHybridRetrievalState,
+  fileName: "chunk-embeddings-cache.json" | "identifier-embeddings-cache.json",
+): Promise<HybridVectorCoverageSummary> {
+  const coverage = await inspectEmbeddingCacheCoverage(
+    rootDir,
+    fileName,
+    Object.values(state.documents).map((document) => document.embeddingCacheKey),
+  );
+  return {
+    source: state.source,
+    totalDocuments: Object.keys(state.documents).length,
+    vectorCoverage: mapCoverageToDiagnostics(coverage),
   };
 }
 
@@ -480,4 +602,19 @@ export async function searchHybridChunkIndex(rootDir: string, query: string, opt
 export async function searchHybridIdentifierIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchResult> {
   const state = await loadHybridIdentifierIndexState(rootDir);
   return searchHybridState(rootDir, state, "identifier-embeddings-cache.json", query, options);
+}
+
+export async function inspectHybridVectorCoverage(rootDir: string): Promise<{
+  chunk: HybridVectorCoverageSummary;
+  identifier: HybridVectorCoverageSummary;
+}> {
+  const [chunkState, identifierState] = await Promise.all([
+    loadHybridChunkIndexState(rootDir),
+    loadHybridIdentifierIndexState(rootDir),
+  ]);
+  const [chunk, identifier] = await Promise.all([
+    inspectSingleHybridVectorCoverage(rootDir, chunkState, "chunk-embeddings-cache.json"),
+    inspectSingleHybridVectorCoverage(rootDir, identifierState, "identifier-embeddings-cache.json"),
+  ]);
+  return { chunk, identifier };
 }

@@ -821,6 +821,37 @@ export async function loadVectorEntriesById<TMetadata = unknown>(
   }
 }
 
+export async function loadPresentVectorEntryIds(
+  rootDir: string,
+  namespace: string,
+  entryIds: string[],
+  options?: IndexArtifactOptions,
+): Promise<string[]> {
+  await ensureContextplusLayout(resolve(rootDir));
+  if (entryIds.length === 0) return [];
+  const uniqueEntryIds = Array.from(new Set(entryIds));
+  const db = openIndexDatabase(rootDir);
+  try {
+    const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
+    const presentEntryIds: string[] = [];
+    const chunkSize = 400;
+    for (let index = 0; index < uniqueEntryIds.length; index += chunkSize) {
+      const chunk = uniqueEntryIds.slice(index, index + chunkSize);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = db.prepare(`
+        SELECT entry_id
+        FROM vector_entries
+        WHERE namespace = ? AND entry_id IN (${placeholders})
+        ORDER BY entry_id
+      `).all(storedNamespace, ...chunk) as Array<{ entry_id: string }>;
+      for (const row of rows) presentEntryIds.push(row.entry_id);
+    }
+    return presentEntryIds;
+  } finally {
+    db.close();
+  }
+}
+
 export async function loadVectorCollectionMap<TMetadata = unknown>(
   rootDir: string,
   namespace: string,

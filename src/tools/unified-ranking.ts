@@ -5,7 +5,12 @@ import { loadIndexArtifact } from "../core/index-database.js";
 import { fetchEmbedding } from "../core/embeddings.js";
 import { assertValidPreparedIndex } from "./index-reliability.js";
 import { ensureFileSearchIndex } from "./semantic-search.js";
-import { searchHybridChunkIndex, searchHybridIdentifierIndex, type HybridSearchMatch } from "./hybrid-retrieval.js";
+import {
+  searchHybridChunkIndex,
+  searchHybridIdentifierIndex,
+  type HybridSearchDiagnostics,
+  type HybridSearchMatch,
+} from "./hybrid-retrieval.js";
 
 type EntityType = "file" | "symbol";
 export type RetrievalMode = "semantic" | "keyword" | "both";
@@ -113,6 +118,17 @@ export interface UnifiedRankedHit {
   modulePath?: string;
   score: number;
   evidence: UnifiedSearchEvidence;
+}
+
+export interface UnifiedSearchDiagnostics {
+  retrievalMode: RetrievalMode;
+  chunk: HybridSearchDiagnostics;
+  identifier: HybridSearchDiagnostics;
+}
+
+export interface UnifiedSearchReport {
+  hits: UnifiedRankedHit[];
+  diagnostics: UnifiedSearchDiagnostics;
 }
 
 export interface CanonicalSearchOptions extends UnifiedRankingOptions {}
@@ -361,19 +377,51 @@ function formatEvidenceSummary(hit: UnifiedRankedHit): string {
   ].join(" | ");
 }
 
-export function formatUnifiedSearchResults(query: string, entityTypes: EntityType[], hits: UnifiedRankedHit[], retrievalMode: RetrievalMode): string {
+function formatVectorCoverageLine(label: string, diagnostics: HybridSearchDiagnostics): string {
+  const coverage = diagnostics.vectorCoverage;
+  if (coverage.state === "explicit-lexical-only") {
+    return `${label} lexical-only-explicit`;
+  }
+  return `${label} ${coverage.loadedVectorCount}/${coverage.requestedVectorCount} (${coverage.coverageRatio.toFixed(2)})`;
+}
+
+export function formatUnifiedSearchResults(
+  query: string,
+  entityTypes: EntityType[],
+  hits: UnifiedRankedHit[],
+  retrievalMode: RetrievalMode,
+  diagnostics?: UnifiedSearchDiagnostics,
+): string {
   const requested = entityTypes.join(", ");
   if (hits.length === 0) {
-    return `Search: "${query}"\nRequested result types: ${requested}\nRetrieval mode: ${retrievalMode}\nNo matching results found in the prepared full-engine artifacts.`;
+    const lines = [
+      `Search: "${query}"`,
+      `Requested result types: ${requested}`,
+      `Retrieval mode: ${retrievalMode}`,
+    ];
+    if (diagnostics) {
+      lines.push(`Vector coverage: ${formatVectorCoverageLine("chunk", diagnostics.chunk)} | ${formatVectorCoverageLine("identifier", diagnostics.identifier)}`);
+    }
+    lines.push("No matching results found in the prepared full-engine artifacts.");
+    return lines.join("\n");
   }
 
   const lines = [
     `Search: "${query}"`,
     `Requested result types: ${requested}`,
     `Retrieval mode: ${retrievalMode}`,
+  ];
+  if (diagnostics) {
+    lines.push(`Vector coverage: ${formatVectorCoverageLine("chunk", diagnostics.chunk)} | ${formatVectorCoverageLine("identifier", diagnostics.identifier)}`);
+    lines.push(
+      `Hybrid candidates: chunk ${diagnostics.chunk.lexicalCandidateCount}->${diagnostics.chunk.rerankCandidateCount}->${diagnostics.chunk.finalResultCount}` +
+      ` | identifier ${diagnostics.identifier.lexicalCandidateCount}->${diagnostics.identifier.rerankCandidateCount}->${diagnostics.identifier.finalResultCount}`,
+    );
+  }
+  lines.push(
     `Ranked hits: ${hits.length}`,
     "",
-  ];
+  );
 
   for (const hit of hits) {
     const lineRange = hit.endLine > hit.line ? `L${hit.line}-L${hit.endLine}` : `L${hit.line}`;
@@ -391,11 +439,11 @@ export function formatUnifiedSearchResults(query: string, entityTypes: EntityTyp
 
 export async function runCanonicalSearch(options: CanonicalSearchOptions): Promise<string> {
   const entityTypes = options.entityTypes ?? ["file", "symbol"];
-  const hits = await rankUnifiedSearch(options);
-  return formatUnifiedSearchResults(options.query, entityTypes, hits, normalizeRetrievalMode(options.retrievalMode));
+  const report = await buildUnifiedSearchReport(options);
+  return formatUnifiedSearchResults(options.query, entityTypes, report.hits, normalizeRetrievalMode(options.retrievalMode), report.diagnostics);
 }
 
-export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise<UnifiedRankedHit[]> {
+export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): Promise<UnifiedSearchReport> {
   await assertValidPreparedIndex({
     rootDir: options.rootDir,
     mode: "full",
@@ -528,7 +576,7 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
   const normalizedKinds = options.includeKinds?.map((value) => value.trim().toLowerCase()).filter(Boolean);
   const kindFilter = normalizedKinds && normalizedKinds.length > 0 ? new Set(normalizedKinds) : null;
 
-  return Array.from(candidates.values())
+  const hits = Array.from(candidates.values())
     .filter((candidate) => entityTypes.has(candidate.entityType))
     .filter((candidate) => !kindFilter || candidate.entityType !== "symbol" || kindFilter.has(candidate.kind.toLowerCase()))
     .map((candidate) => finalizeCandidate(candidate, options))
@@ -540,4 +588,16 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
       || a.path.localeCompare(b.path)
       || a.title.localeCompare(b.title))
     .slice(0, topK);
+  return {
+    hits,
+    diagnostics: {
+      retrievalMode,
+      chunk: chunkSearch.diagnostics,
+      identifier: identifierSearch.diagnostics,
+    },
+  };
+}
+
+export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise<UnifiedRankedHit[]> {
+  return (await buildUnifiedSearchReport(options)).hits;
 }

@@ -70,6 +70,8 @@ describe("cli bridge", () => {
       assert.equal(doctor.hubSummary.suggestionCount >= 1, true);
       assert.equal(typeof doctor.treeSitter.totalParseCalls, "number");
       assert.equal(typeof doctor.treeSitter.totalParseFailures, "number");
+      assert.equal(doctor.hybridVectors.chunk.vectorCoverage.state, "complete");
+      assert.equal(doctor.hybridVectors.identifier.vectorCoverage.state, "complete");
 
       const treePayload = await execBridge(cwd, "tree");
       assert.equal(treePayload.root, cwd);
@@ -101,7 +103,9 @@ describe("cli bridge", () => {
       const relatedSearchPayload = await execBridge(cwd, "search", "app entrypoint", "--intent", "related", "--search-type", "mixed");
       assert.equal(relatedSearchPayload.intent, "related");
       assert.equal(relatedSearchPayload.hits.length >= 1, true);
+      assert.equal(relatedSearchPayload.diagnostics.chunk.vectorCoverage.state, "complete");
       assert.equal(relatedSearchPayload.text.includes(relatedSearchPayload.hits[0].path), true);
+      assert.equal(relatedSearchPayload.text.includes("Vector coverage:"), true);
 
       const researchPayload = await execBridge(cwd, "research", "app entrypoint flow");
       assert.equal(researchPayload.report.codeHits.length >= 1, true);
