@@ -92,7 +92,7 @@ describe("cluster-artifacts", () => {
       const manifest = readArtifactFromDb(dbPath, "full-index-manifest");
       const rendered = await semanticNavigate({ rootDir, maxDepth: 3, maxClusters: 10 });
 
-      assert.equal(clusterState.artifactVersion, 14);
+      assert.equal(clusterState.artifactVersion, 15);
       assert.equal(clusterState.contractVersion, 12);
       assert.equal(clusterState.mode, "full");
       assert.equal(clusterState.clusterCount >= 1, true);

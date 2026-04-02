@@ -18,12 +18,6 @@
 - [ ] Finish no-fallback correctness fixes before claiming large-repo or production-grade trustworthiness.
 - [ ] Finish real benchmark and observability work before claiming the engine is fast on large repos.
 
-## Phase 17: Ranking Misclassification Bug
-
-- [ ] Remove the brittle unified-ranking heuristic that treats chunk matches as files when `match.title === "file"`.
-- [ ] Replace that heuristic with explicit typed metadata on ranking entities so real symbols named `file` are handled correctly.
-- [ ] Add regression coverage for a real symbol literally named `file` and verify it is not classified as a file hit.
-
 ## Phase 18: Missing Vector Integrity Bug
 
 - [ ] Change `searchHybridState()` in [src/tools/hybrid-retrieval.ts](/home/cesar514/Documents/agent_programming/contextplus/src/tools/hybrid-retrieval.ts) so missing vectors are not silently assigned `semanticScore = 0`.

@@ -67,7 +67,7 @@ describe("hybrid-retrieval", () => {
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 
-      assert.equal(hybridChunk.state.artifactVersion, 14);
+      assert.equal(hybridChunk.state.artifactVersion, 15);
       assert.equal(hybridChunk.state.contractVersion, 12);
       assert.equal(hybridChunk.state.source, "chunk");
       assert.equal(hybridChunk.stats.indexedDocuments >= 2, true);
@@ -75,8 +75,9 @@ describe("hybrid-retrieval", () => {
       assert.equal(Object.keys(dbHybridChunk.documents).length, hybridChunk.stats.indexedDocuments);
       assert.equal(Array.isArray(dbHybridChunk.lexicalIndex.terms.greeting), true);
       assert.equal(dbHybridChunk.lexicalIndex.documentCount, hybridChunk.stats.indexedDocuments);
+      assert.equal(Object.values(dbHybridChunk.documents).every((document) => document.entityType === "file" || document.entityType === "symbol"), true);
 
-      assert.equal(hybridIdentifier.state.artifactVersion, 14);
+      assert.equal(hybridIdentifier.state.artifactVersion, 15);
       assert.equal(hybridIdentifier.state.contractVersion, 12);
       assert.equal(hybridIdentifier.state.source, "identifier");
       assert.equal(hybridIdentifier.stats.indexedDocuments >= 2, true);
@@ -84,6 +85,7 @@ describe("hybrid-retrieval", () => {
       assert.equal(Object.keys(dbHybridIdentifier.documents).length, hybridIdentifier.stats.indexedDocuments);
       assert.equal(Array.isArray(dbHybridIdentifier.lexicalIndex.terms.shout), true);
       assert.equal(dbHybridIdentifier.lexicalIndex.documentCount, hybridIdentifier.stats.indexedDocuments);
+      assert.equal(Object.values(dbHybridIdentifier.documents).every((document) => document.entityType === "symbol"), true);
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
@@ -133,6 +135,8 @@ describe("hybrid-retrieval", () => {
       assert.equal(identifierMatches.length >= 1, true);
       assert.equal(chunkMatches[0].title, "shoutGreeting");
       assert.equal(identifierMatches[0].title, "shoutGreeting");
+      assert.equal(chunkMatches[0].entityType, "symbol");
+      assert.equal(identifierMatches[0].entityType, "symbol");
       assert.equal(chunkMatches[0].lexicalScore > 0, true);
       assert.equal(chunkMatches[0].semanticScore > 0, true);
       assert.equal(identifierMatches[0].lexicalScore > 0, true);
@@ -147,6 +151,39 @@ describe("hybrid-retrieval", () => {
       assert.equal(identifierSearch.diagnostics.rerankCandidateCount >= identifierSearch.diagnostics.finalResultCount, true);
       assert.equal(chunkSearch.diagnostics.totalDocuments, 2);
       assert.equal(identifierSearch.diagnostics.totalDocuments, 2);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves explicit symbol entity typing for a real symbol named file", async () => {
+    const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
+    const { refreshHybridChunkIndex, searchHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-symbol-file-"));
+    try {
+      await mkdir(join(rootDir, "src"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "naming.ts"),
+        [
+          "// Hybrid retrieval fixture for symbols literally named file",
+          "// FEATURE: explicit entity typing must beat title heuristics",
+          "export function file(input: string): string {",
+          "  return input.trim();",
+          "}",
+          "",
+        ].join("\n"),
+      );
+
+      const chunkRefresh = await refreshChunkIndexState(rootDir);
+      const chunks = Object.values(chunkRefresh.state.files).flatMap((entry) => entry.chunks);
+      await warmChunkEmbeddings(rootDir, chunks);
+      await refreshHybridChunkIndex(rootDir, chunkRefresh.state);
+
+      const chunkSearch = await searchHybridChunkIndex(rootDir, "function named file trim", { topK: 3 });
+      const symbolMatch = chunkSearch.matches.find((match) => match.title === "file");
+      assert.ok(symbolMatch);
+      assert.equal(symbolMatch.entityType, "symbol");
+      assert.equal(symbolMatch.kind, "function");
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

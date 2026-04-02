@@ -439,10 +439,10 @@ export async function rankUnifiedSearch(options: UnifiedRankingOptions): Promise
     queryVector,
   });
   for (const match of chunkSearch.matches) {
-    const candidateId = match.title === "file"
+    const candidateId = match.entityType === "file"
       ? getFileCandidateId(match.path)
       : getSymbolCandidateId(match.path, match.title, match.line);
-    const entityType: EntityType = match.title === "file" ? "file" : "symbol";
+    const entityType: EntityType = match.entityType;
     const candidate = candidates.get(candidateId) ?? createCandidate(candidateId, entityType, match.path, match.title, match.kind, match.line, match.endLine);
     applyHybridEvidence(candidate, match, "chunk");
     candidates.set(candidateId, candidate);

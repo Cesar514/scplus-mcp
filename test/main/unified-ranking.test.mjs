@@ -169,4 +169,48 @@ describe("unified-ranking", () => {
       await rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it("does not classify a real symbol named file as a file hit", async () => {
+    const { indexCodebase } = await import("../../build/tools/index-codebase.js");
+    const { rankUnifiedSearch } = await import("../../build/tools/unified-ranking.js");
+    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-unified-symbol-file-"));
+    try {
+      await mkdir(join(rootDir, "src"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "naming.ts"),
+        [
+          "// Unified ranking fixture for a symbol literally named file",
+          "// FEATURE: explicit entity typing must beat title heuristics",
+          "export function file(input: string): string {",
+          "  return input.trim();",
+          "}",
+          "",
+        ].join("\n"),
+      );
+
+      await indexCodebase({ rootDir, mode: "full" });
+
+      const symbolHits = await rankUnifiedSearch({
+        rootDir,
+        query: "function named file trim",
+        entityTypes: ["symbol"],
+        includeKinds: ["function"],
+        topK: 3,
+      });
+      const fileHits = await rankUnifiedSearch({
+        rootDir,
+        query: "function named file trim",
+        entityTypes: ["file"],
+        topK: 3,
+      });
+
+      assert.equal(symbolHits.length >= 1, true);
+      assert.equal(symbolHits[0].title, "file");
+      assert.equal(symbolHits[0].entityType, "symbol");
+      assert.equal(symbolHits[0].kind, "function");
+      assert.equal(fileHits.some((hit) => hit.title === "file"), false);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });

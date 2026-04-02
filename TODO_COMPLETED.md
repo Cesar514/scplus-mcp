@@ -2,6 +2,10 @@
 
 ## v1.5
 
+- [x] remove the brittle unified-ranking heuristic in `src/tools/unified-ranking.ts` that treated chunk matches as files when `match.title === "file"`
+- [x] replace that heuristic with explicit typed metadata on hybrid ranking entities and matches in `src/tools/hybrid-retrieval.ts` so real symbols named `file` are handled correctly
+- [x] bump the persisted full-index artifact version so stale hybrid artifacts without explicit entity typing fail validation instead of being silently reused
+- [x] add direct regressions proving a real symbol literally named `file` stays typed as a symbol in both hybrid retrieval and unified ranking
 - [x] retire the old `findBraceBlockEnd()`-style regex range path by removing the remaining regex parser implementation from `src/core/parser.ts`
 - [x] ensure symbol range computation no longer depends on raw brace counting, so braces inside strings and comments cannot shift `endLine`
 - [x] verify with built tree-sitter parsing that function ranges stay correct when source text contains `}` inside strings and comments

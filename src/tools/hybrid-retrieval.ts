@@ -33,6 +33,7 @@ interface PersistedIdentifierIndexState {
 export interface HybridRetrievalDocument {
   id: string;
   source: "chunk" | "identifier";
+  entityType: "file" | "symbol";
   path: string;
   title: string;
   kind: string;
@@ -75,6 +76,7 @@ export interface HybridRetrievalStats {
 export interface HybridSearchMatch {
   id: string;
   source: "chunk" | "identifier";
+  entityType: "file" | "symbol";
   path: string;
   title: string;
   kind: string;
@@ -193,6 +195,7 @@ function buildChunkHybridDocument(chunk: ChunkArtifact): HybridRetrievalDocument
   return {
     id: chunk.id,
     source: "chunk",
+    entityType: chunk.chunkType === "file-fallback" ? "file" : "symbol",
     path: chunk.path,
     title: chunk.symbolName ?? "file",
     kind: chunk.symbolKind,
@@ -218,6 +221,7 @@ function buildIdentifierHybridDocument(doc: PersistedIdentifierDoc): HybridRetri
   return {
     id: doc.id,
     source: "identifier",
+    entityType: "symbol",
     path: doc.path,
     title: doc.name,
     kind: doc.kind,
@@ -441,6 +445,7 @@ async function searchHybridState(
     ranked.push({
       id: document.id,
       source: document.source,
+      entityType: document.entityType,
       path: document.path,
       title: document.title,
       kind: document.kind,
