@@ -8,6 +8,11 @@
 - [x] audit the Context+ skill, bundled manual, repo instructions, and landing instruction mirrors for drift against the current codebase
 - [x] update those instruction surfaces to the current Context+ runtime contract, tool names, storage model, freshness model, and edit rules
 - [x] verify the repo still passes Context+ lint and native checks after the instruction sync
+- [x] fix the operator CLI activity pane so issue and latest-log previews stay within the terminal pane, clamp to three rendered lines, and expose `/issue` plus `/log` full-detail views
+- [x] keep slash-command suggestions scrollable and bounded while typing `/` so the activity shell does not hand most of the pane to the command list
+- [x] migrate the public executable, package, init-template, docs, landing, Codex config, and external skill naming to `scplus-mcp` and `scplus-cli` while preserving the stable `.contextplus/` state contract
+- [x] verify the CLI and naming migration with `npm run build`, `npm test`, focused Go CLI package tests, Context+ lint, and stale-name grep checks
+- [x] commit the verified scplus CLI and MCP migration
 
 ## v1.5
 

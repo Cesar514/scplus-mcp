@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"contextplusplus/cli/internal/backend"
-	"contextplusplus/cli/internal/hubs"
+	"scplus-cli/cli/internal/backend"
+	"scplus-cli/cli/internal/hubs"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -29,6 +29,8 @@ const (
 	viewOverview   = "overview"
 	viewTree       = "tree"
 	viewHubs       = "hubs"
+	viewIssue      = "issue"
+	viewLog        = "log"
 	viewFindHub    = "find-hub"
 	viewRestore    = "restore"
 	viewCluster    = "cluster"
@@ -344,7 +346,7 @@ func NewModel(root string, client *backend.Client) Model {
 		height:        38,
 		detail:        detail,
 		logViewport:   logViewport,
-		logs:          []string{"contextplusplus-cli started."},
+		logs:          []string{"scplus-cli started."},
 		wizard:        newWizardState(),
 		backendOnline: true,
 		activeView:    viewActivity,
@@ -355,6 +357,8 @@ func NewModel(root string, client *backend.Client) Model {
 			viewOverview:   newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
 			viewTree:       newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
 			viewHubs:       newListSection(viewHubs, "Hubs", "Feature hubs and suggestions", "Loading hub view..."),
+			viewIssue:      newListSection(viewIssue, "Issue", "Full current issue detail", "No issue has been recorded."),
+			viewLog:        newListSection(viewLog, "Log", "Full operator log history", "No log entries have been recorded."),
 			viewFindHub:    newListSection(viewFindHub, "Find hub", "Ranked hub discovery and suggestion triage", "Run a find-hub command to load results."),
 			viewRestore:    newListSection(viewRestore, "Restore", "Restore-point history", "Loading restore points..."),
 			viewCluster:    newListSection(viewCluster, "Cluster", "Persisted semantic cluster summaries", "Loading cluster view..."),
@@ -466,6 +470,8 @@ func paletteCommands() []paletteCommand {
 		{ID: "open-overview", Title: "/overview", Subtitle: "Open the operator health and observability window", Action: "open-overview"},
 		{ID: "open-tree", Title: "/tree", Subtitle: "Open the prepared tree window", Action: "open-tree"},
 		{ID: "open-hubs", Title: "/hubs", Subtitle: "Open manual and suggested hubs", Action: "open-hubs"},
+		{ID: "open-issue", Title: "/issue", Subtitle: "Open the full current issue detail", Action: "open-issue"},
+		{ID: "open-log", Title: "/log", Subtitle: "Open the full operator log history", Action: "open-log"},
 		{ID: "open-restore", Title: "/restore", Subtitle: "Open restore points and recovery", Action: "open-restore"},
 		{ID: "open-cluster", Title: "/cluster", Subtitle: "Open persisted semantic clusters", Action: "open-cluster"},
 		{ID: "open-status", Title: "/status", Subtitle: "Open the git worktree status table", Action: "open-status"},
@@ -1233,6 +1239,8 @@ func (m *Model) refreshSidebar() {
 		{ID: viewOverview, Title: "Overview", Subtitle: "Health, serving, and observability"},
 		{ID: viewTree, Title: "Tree", Subtitle: "Prepared tree and file topology"},
 		{ID: viewHubs, Title: "Hubs", Subtitle: "Manual and suggested hub views"},
+		{ID: viewIssue, Title: "Issue", Subtitle: "Full current issue detail"},
+		{ID: viewLog, Title: "Log", Subtitle: "Full operator log history"},
 		{ID: viewFindHub, Title: "Find hub", Subtitle: "Ranked hub discovery and triage"},
 		{ID: viewRestore, Title: "Restore", Subtitle: "Checkpoint history and recovery"},
 		{ID: viewCluster, Title: "Cluster", Subtitle: "Cluster and subsystem summaries"},
@@ -1898,6 +1906,21 @@ func (m *Model) executePaletteAction(action string) tea.Cmd {
 		m.setActiveView(viewHubs)
 		m.focus = focusContent
 		m.recordNavigation()
+		return nil
+	case "open-issue":
+		if strings.TrimSpace(m.lastError) == "" {
+			m.setError(errors.New("no issue has been recorded"))
+			return nil
+		}
+		m.showCommandSection(viewIssue, "Issue", "Full current issue detail", buildTextFallbackItems("issue", m.lastError), m.lastError)
+		return nil
+	case "open-log":
+		if len(m.logs) == 0 {
+			m.setError(errors.New("no log entries have been recorded"))
+			return nil
+		}
+		logText := strings.Join(m.logs, "\n")
+		m.showCommandSection(viewLog, "Log", "Full operator log history", buildTextFallbackItems("log", logText), logText)
 		return nil
 	case "open-restore":
 		m.setActiveView(viewRestore)
@@ -2851,7 +2874,7 @@ func (m Model) renderActivityShell(width int, height int) string {
 	activeJob := m.activeStatusJob()
 	wrapWidth := max(24, int(float64(width)*0.7))
 	lines := []string{
-		renderPaneTitle("Activity | contextplusplus-cli", m.focus == focusContent) + subtitleStyle.Render(" | "+m.magicianRuntimeStatus(activeJob)),
+		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent) + subtitleStyle.Render(" | "+m.magicianRuntimeStatus(activeJob)),
 		"",
 		magician,
 		"",
@@ -2866,13 +2889,15 @@ func (m Model) renderActivityShell(width int, height int) string {
 		)),
 	}
 	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, subtitleStyle.Width(wrapWidth).Render(activeJob.Message))
+		lines = append(lines, renderPreviewSection("Current task", activeJob.Message, wrapWidth, subtitleStyle)...)
 	}
 	if strings.TrimSpace(m.lastError) != "" {
-		lines = append(lines, "", errorStyle.Width(wrapWidth).Render("Last error: "+m.lastError))
+		lines = append(lines, "")
+		lines = append(lines, renderPreviewSection("Current issue", m.lastError, wrapWidth, errorStyle)...)
 	}
 	if len(m.logs) > 0 {
-		lines = append(lines, "", subtitleStyle.Width(wrapWidth).Render("Latest log: "+m.logs[len(m.logs)-1]))
+		lines = append(lines, "")
+		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], wrapWidth, subtitleStyle)...)
 	}
 	if !strings.HasPrefix(query, "/") {
 		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
@@ -2891,7 +2916,8 @@ func (m Model) renderActivityShell(width int, height int) string {
 		m.commandSelect = 0
 	}
 	lines = append(lines, "", subtitleStyle.Render("Commands"))
-	windowSize := min(len(commands), max(4, height-len(lines)-4))
+	windowBudget := max(2, min(4, (height-len(lines)-4)/2))
+	windowSize := min(len(commands), windowBudget)
 	start, end := visibleRange(len(commands), m.commandSelect, windowSize)
 	if start > 0 {
 		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier commands hidden", start)))
@@ -2917,7 +2943,7 @@ func (m Model) renderActivityPanel(width int) string {
 	activeJob := m.activeStatusJob()
 	lines := []string{
 		renderPaneTitle("Activity", false),
-		subtitleStyle.Render("Only the current status and latest error stay visible here"),
+		subtitleStyle.Render("Only compact previews stay visible here"),
 		"",
 		subtitleStyle.Render(fmt.Sprintf(
 			"%s | state=%s | phase=%s | pending=%d",
@@ -2928,13 +2954,15 @@ func (m Model) renderActivityPanel(width int) string {
 		)),
 	}
 	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, truncate(activeJob.Message, max(24, width-6)))
+		lines = append(lines, renderPreviewSection("Current task", activeJob.Message, max(24, width-6), subtitleStyle)...)
 	}
 	if strings.TrimSpace(m.lastError) != "" {
-		lines = append(lines, "", errorStyle.Render("Last error: "+truncate(m.lastError, max(24, width-18))))
+		lines = append(lines, "")
+		lines = append(lines, renderPreviewSection("Current issue", m.lastError, max(24, width-6), errorStyle)...)
 	}
 	if len(m.logs) > 0 {
-		lines = append(lines, "", subtitleStyle.Render("Latest log: "+truncate(m.logs[len(m.logs)-1], max(24, width-16))))
+		lines = append(lines, "")
+		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], max(24, width-6), subtitleStyle)...)
 	}
 	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
 }
@@ -3150,7 +3178,7 @@ func (m Model) Close() error {
 func RenderDoctorPlain(report backend.DoctorReport) string {
 	stageMetrics := formatStageMetrics(report.Observability.Indexing.Stages)
 	lines := []string{
-		fmt.Sprintf("contextplusplus-cli doctor for %s", report.Root),
+		fmt.Sprintf("scplus-cli doctor for %s", report.Root),
 		fmt.Sprintf("Branch: %s", report.RepoStatus.Branch),
 		fmt.Sprintf("Unstaged: %d | Untracked: %d", report.RepoStatus.UnstagedCount, report.RepoStatus.UntrackedCount),
 		fmt.Sprintf("Active generation: %d", report.Serving.ActiveGeneration),
@@ -3923,6 +3951,59 @@ func truncate(value string, limit int) string {
 		return value
 	}
 	return value[:limit-3] + "..."
+}
+
+func renderPreviewSection(title string, value string, width int, style lipgloss.Style) []string {
+	lines := previewLines(value, width, 3)
+	if len(lines) == 0 {
+		return nil
+	}
+	rendered := []string{style.Render(title + ":")}
+	for _, line := range lines {
+		rendered = append(rendered, style.Width(width).Render(line))
+	}
+	return rendered
+}
+
+func previewLines(value string, width int, maxLines int) []string {
+	if width <= 0 || maxLines <= 0 {
+		return nil
+	}
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\r\n", "\n"))
+	if value == "" {
+		return nil
+	}
+	rawLines := splitNonEmptyLines(value)
+	wrapped := make([]string, 0, len(rawLines))
+	for _, raw := range rawLines {
+		for _, line := range strings.Split(lipgloss.NewStyle().Width(width).Render(raw), "\n") {
+			trimmed := strings.TrimRight(line, " ")
+			if trimmed == "" {
+				continue
+			}
+			wrapped = append(wrapped, trimmed)
+		}
+	}
+	if len(wrapped) <= maxLines {
+		return wrapped
+	}
+	visible := append([]string(nil), wrapped[:maxLines]...)
+	visible[maxLines-1] = appendEllipsis(visible[maxLines-1], width)
+	return visible
+}
+
+func appendEllipsis(value string, width int) string {
+	if width <= 3 {
+		return strings.Repeat(".", max(1, width))
+	}
+	value = strings.TrimRight(value, " ")
+	if value == "" {
+		return "..."
+	}
+	if len(value)+3 <= width {
+		return value + "..."
+	}
+	return truncate(value, width)
 }
 
 func min(left int, right int) int {

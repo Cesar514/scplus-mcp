@@ -77,7 +77,7 @@ func BuildHubMarkdown(title, summary string, files []string) string {
 		"",
 		strings.TrimSpace(summary),
 		"",
-		"Human-authored hub created from the contextplusplus-cli.",
+		"Human-authored hub created from the scplus-cli.",
 		"",
 	}
 	for _, filePath := range files {

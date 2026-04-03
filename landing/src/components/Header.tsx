@@ -29,11 +29,11 @@ export default function Header({ stars }: HeaderProps) {
                 className="font-light"
                 style={{ fontSize: 22, lineHeight: "28px", color: "var(--text-primary)" }}
             >
-                context++
+                scplus
             </span>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 <a
-                    href="https://www.npmjs.com/package/contextplusplus"
+                    href="https://www.npmjs.com/package/scplus-mcp"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center"

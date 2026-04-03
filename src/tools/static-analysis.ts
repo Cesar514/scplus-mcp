@@ -330,7 +330,7 @@ export function formatStaticAnalysisReport(report: StaticAnalysisReport): string
   }
 
   if (report.ruleFindings.length > 0) {
-    lines.push("", "context++ rule findings:");
+    lines.push("", "scplus rule findings:");
     lines.push(...formatFindings(report.ruleFindings));
   }
 

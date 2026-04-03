@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"contextplusplus/cli/internal/backend"
-	"contextplusplus/cli/internal/hubs"
-	"contextplusplus/cli/internal/ui"
+	"scplus-cli/cli/internal/backend"
+	"scplus-cli/cli/internal/hubs"
+	"scplus-cli/cli/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -145,7 +145,7 @@ func main() {
 	}()
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "--root" {
-		root, _, parseErr := parseRoot("contextplusplus-cli", args)
+		root, _, parseErr := parseRoot("scplus-cli", args)
 		if parseErr != nil {
 			fmt.Fprintln(os.Stderr, parseErr)
 			os.Exit(1)

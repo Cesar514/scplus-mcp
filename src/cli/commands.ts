@@ -1,5 +1,5 @@
 // summary: Routes human CLI subcommands onto backend actions and bridge payload handling.
-// FEATURE: Human terminal interface subcommands for contextplusplus backend workflows.
+// FEATURE: Human terminal interface subcommands for scplus operator workflows.
 // inputs: Parsed CLI arguments, bridge parameters, and operator command requests.
 // outputs: Invoked backend workflows and terminal-facing command results.
 
@@ -115,7 +115,7 @@ async function runInitCommand(args: string[]): Promise<void> {
   const { content, outputPath } = buildInitConfig(target, runner);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${content}\n`, "utf8");
-  console.error(`contextplusplus initialized for ${target} using ${runner}.`);
+  console.error(`scplus-mcp initialized for ${target} using ${runner}.`);
   console.error(`Wrote MCP config: ${outputPath}`);
 }
 

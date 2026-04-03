@@ -1,7 +1,7 @@
 <svg width="1320" height="620" viewBox="0 0 1320 620" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1320" height="620" rx="28" fill="#F7F7F2"/>
   <rect x="28" y="28" width="1264" height="564" rx="22" fill="#FFFDF8" stroke="#1E1E1B" stroke-width="2"/>
-  <text x="56" y="84" fill="#111111" font-size="34" font-family="ui-sans-serif, system-ui, sans-serif">context++ serving contract</text>
+  <text x="56" y="84" fill="#111111" font-size="34" font-family="ui-sans-serif, system-ui, sans-serif">scplus serving contract</text>
   <text x="56" y="118" fill="#5B5B56" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">One active validated generation, explicit dirty and blocked freshness, no hidden fallback.</text>
 
   <rect x="56" y="162" width="260" height="110" rx="18" fill="#FFF4D6" stroke="#1E1E1B" stroke-width="2"/>
@@ -38,6 +38,6 @@
   <text x="718" y="372" fill="#111111" font-size="26" font-family="ui-sans-serif, system-ui, sans-serif">Failure behavior</text>
   <text x="718" y="412" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">If refresh or rebuild fails, freshness becomes blocked.</text>
   <text x="718" y="444" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">Prepared queries reject instead of serving stale answers.</text>
-  <text x="718" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">doctor, bridge events, backend logs, and contextplusplus-cli show</text>
+  <text x="718" y="476" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">doctor, bridge events, backend logs, and scplus-cli show</text>
   <text x="718" y="504" fill="#44443E" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">the blocked reason and pending paths explicitly.</text>
 </svg>

@@ -10,7 +10,7 @@ import { ThemeProvider } from "../components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "context++ // Semantic Intelligence for Large-Scale Engineering",
+  title: "scplus // Semantic Intelligence for Large-Scale Engineering",
   description:
     "MCP server designed for developers who demand 99% accuracy. Treesitter AST, Spectral Clustering, and Obsidian-style linking.",
   icons: {

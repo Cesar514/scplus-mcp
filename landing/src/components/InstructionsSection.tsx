@@ -102,7 +102,7 @@ export default function InstructionsSection({ instructions }: InstructionsSectio
           >
             Copy the instruction file into your project root to teach your agent
             structural search, blast radius analysis, and lean context
-            discipline. Or don&apos;t, context++ already includes the
+            discipline. Or don&apos;t, scplus already includes the
             instructions in the new versions.
           </p>
 

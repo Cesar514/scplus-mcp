@@ -1,4 +1,4 @@
-   /\_    contextplusplus-cli                                                                                           
+   /\_    scplus-cli                                                                                                      
  _( o.o)  Operator console with navigation history, command palette, and export layers                                  
   > ^ <                                                                                                                 
  /|_|_\                                                                                                                 

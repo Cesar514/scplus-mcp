@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"contextplusplus/cli/internal/backend"
+	"scplus-cli/cli/internal/backend"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -67,7 +67,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
-		"contextplusplus-cli doctor for /tmp/contextplus",
+		"scplus-cli doctor for /tmp/contextplus",
 		"Branch: main",
 		"Prepared index: OK",
 		"Ollama: 1 running models",
@@ -134,7 +134,7 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Activity | contextplusplus-cli",
+		"Activity | scplus-cli",
 		"/\\_",
 		"Type /command",
 		"watcher: on",
@@ -189,7 +189,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Activity | contextplusplus-cli",
+		"Activity | scplus-cli",
 		"The magician is resting",
 		"Type /command",
 	} {
@@ -526,9 +526,8 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 		"/forward",
 		"/overview",
 		"/tree",
+		"/issue",
 		"/search",
-		"/symbol",
-		"/index",
 		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -679,6 +678,21 @@ func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 	}
 }
 
+func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 120
+	model.height = 40
+	model.commandBar.SetValue("/")
+
+	rendered := model.renderActivityShell(90, 40)
+	if !strings.Contains(rendered, "more commands hidden") {
+		t.Fatalf("expected bounded command list to keep hidden commands even in a tall window: %s", rendered)
+	}
+	if strings.Contains(rendered, "/word") {
+		t.Fatalf("expected later commands to stay hidden until scrolled into view: %s", rendered)
+	}
+}
+
 func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 72
@@ -700,8 +714,80 @@ func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 	if !strings.Contains(rendered, "pending=4") {
 		t.Fatalf("expected wrapped status to keep the pending count visible: %s", rendered)
 	}
-	if !strings.Contains(rendered, "Last error: this is a deliberately") {
+	if !strings.Contains(rendered, "Current issue:") {
 		t.Fatalf("expected wrapped error output in activity shell: %s", rendered)
+	}
+}
+
+func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 90
+	model.height = 24
+	model.lastError = "issue line one\nissue line two\nissue line three\nissue line four"
+	model.logs = append(model.logs, "log line one\nlog line two\nlog line three\nlog line four")
+
+	rendered := model.renderActivityShell(70, 24)
+	for _, snippet := range []string{"Current issue:", "issue line one", "issue line two", "issue line three...", "Latest log:", "log line one", "log line two", "log line three..."} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("expected activity shell to include %q: %s", snippet, rendered)
+		}
+	}
+	for _, snippet := range []string{"issue line four", "log line four"} {
+		if strings.Contains(rendered, snippet) {
+			t.Fatalf("expected hidden preview content to stay out of the activity shell: %s", rendered)
+		}
+	}
+}
+
+func TestActivityPanelClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.lastError = "panel issue one\npanel issue two\npanel issue three\npanel issue four"
+	model.logs = append(model.logs, "panel log one\npanel log two\npanel log three\npanel log four")
+
+	rendered := model.renderActivityPanel(64)
+	for _, snippet := range []string{"Current issue:", "panel issue one", "panel issue two", "panel issue three...", "Latest log:", "panel log one", "panel log two", "panel log three..."} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("expected activity panel to include %q: %s", snippet, rendered)
+		}
+	}
+	for _, snippet := range []string{"panel issue four", "panel log four"} {
+		if strings.Contains(rendered, snippet) {
+			t.Fatalf("expected hidden preview content to stay out of the activity panel: %s", rendered)
+		}
+	}
+}
+
+func TestIssueSlashCommandOpensFullIssueWindow(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.lastError = "first issue line\nsecond issue line\nthird issue line\nfourth issue line"
+
+	cmd := model.executePaletteAction("open-issue")
+	if cmd != nil {
+		t.Fatalf("expected issue command to switch views synchronously")
+	}
+	if model.activeView != viewIssue {
+		t.Fatalf("expected issue command to open %q, got %q", viewIssue, model.activeView)
+	}
+	section := model.sections[viewIssue]
+	if section == nil || section.RawText != model.lastError {
+		t.Fatalf("expected full issue text in the issue view, got %#v", section)
+	}
+}
+
+func TestLogSlashCommandOpensFullLogWindow(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.logs = append(model.logs, "alpha", "beta", "gamma")
+
+	cmd := model.executePaletteAction("open-log")
+	if cmd != nil {
+		t.Fatalf("expected log command to switch views synchronously")
+	}
+	if model.activeView != viewLog {
+		t.Fatalf("expected log command to open %q, got %q", viewLog, model.activeView)
+	}
+	section := model.sections[viewLog]
+	if section == nil || !strings.Contains(section.RawText, "scplus-cli started.\nalpha\nbeta\ngamma") {
+		t.Fatalf("expected full log history in the log view, got %#v", section)
 	}
 }
 

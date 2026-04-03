@@ -1,7 +1,7 @@
 <svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1400" height="860" rx="28" fill="#0B0D10"/>
   <rect x="24" y="24" width="1352" height="812" rx="22" fill="#10141A" stroke="#2A303A" stroke-width="2"/>
-  <text x="58" y="82" fill="#F5F7FA" font-size="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">contextplusplus-cli operator console</text>
+  <text x="58" y="82" fill="#F5F7FA" font-size="34" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">scplus-cli operator console</text>
   <text x="58" y="118" fill="#8B95A7" font-size="18" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Persistent backend, typed panes, jobs/logs, palette, watcher state</text>
 
   <rect x="52" y="154" width="250" height="514" rx="16" fill="#121720" stroke="#313946"/>

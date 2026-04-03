@@ -1,11 +1,11 @@
 {
-  "name": "contextplusplus",
+  "name": "scplus-mcp",
   "version": "1.0.9",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "contextplusplus": "./build/index.js",
-    "contextplusplus-cli": "./build/cli-launcher.js"
+    "scplus-mcp": "./build/index.js",
+    "scplus-cli": "./build/cli-launcher.js"
   },
   "scripts": {
     "build": "tsc",

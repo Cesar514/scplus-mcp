@@ -18,7 +18,7 @@ const toolRefRows = [
     desc: "Create or refresh repo-local .contextplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\ncontextplusplus root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\nscplus root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
   },
   {
     name: "validate_index",
@@ -239,9 +239,9 @@ export default async function Home() {
               backgroundClip: "text",
             }}
           >
-            context++ is an MCP server designed for developers who demand 99%
+            scplus-mcp is an MCP server designed for developers who demand 99%
             accuracy. By combining Treesitter AST & Spectral
-            Clustering, context++ turns a massive codebase into a searchable,
+            Clustering, scplus turns a massive codebase into a searchable,
             hierarchical graph.
           </p>
         </section>
@@ -300,7 +300,7 @@ export default async function Home() {
             marginBottom: 40,
           }}
         >
-          context++ guarantees minimal context bloat. It gives your agent deep
+          scplus guarantees minimal context bloat. It gives your agent deep
           semantic understanding of your codebase, from AST parsing and symbol
           navigation to blast radius analysis and commit validation.
         </p>
@@ -504,11 +504,11 @@ export default async function Home() {
             color: "var(--text-primary)",
           }}
         >
-          context++
+          scplus
         </span>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <a
-            href="https://www.npmjs.com/package/contextplusplus"
+            href="https://www.npmjs.com/package/scplus-mcp"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center"

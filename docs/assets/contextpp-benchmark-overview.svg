@@ -1,7 +1,7 @@
 <svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1400" height="860" rx="28" fill="#FAF7EF"/>
   <rect x="24" y="24" width="1352" height="812" rx="22" fill="#FFFDF8" stroke="#1F2937" stroke-width="2"/>
-  <text x="60" y="86" fill="#111827" font-size="34" font-family="ui-sans-serif, system-ui, sans-serif">context++ benchmark overview</text>
+  <text x="60" y="86" fill="#111827" font-size="34" font-family="ui-sans-serif, system-ui, sans-serif">scplus benchmark overview</text>
   <text x="60" y="122" fill="#4B5563" font-size="18" font-family="ui-sans-serif, system-ui, sans-serif">Real evaluation harness output committed under docs/benchmarks/latest.*</text>
 
   <rect x="60" y="166" width="402" height="204" rx="18" fill="#F9FAFB" stroke="#1F2937" stroke-width="2"/>

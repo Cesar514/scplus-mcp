@@ -25,11 +25,11 @@ function buildConfig(runner: string, ideId: string): string {
 
   if (ideId === "codex") {
     return [
-      '[mcp_servers."contextplusplus"]',
+      '[mcp_servers."scplus-mcp"]',
       `command = "${isNpx ? "npx" : "bunx"}"`,
-      `args = [${isNpx ? '"-y", "contextplusplus"' : '"contextplusplus"'}]`,
+      `args = [${isNpx ? '"-y", "scplus-mcp"' : '"scplus-mcp"'}]`,
       "",
-      '[mcp_servers."contextplusplus".env]',
+      '[mcp_servers."scplus-mcp".env]',
       'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
       'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
       'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
@@ -41,11 +41,11 @@ function buildConfig(runner: string, ideId: string): string {
       {
         $schema: "https://opencode.ai/config.json",
         mcp: {
-          contextplusplus: {
+          "scplus-mcp": {
             type: "local",
             command: isNpx
-              ? ["npx", "-y", "contextplusplus"]
-              : ["bunx", "contextplusplus"],
+              ? ["npx", "-y", "scplus-mcp"]
+              : ["bunx", "scplus-mcp"],
             enabled: true,
             environment: {
               OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
@@ -64,10 +64,10 @@ function buildConfig(runner: string, ideId: string): string {
     return JSON.stringify(
       {
         servers: {
-          contextplusplus: {
+          "scplus-mcp": {
             type: "stdio",
             command: isNpx ? "npx" : "bunx",
-            args: isNpx ? ["-y", "contextplusplus"] : ["contextplusplus"],
+            args: isNpx ? ["-y", "scplus-mcp"] : ["scplus-mcp"],
             env: {
               OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
               OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
@@ -85,9 +85,9 @@ function buildConfig(runner: string, ideId: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        contextplusplus: {
+        "scplus-mcp": {
           command: isNpx ? "npx" : "bunx",
-          args: isNpx ? ["-y", "contextplusplus"] : ["contextplusplus"],
+          args: isNpx ? ["-y", "scplus-mcp"] : ["scplus-mcp"],
           env: {
             OLLAMA_EMBED_MODEL: "qwen3-embedding:0.6b-32k",
             OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
@@ -103,8 +103,8 @@ function buildConfig(runner: string, ideId: string): string {
 
 function buildInitCommand(runner: string, agent: string): string {
   return runner === "npx"
-    ? `npx -y contextplusplus init ${agent}`
-    : `bunx contextplusplus init ${agent}`;
+    ? `npx -y scplus-mcp init ${agent}`
+    : `bunx scplus-mcp init ${agent}`;
 }
 
 function highlightJson(json: string): ReactNode[] {
@@ -276,9 +276,9 @@ export default function IdeSetup() {
               marginBottom: 40,
             }}
           >
-            &ldquo;context++ is the best thing that has happened to my
+            &ldquo;scplus is the best thing that has happened to my
             agent.&rdquo; Give it the semantic understanding it deserves. Add
-            context++ to your IDE by pasting the following JSON into your MCP
+            scplus to your IDE by pasting the following JSON into your MCP
             configuration file.
           </p>
 
@@ -497,7 +497,7 @@ export default function IdeSetup() {
               transition: "color 0.15s",
             }}
           >
-            Before using context++, make sure Ollama is running and install the
+            Before using scplus, make sure Ollama is running and install the
             required models (for example, qwen3-embedding:0.6b-32k and
             nemotron-3-nano:4b-128k).{" "}
             <span style={{ textDecoration: "underline" }}>

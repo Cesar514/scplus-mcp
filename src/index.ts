@@ -46,7 +46,7 @@ const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
   : process.cwd();
 const INSTRUCTIONS_SOURCE_URL = "https://contextplus.vercel.app/api/instructions";
-const INSTRUCTIONS_RESOURCE_URI = "contextplusplus://instructions";
+const INSTRUCTIONS_RESOURCE_URI = "scplus-mcp://instructions";
 
 let noteServerActivity = () => { };
 let ensureTrackerRunning = () => { };
@@ -68,14 +68,14 @@ function withRequestActivity<TArgs, TResult>(
 }
 
 const server = new McpServer({
-  name: "contextplusplus",
+  name: "scplus-mcp",
   version: "1.0.0",
 }, {
   capabilities: { logging: {} },
 });
 
 server.resource(
-  "contextplusplus_instructions",
+  "scplus_mcp_instructions",
   INSTRUCTIONS_RESOURCE_URI,
   withRequestActivity(async (uri) => {
     const response = await fetch(INSTRUCTIONS_SOURCE_URL);
@@ -91,7 +91,7 @@ server.resource(
 
 server.tool(
   "index",
-  "Create or refresh the .contextplus project state for this repo. Builds the repo-local contextplusplus layout, " +
+  "Create or refresh the .contextplus project state for this repo. Builds the repo-local scplus layout, " +
   "writes project config plus a context-tree snapshot into the durable sqlite substrate at .contextplus/state/index.sqlite, " +
   "persists stage state, indexing status, embedding caches, restore points, and file/identifier indexes there, " +
   "and in full mode also persists chunk and code-structure artifacts with explicit contract metadata and no JSON mirrors.",
@@ -511,7 +511,7 @@ async function main() {
   const shutdown = async (reason: string, exitCode: number = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.error(`contextplusplus MCP shutdown requested: ${reason}`);
+    console.error(`scplus-mcp shutdown requested: ${reason}`);
     await backendCore.close();
     await runCleanup({
       cancelEmbeddings: cancelAllEmbeddings,
@@ -557,7 +557,7 @@ async function main() {
   });
 
   noteServerActivity();
-  console.error(`contextplusplus MCP server running on stdio | root: ${ROOT_DIR}`);
+  console.error(`scplus-mcp server running on stdio | root: ${ROOT_DIR}`);
 }
 
 main().catch((error) => {

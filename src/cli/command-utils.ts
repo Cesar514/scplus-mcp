@@ -61,11 +61,11 @@ export function parseRunner(args: string[]): "npx" | "bunx" {
 }
 
 function buildMcpConfig(runner: "npx" | "bunx"): string {
-  const commandArgs = runner === "npx" ? ["-y", "contextplusplus"] : ["contextplusplus"];
+  const commandArgs = runner === "npx" ? ["-y", "scplus-mcp"] : ["scplus-mcp"];
   return JSON.stringify(
     {
       mcpServers: {
-        contextplusplus: {
+        "scplus-mcp": {
           command: runner,
           args: commandArgs,
           env: {
@@ -84,12 +84,12 @@ function buildMcpConfig(runner: "npx" | "bunx"): string {
 }
 
 function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
-  const command = runner === "npx" ? ["npx", "-y", "contextplusplus"] : ["bunx", "contextplusplus"];
+  const command = runner === "npx" ? ["npx", "-y", "scplus-mcp"] : ["bunx", "scplus-mcp"];
   return JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
       mcp: {
-        contextplusplus: {
+        "scplus-mcp": {
           type: "local",
           command,
           enabled: true,
@@ -109,13 +109,13 @@ function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
 }
 
 function buildCodexConfig(runner: "npx" | "bunx"): string {
-  const args = runner === "npx" ? ["-y", "contextplusplus"] : ["contextplusplus"];
+  const args = runner === "npx" ? ["-y", "scplus-mcp"] : ["scplus-mcp"];
   return [
-    '[mcp_servers."contextplusplus"]',
+    '[mcp_servers."scplus-mcp"]',
     `command = ${JSON.stringify(runner)}`,
     `args = ${JSON.stringify(args)}`,
     "",
-    '[mcp_servers."contextplusplus".env]',
+    '[mcp_servers."scplus-mcp".env]',
     'OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"',
     'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
     'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',

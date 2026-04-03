@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 async function main(): Promise<void> {
   const buildDir = dirname(fileURLToPath(import.meta.url));
-  const binaryName = process.platform === "win32" ? "contextplusplus-cli.exe" : "contextplusplus-cli";
+  const binaryName = process.platform === "win32" ? "scplus-cli.exe" : "scplus-cli";
   const binaryPath = resolve(buildDir, binaryName);
   await access(binaryPath, constants.X_OK);
   const child = spawn(binaryPath, process.argv.slice(2), {
