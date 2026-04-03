@@ -1,4 +1,4 @@
-// summary: Encodes and decodes sqlite vector rows for the durable Context+ index.
+// summary: Encodes and decodes sqlite vector rows for the durable scplus index.
 // FEATURE: Binary vector encoding and row mapping for durable retrieval data.
 // inputs: In-memory vectors, sqlite row payloads, and vector collection metadata.
 // outputs: Serialized vector blobs and typed row-mapping helpers for retrieval storage.

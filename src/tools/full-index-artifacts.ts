@@ -6,7 +6,7 @@
 import { readFile } from "fs/promises";
 import { dirname, extname, resolve } from "path";
 import { flattenSymbols, analyzeFile, isSupportedFile } from "../core/parser.js";
-import { ensureContextplusLayout } from "../core/project-layout.js";
+import { ensureScplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION, type FullArtifactManifest } from "./index-contract.js";
 import { loadIndexArtifact, loadIndexServingState, saveIndexArtifact } from "../core/index-database.js";
@@ -570,7 +570,7 @@ export async function ensureFullIndexArtifacts(
 ): Promise<FullIndexArtifactResult> {
   const rootDir = resolve(options.rootDir);
   const servingState = await loadIndexServingState(rootDir);
-  await ensureContextplusLayout(rootDir);
+  await ensureScplusLayout(rootDir);
 
   const chunkResult = await refreshChunkIndexState(rootDir, async (progress: ChunkIndexProgress) => {
     await onProgress?.({

@@ -1,10 +1,10 @@
-# Context+ Architecture
+# scplus Architecture
 
-This document is the short authoritative description of the current Context+ runtime.
+This document is the short authoritative description of the current scplus runtime.
 
 ## Serving Model
 
-Context+ serves prepared state from one sqlite-backed repo-local index at `.contextplus/state/index.sqlite`.
+scplus serves prepared state from one sqlite-backed repo-local index at `.scplus/state/index.sqlite`.
 
 - Query surfaces read from one active generation only.
 - Reindex and repair flows reserve a pending generation, write candidate artifacts there, validate that generation, and only then promote it to active.
@@ -22,7 +22,7 @@ Generations are durable serving snapshots, not ad hoc caches.
 
 ## Query Escalation Model
 
-Context+ uses a two-lane query model.
+scplus uses a two-lane query model.
 
 - Exact navigation questions should stay on the prepared exact-query substrate through `symbol`, `word`, `outline`, `deps`, `status`, and `changes`.
 - Broader discovery questions route through `search` with `intent="related"` and the unified ranking stack over file, chunk, identifier, and structure evidence.

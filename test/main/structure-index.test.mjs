@@ -10,7 +10,7 @@ import { join } from "node:path";
 describe("structure-index", () => {
   it("persists richer file and module structure artifacts", async () => {
     const { refreshStructureIndexState } = await import("../../build/tools/full-index-artifacts.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-structure-index-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-structure-index-"));
 
     try {
       await mkdir(join(rootDir, "src", "lib"), { recursive: true });

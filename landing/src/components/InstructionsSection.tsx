@@ -1,4 +1,4 @@
-// summary: Mirrors the repo-local Context+ instructions inside the landing page content.
+// summary: Mirrors the repo-local scplus instructions inside the landing page content.
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
 // inputs: Mirrored instructions text, section copy, and layout props.
 // outputs: Rendered instructions section for landing readers.

@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
@@ -45,7 +45,7 @@ function readVectorEntriesFromDb(dbPath, namespace) {
 describe("chunk-index", () => {
   it("builds first-class symbol and fallback chunk artifacts", async () => {
     const { buildChunkArtifactsForFile } = await import("../../build/tools/chunk-index.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-chunk-index-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-chunk-index-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -99,7 +99,7 @@ describe("chunk-index", () => {
 
   it("persists versioned chunk state and reuses chunk embeddings on repeated warmups", async () => {
     const { buildChunkArtifactsForFile, refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-chunk-index-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-chunk-index-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(

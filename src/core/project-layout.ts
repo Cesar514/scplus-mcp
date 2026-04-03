@@ -6,16 +6,16 @@
 import { mkdir } from "fs/promises";
 import { join } from "path";
 
-export const CONTEXTPLUS_DIR = ".scplus";
-export const CONTEXTPLUS_HUBS_DIR = join(CONTEXTPLUS_DIR, "hubs");
-export const CONTEXTPLUS_EMBEDDINGS_DIR = join(CONTEXTPLUS_DIR, "embeddings");
-export const CONTEXTPLUS_CONFIG_DIR = join(CONTEXTPLUS_DIR, "config");
-export const CONTEXTPLUS_CHECKPOINTS_DIR = join(CONTEXTPLUS_DIR, "checkpoints");
-export const CONTEXTPLUS_DERIVED_DIR = join(CONTEXTPLUS_DIR, "derived");
-export const CONTEXTPLUS_STATE_DIR = join(CONTEXTPLUS_DIR, "state");
-export const CONTEXTPLUS_INDEX_DB_FILE = join(CONTEXTPLUS_STATE_DIR, "index.sqlite");
+export const SCPLUS_DIR = ".scplus";
+export const SCPLUS_HUBS_DIR = join(SCPLUS_DIR, "hubs");
+export const SCPLUS_EMBEDDINGS_DIR = join(SCPLUS_DIR, "embeddings");
+export const SCPLUS_CONFIG_DIR = join(SCPLUS_DIR, "config");
+export const SCPLUS_CHECKPOINTS_DIR = join(SCPLUS_DIR, "checkpoints");
+export const SCPLUS_DERIVED_DIR = join(SCPLUS_DIR, "derived");
+export const SCPLUS_STATE_DIR = join(SCPLUS_DIR, "state");
+export const SCPLUS_INDEX_DB_FILE = join(SCPLUS_STATE_DIR, "index.sqlite");
 
-export interface ContextplusLayout {
+export interface ScplusLayout {
   root: string;
   hubs: string;
   embeddings: string;
@@ -25,20 +25,20 @@ export interface ContextplusLayout {
   state: string;
 }
 
-export function getContextplusLayout(rootDir: string): ContextplusLayout {
+export function getScplusLayout(rootDir: string): ScplusLayout {
   return {
-    root: join(rootDir, CONTEXTPLUS_DIR),
-    hubs: join(rootDir, CONTEXTPLUS_HUBS_DIR),
-    embeddings: join(rootDir, CONTEXTPLUS_EMBEDDINGS_DIR),
-    config: join(rootDir, CONTEXTPLUS_CONFIG_DIR),
-    checkpoints: join(rootDir, CONTEXTPLUS_CHECKPOINTS_DIR),
-    derived: join(rootDir, CONTEXTPLUS_DERIVED_DIR),
-    state: join(rootDir, CONTEXTPLUS_STATE_DIR),
+    root: join(rootDir, SCPLUS_DIR),
+    hubs: join(rootDir, SCPLUS_HUBS_DIR),
+    embeddings: join(rootDir, SCPLUS_EMBEDDINGS_DIR),
+    config: join(rootDir, SCPLUS_CONFIG_DIR),
+    checkpoints: join(rootDir, SCPLUS_CHECKPOINTS_DIR),
+    derived: join(rootDir, SCPLUS_DERIVED_DIR),
+    state: join(rootDir, SCPLUS_STATE_DIR),
   };
 }
 
-export async function ensureContextplusLayout(rootDir: string): Promise<ContextplusLayout> {
-  const layout = getContextplusLayout(rootDir);
+export async function ensureScplusLayout(rootDir: string): Promise<ScplusLayout> {
+  const layout = getScplusLayout(rootDir);
   await mkdir(layout.root, { recursive: true });
   await mkdir(layout.state, { recursive: true });
   return layout;

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 const execFileAsync = promisify(execFile);
 
 function readArtifactFromDb(dbPath, artifactKey) {
@@ -41,7 +41,7 @@ describe("hybrid-retrieval", () => {
     const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
     const { ensureIdentifierSearchIndex } = await import("../../build/tools/semantic-identifiers.js");
     const { refreshHybridChunkIndex, refreshHybridIdentifierIndex } = await import("../../build/tools/hybrid-retrieval.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-index-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hybrid-index-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -105,7 +105,7 @@ describe("hybrid-retrieval", () => {
       searchHybridChunkIndex,
       searchHybridIdentifierIndex,
     } = await import("../../build/tools/hybrid-retrieval.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-search-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hybrid-search-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -170,7 +170,7 @@ describe("hybrid-retrieval", () => {
   it("preserves explicit symbol entity typing for a real symbol named file", async () => {
     const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
     const { refreshHybridChunkIndex, searchHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-symbol-file-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hybrid-symbol-file-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -203,7 +203,7 @@ describe("hybrid-retrieval", () => {
   it("reports keyword retrieval as explicit lexical-only mode instead of silently treating vectors as optional", async () => {
     const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
     const { refreshHybridChunkIndex, searchHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-keyword-mode-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hybrid-keyword-mode-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -240,7 +240,7 @@ describe("hybrid-retrieval", () => {
     const { deleteVectorEntries } = await import("../../build/core/index-database.js");
     const { refreshChunkIndexState, warmChunkEmbeddings } = await import("../../build/tools/chunk-index.js");
     const { refreshHybridChunkIndex } = await import("../../build/tools/hybrid-retrieval.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hybrid-missing-vector-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hybrid-missing-vector-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(
@@ -263,7 +263,7 @@ describe("hybrid-retrieval", () => {
       await deleteVectorEntries(rootDir, "chunk-search", [symbolChunk.id]);
 
       const script = `
-        process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+        process.env.SCPLUS_EMBED_PROVIDER = "mock";
         const { searchHybridChunkIndex } = await import(${JSON.stringify(join(process.cwd(), "build", "tools", "hybrid-retrieval.js"))});
         try {
           await searchHybridChunkIndex(process.env.TEST_ROOT, "shout greeting upper case", { topK: 2 });

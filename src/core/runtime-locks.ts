@@ -1,12 +1,12 @@
 // summary: Coordinates cross-process runtime locks for shared repo-level backend work.
-// FEATURE: Loud cross-process watcher and mutation ownership for Context+ runtimes.
+// FEATURE: Loud cross-process watcher and mutation ownership for scplus runtimes.
 // inputs: Repository roots, lock kinds, acquisition timing, and lock-owner metadata.
 // outputs: Acquired lock handles or explicit ownership errors instead of silent races.
 
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { ensureContextplusLayout } from "./project-layout.js";
+import { ensureScplusLayout } from "./project-layout.js";
 
 export type RepoRuntimeLockKind = "mutation" | "watcher";
 
@@ -37,7 +37,7 @@ export class RepoRuntimeLockBusyError extends Error {
     readonly owner: RepoRuntimeLockOwner,
   ) {
     super(
-      `Context+ ${kind} lock for ${rootDir} is already held by pid ${owner.pid} ` +
+      `scplus ${kind} lock for ${rootDir} is already held by pid ${owner.pid} ` +
       `(${owner.holder}, started ${owner.startedAt}). Close the competing runtime or wait for it to finish.`,
     );
     this.name = "RepoRuntimeLockBusyError";
@@ -89,7 +89,7 @@ export async function acquireRepoRuntimeLock(
   options: AcquireRepoRuntimeLockOptions,
 ): Promise<RepoRuntimeLockHandle> {
   const normalizedRootDir = resolve(rootDir);
-  await ensureContextplusLayout(normalizedRootDir);
+  await ensureScplusLayout(normalizedRootDir);
   const lockDir = join(normalizedRootDir, ".scplus", "locks");
   await mkdir(lockDir, { recursive: true });
   const lockPath = runtimeLockPath(normalizedRootDir, kind);

@@ -20,7 +20,6 @@ dist/
 .env.*.local
 
 # Development
-.contextplus/
 .mcp_data/
 .turbo/
 .wrangler/

@@ -138,8 +138,6 @@ type exportFinishedMsg struct {
 	err  error
 }
 
-type frameMsg time.Time
-
 type backendEventMsg struct {
 	event backend.Event
 }
@@ -271,7 +269,7 @@ type Model struct {
 	client         *backend.Client
 	width          int
 	height         int
-	magicianFrame  int
+	shutdownAll    bool
 	doctor         backend.DoctorReport
 	doctorLoaded   bool
 	restorePoints  []backend.RestorePoint
@@ -444,16 +442,14 @@ func newOverlayState() overlayState {
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{ID: "exit", Title: "exit", Subtitle: "Quit the human CLI", Action: "exit"},
-		{ID: "activity", Title: "activity", Subtitle: "Return to the main command surface", Action: "open-activity"},
-		{ID: "back", Title: "back", Subtitle: "Move backward through navigation history", Action: "history-back"},
-		{ID: "forward", Title: "forward", Subtitle: "Move forward through navigation history", Action: "history-forward"},
 		{ID: "open-overview", Title: "overview", Subtitle: "Open the operator health and observability window", Action: "open-overview"},
 		{ID: "open-tree", Title: "tree", Subtitle: "Open the prepared tree window", Action: "open-tree"},
 		{ID: "open-hubs", Title: "hubs", Subtitle: "Open manual and suggested hubs", Action: "open-hubs"},
 		{ID: "open-issue", Title: "issue", Subtitle: "Open the full current issue detail", Action: "open-issue"},
 		{ID: "open-log", Title: "log", Subtitle: "Open the full operator log history", Action: "open-log"},
 		{ID: "open-restore", Title: "restore", Subtitle: "Open restore points and recovery", Action: "open-restore"},
-		{ID: "open-cluster", Title: "cluster", Subtitle: "Open persisted semantic clusters", Action: "open-cluster"},
+		{ID: "cluster", Title: "cluster", Subtitle: "Run semantic clustering and refresh cluster labels", Action: "cluster"},
+		{ID: "open-cluster", Title: "view-clusters", Subtitle: "Open persisted semantic clusters", Action: "open-cluster"},
 		{ID: "open-status", Title: "status", Subtitle: "Open the git worktree status table", Action: "open-status"},
 		{ID: "open-changes", Title: "changes", Subtitle: "Open changed-file stats and ranges", Action: "open-changes"},
 		{ID: "open-search", Title: "search", Subtitle: "Open the ranked search results window", Action: "open-search"},
@@ -485,10 +481,11 @@ func paletteCommands() []paletteCommand {
 }
 
 func (m *Model) seedJobs() {
-	m.jobOrder = []string{"index", "refresh", "restore", "lint", "query"}
+	m.jobOrder = []string{"index", "refresh", "cluster", "restore", "lint", "query"}
 	m.jobs = map[string]*jobState{
 		"index":   newJobState("index", "Index"),
 		"refresh": newJobState("refresh", "Refresh"),
+		"cluster": newJobState("cluster", "Cluster"),
 		"restore": newJobState("restore", "Restore"),
 		"lint":    newJobState("lint", "Lint"),
 		"query":   newJobState("query", "Query"),
@@ -552,7 +549,7 @@ func (m *Model) selectedJob() *jobState {
 }
 
 func (m *Model) activeStatusJob() *jobState {
-	for _, id := range []string{"index", "refresh", "restore", "lint", "query"} {
+	for _, id := range []string{"index", "refresh", "cluster", "restore", "lint", "query"} {
 		job := m.job(id)
 		if isActiveJobState(job.State) {
 			return job
@@ -664,12 +661,6 @@ func (m *Model) finishRefreshSubtask(task string, err error) {
 	m.refreshJobTable()
 }
 
-func animateCmd() tea.Cmd {
-	return tea.Tick(220*time.Millisecond, func(t time.Time) tea.Msg {
-		return frameMsg(t)
-	})
-}
-
 func loadDoctorCmd(client *backend.Client, root string) tea.Cmd {
 	return func() tea.Msg {
 		report, err := client.Doctor(context.Background(), root)
@@ -693,7 +684,7 @@ func loadHubsCmd(client *backend.Client, root string) tea.Cmd {
 
 func loadClusterCmd(client *backend.Client, root string) tea.Cmd {
 	return func() tea.Msg {
-		payload, err := client.Cluster(context.Background(), root)
+		payload, err := client.ViewClusters(context.Background(), root)
 		return textLoadedMsg{kind: viewCluster, text: payload.Text, err: err}
 	}
 }
@@ -759,7 +750,7 @@ func refreshAllCmd(client *backend.Client, root string) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(animateCmd(), refreshAllCmd(m.client, m.root), waitForBackendEventCmd(m.client.Events()))
+	return tea.Batch(refreshAllCmd(m.client, m.root), waitForBackendEventCmd(m.client.Events()))
 }
 
 func (m *Model) appendLog(line string) {
@@ -1311,7 +1302,6 @@ func (m *Model) refreshSidebar() {
 		{ID: "supersede-pending", Title: supersedeLabel, Subtitle: supersedeSubtitle, IsAction: true, Action: "supersede-pending"},
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
 		{ID: "hub-create", Title: "New hub", Subtitle: "Create a manual feature hub", IsAction: true, Action: "hub-create"},
-		{ID: "palette", Title: "Command palette", Subtitle: "Search backend actions, exact lookups, and exports", IsAction: true, Action: "palette"},
 		{ID: "help", Title: "Help", Subtitle: "Show keybindings, filters, and exports", IsAction: true, Action: "help"},
 	}
 	if m.sidebarIndex >= len(m.sidebar) {
@@ -1973,6 +1963,11 @@ func (m *Model) executePaletteAction(action string) tea.Cmd {
 		m.focus = focusContent
 		m.recordNavigation()
 		return nil
+	case "cluster":
+		m.startOperatorJob("cluster", "cluster-scan", "semantic cluster refresh requested", "semantic-cluster-index")
+		return runTextCommandCmd("cluster", viewCluster, "Clusters", "Refreshed semantic cluster summaries", true, func() (backend.TextPayload, error) {
+			return m.client.ClusterRefresh(context.Background(), m.root)
+		})
 	case "open-status":
 		m.setActiveView(viewStatus)
 		m.focus = focusContent
@@ -2156,9 +2151,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = message.Height
 		m.syncDetailViewport()
 		return m, nil
-	case frameMsg:
-		m.magicianFrame = (m.magicianFrame + 1) % len(magicianFrames)
-		return m, animateCmd()
 	case doctorLoadedMsg:
 		if message.err != nil {
 			m.backendOnline = false
@@ -2400,6 +2392,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch message.String() {
 		case "ctrl+c":
+			return m, tea.Quit
+		case "ctrl+x":
+			m.shutdownAll = true
 			return m, tea.Quit
 		case "ctrl+p", ":":
 			if m.activeView == viewActivity && m.focus == focusContent {
@@ -2875,15 +2870,12 @@ func (m Model) renderActivityShell(width int, height int) string {
 	bar.Width = max(24, innerWidth-2)
 	query := strings.TrimSpace(bar.Value())
 	activeJob := m.activeStatusJob()
-	magician := renderMagician(magicianFrames[m.magicianFrame], innerWidth)
 	wrapWidth := max(24, innerWidth-2)
 	metaLines := m.renderWindowMeta(innerWidth)
-	runtimeStatus := subtitleStyle.Width(innerWidth).Render(m.magicianRuntimeStatus(activeJob))
+	runtimeStatus := subtitleStyle.Width(innerWidth).Render(m.runtimeStatusLine(activeJob))
 	lines := []string{
 		renderPaneTitle("SCPLUS-CLI", m.focus == focusContent),
 		runtimeStatus,
-		magician,
-		"",
 		bar.View(),
 	}
 	if query != "" {
@@ -2944,8 +2936,6 @@ func (m Model) renderSingleContentWindow(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(title, m.focus == focusContent || m.focus == focusDetail || m.focus == focusWizard),
 		subtitleStyle.Width(innerWidth).Render(subtitle),
-		renderMagician(magicianFrames[m.magicianFrame], innerWidth),
-		"",
 	}
 	if section != nil && section.ID != viewIssue && section.ID != viewLog {
 		lines = append(lines, subtitleStyle.Width(innerWidth).Render(fmt.Sprintf(
@@ -3087,9 +3077,6 @@ func (m Model) statusLineText() string {
 			statusParts = append(statusParts, "freshness: "+m.doctor.Serving.ActiveGenerationFreshness)
 		}
 	}
-	if len(m.history) > 1 {
-		statusParts = append(statusParts, fmt.Sprintf("view trail: %d/%d", m.historyIndex+1, len(m.history)))
-	}
 	return strings.Join(statusParts, " | ")
 }
 
@@ -3112,12 +3099,12 @@ func (m Model) windowHelpText() string {
 		return "Help: Enter or Esc closes"
 	}
 	if m.activeView == viewActivity {
-		return "Activity: type command letters | Up/Down choose | Enter run | Ctrl+P palette | Ctrl+C quit"
+		return "Activity: type command letters | Up/Down choose | Enter run | Ctrl+P palette | Ctrl+X stop all"
 	}
 	if m.activeView == viewRestore && m.focus == focusContent {
-		return "Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | restore-point | export | Ctrl+C quit"
+		return "Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | restore-point | export | Ctrl+X stop all"
 	}
-	return "Type command letters in Activity | Ctrl+P palette | Ctrl+F search | Esc activity | Ctrl+C quit"
+	return "Type command letters in Activity | Ctrl+P palette | Ctrl+F search | Esc activity | Ctrl+X stop all"
 }
 
 func (m Model) renderWindowMeta(width int) []string {
@@ -3190,8 +3177,6 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(m.overlay.Title+" | scplus-cli", true),
 		subtitleStyle.Width(innerWidth).Render(m.overlay.Subtitle),
-		"",
-		renderMagician(magicianFrames[m.magicianFrame], innerWidth),
 		"",
 	}
 	switch m.overlay.Mode {
@@ -3947,15 +3932,15 @@ func formatOllamaSummary(status backend.OllamaRuntimeStatus) string {
 	return status.Error
 }
 
-func (m Model) magicianRuntimeStatus(activeJob *jobState) string {
+func (m Model) runtimeStatusLine(activeJob *jobState) string {
 	if activeJob == nil || !isActiveJobState(activeJob.State) {
-		return "The magician is resting"
+		return "Runtime is idle"
 	}
 	modelName := m.activeRuntimeModelName(activeJob)
 	if strings.TrimSpace(modelName) == "" {
-		return "The magician is resting"
+		return "Runtime is idle"
 	}
-	return fmt.Sprintf("The magician is using '%s' for %s", modelName, strings.ToLower(strings.TrimSpace(activeJob.Title)))
+	return fmt.Sprintf("Runtime is using '%s' for %s", modelName, strings.ToLower(strings.TrimSpace(activeJob.Title)))
 }
 
 func (m Model) activeRuntimeModelName(activeJob *jobState) string {
@@ -3995,7 +3980,7 @@ func runtimeModelPreferenceForJob(activeJob *jobState) string {
 	switch strings.ToLower(strings.TrimSpace(activeJob.ID)) {
 	case "index", "refresh":
 		return strings.TrimSpace(os.Getenv("OLLAMA_EMBED_MODEL"))
-	case "query":
+	case "cluster", "query":
 		return strings.TrimSpace(os.Getenv("OLLAMA_CHAT_MODEL"))
 	default:
 		return strings.TrimSpace(os.Getenv("OLLAMA_CHAT_MODEL"))
@@ -4107,23 +4092,8 @@ func renderPreviewSectionWithLimit(title string, value string, width int, maxLin
 	return rendered
 }
 
-func centerBlock(content string, width int) string {
-	containerWidth := max(1, width)
-	lines := strings.Split(content, "\n")
-	blockWidth := 0
-	for _, line := range lines {
-		blockWidth = max(blockWidth, lipgloss.Width(line))
-	}
-	leftPad := 0
-	if containerWidth > blockWidth {
-		leftPad = (containerWidth - blockWidth) / 2
-	}
-	prefix := strings.Repeat(" ", leftPad)
-	centered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		centered = append(centered, prefix+line)
-	}
-	return strings.Join(centered, "\n")
+func (m Model) RequestedGlobalShutdown() bool {
+	return m.shutdownAll
 }
 
 func (m Model) renderActivityCommandRows(width int, height int) []string {

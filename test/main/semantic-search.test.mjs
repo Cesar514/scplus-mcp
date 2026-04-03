@@ -70,10 +70,10 @@ describe("semantic-search", () => {
 
     it("skips oversized data files and still indexes source files", async () => {
       const rootDir = await mkdtemp(
-        join(tmpdir(), "contextplus-semantic-search-"),
+        join(tmpdir(), "scplus-semantic-search-"),
       );
       const originalEmbed = Ollama.prototype.embed;
-      const previousSizeLimit = process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
+      const previousSizeLimit = process.env.SCPLUS_MAX_EMBED_FILE_SIZE;
 
       Ollama.prototype.embed = async function ({ input }) {
         const batch = Array.isArray(input) ? input : [input];
@@ -84,7 +84,7 @@ describe("semantic-search", () => {
         };
       };
 
-      process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = "1024";
+      process.env.SCPLUS_MAX_EMBED_FILE_SIZE = "1024";
 
       try {
         await writeFile(
@@ -118,8 +118,8 @@ describe("semantic-search", () => {
         assert.doesNotMatch(result, /data\.json/);
       } finally {
         if (previousSizeLimit === undefined)
-          delete process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
-        else process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
+          delete process.env.SCPLUS_MAX_EMBED_FILE_SIZE;
+        else process.env.SCPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
       }
@@ -127,7 +127,7 @@ describe("semantic-search", () => {
 
     it("persists file search state and refreshes only changed files on later searches", async () => {
       const rootDir = await mkdtemp(
-        join(tmpdir(), "contextplus-semantic-search-"),
+        join(tmpdir(), "scplus-semantic-search-"),
       );
       const originalEmbed = Ollama.prototype.embed;
 
@@ -206,7 +206,7 @@ describe("semantic-search", () => {
 
     it("skips content hashing on unchanged refreshes and hashes only when file metadata changes", async () => {
       const rootDir = await mkdtemp(
-        join(tmpdir(), "contextplus-semantic-search-"),
+        join(tmpdir(), "scplus-semantic-search-"),
       );
       const originalEmbed = Ollama.prototype.embed;
       const alphaContent = [
@@ -259,10 +259,10 @@ describe("semantic-search", () => {
 
     it("blocks refresh loudly when a previously indexed file would disappear because it now exceeds the size limit", async () => {
       const rootDir = await mkdtemp(
-        join(tmpdir(), "contextplus-semantic-search-"),
+        join(tmpdir(), "scplus-semantic-search-"),
       );
       const originalEmbed = Ollama.prototype.embed;
-      const previousSizeLimit = process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
+      const previousSizeLimit = process.env.SCPLUS_MAX_EMBED_FILE_SIZE;
       const initialContent = [
         "# Phase 15 fixture",
         "",
@@ -277,7 +277,7 @@ describe("semantic-search", () => {
         };
       };
 
-      process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = "1024";
+      process.env.SCPLUS_MAX_EMBED_FILE_SIZE = "1024";
 
       try {
         await writeFile(join(rootDir, "notes.md"), initialContent);
@@ -305,8 +305,8 @@ describe("semantic-search", () => {
         assert.equal(afterState.files["notes.md"].doc.content, beforeState.files["notes.md"].doc.content);
       } finally {
         if (previousSizeLimit === undefined)
-          delete process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE;
-        else process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
+          delete process.env.SCPLUS_MAX_EMBED_FILE_SIZE;
+        else process.env.SCPLUS_MAX_EMBED_FILE_SIZE = previousSizeLimit;
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
       }
@@ -314,7 +314,7 @@ describe("semantic-search", () => {
 
     it("surfaces supported-source document construction failures instead of silently dropping the file", async () => {
       const rootDir = await mkdtemp(
-        join(tmpdir(), "contextplus-semantic-search-"),
+        join(tmpdir(), "scplus-semantic-search-"),
       );
       const originalEmbed = Ollama.prototype.embed;
       const sourceContent = [

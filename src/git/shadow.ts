@@ -7,7 +7,7 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, join } from "path";
 import { loadIndexArtifact, loadRestorePointBackup, pruneRestorePointBackups, saveIndexArtifact, saveRestorePointBackup } from "../core/index-database.js";
-import { ensureContextplusLayout } from "../core/project-layout.js";
+import { ensureScplusLayout } from "../core/project-layout.js";
 import { refreshPreparedIndexAfterWrite, runSerializedRootMutation } from "../tools/write-freshness.js";
 
 const SHADOW_BRANCH = "mcp-shadow-history";
@@ -28,7 +28,7 @@ async function saveManifest(rootDir: string, points: RestorePoint[]): Promise<vo
 }
 
 export async function createRestorePoint(rootDir: string, files: string[], message: string): Promise<RestorePoint> {
-  await ensureContextplusLayout(rootDir);
+  await ensureScplusLayout(rootDir);
   const id = `rp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   for (const file of files) {

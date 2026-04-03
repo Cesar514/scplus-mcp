@@ -2,6 +2,22 @@
 
 ## Current Goal History
 
+- [x] Run an exhaustive local verification pass across the current scplus setup, including full automated suites, live doctor/status checks, and direct command smoke tests for the main shipped CLI and backend surfaces.
+- [x] Verify the real built `scplus-cli` and `node build/index.js` command surfaces on this repository and on a fixture repository, then capture any remaining failing commands instead of assuming setup health from partial tests.
+- [x] Reproduce the live `cluster` JSON failure against this repository, inspect the real chat-model response contract, and stop relying on mock-only verification for semantic cluster refresh.
+- [x] Harden structured chat generation with schema-backed Ollama JSON output plus retry-on-invalid-JSON behavior, and verify that both `node build/index.js cluster` and `./build/scplus-cli cluster` now succeed on this repository.
+- [x] Add a real chat-generation backend so semantic clustering and broad research invoke the configured chat model instead of relying only on embeddings and heuristic strings.
+- [x] Use the chat model to generate semantic cluster labels and summaries during cluster artifact refresh, then verify the persisted cluster state reflects those generated semantics.
+- [x] Use the chat model to synthesize research answers from ranked evidence, then verify the research surface includes a model-generated semantic summary instead of only templated artifact dumps.
+- [x] Correct the human CLI runtime-model indicator so `cluster` reports the embedding model instead of implying chat-model work.
+- [x] Trim the human CLI command surface so internal navigation-only actions do not appear as operator-facing commands.
+- [x] Remove the `view trail` status text from the human CLI so internal navigation bookkeeping is no longer shown to operators.
+- [x] Split the human CLI cluster surface so `cluster` runs semantic clustering work with visible job/log activity while `view-clusters` remains the read-only persisted cluster browser.
+- [x] Verify the split cluster behavior directly through focused CLI/backend tests plus built command runs that show `cluster` mutates and `view-clusters` only renders.
+- [x] Remove the CLI mascot entirely so the activity shell, detail windows, and overlays render without any mascot block or mascot-themed status text.
+- [x] Make `Ctrl+X` quit the human CLI and terminate live local scplus runtime processes discovered by the launcher sweep, then verify the shutdown path with launcher-side process tests plus a live CLI snapshot.
+- [x] Remove the legacy all-caps env prefix from active source, tests, and docs so that exact stale prefix no longer appears anywhere in the repository.
+- [x] Replace the abandoned dense sprite pipeline with a fixed 8-line ASCII wizard hat and wand animation, verify it in focused UI coverage, and confirm the shipped `scplus-cli snapshot` activity shell now renders that simpler mascot.
 - [x] Align repo-facing config and metadata with the standalone `scplus-mcp` repository by renaming the landing Cloudflare worker/service away from stale `contextplus`, syncing MCP server version metadata to `package.json`, and updating the README naming contract so configurable published identifiers now point to `scplus-mcp`.
 - [x] Fix the activity window header so it drops `Activity |`, shows `SCPLUS-CLI` as the brand title, separates the magician runtime line, redraws the ASCII magician so the hat and body stay aligned, clears stale `cluster failed` state after a successful post-index refresh, avoids leaving a fake queued index state when the backend rejects a duplicate run, and verifies the shipped semantic clustering command surface.
 - [x] Finish the single-window CLI cleanup by removing slash-only command invocation, fixing the ASCII magician proportions and placement, keeping the status/help rails fully inside a complete bordered window at all terminal sizes, adding explicit scroll visibility indicators plus mouse-wheel scrolling for truncated detail views, enforcing ESC hierarchy so the root activity view does nothing on ESC, auditing and deleting stale unused UI paths surfaced by blast-radius plus lint analysis, and renaming the repo-local state root from `.contextplus` to `.scplus` so new indexes are created only under the new directory.
@@ -498,6 +514,12 @@
 - [x] Document the full MCP tool surface, bridge/local automation surface, human CLI command surface, supported client init/config flows, and Codex TOML configuration in the README.
 - [x] Correct the model wording in the README to reflect that the Ollama models were downloaded from official upstream models and then locally modified to extend context window configuration, rather than presented as bespoke model families.
 - [x] Verify the expanded README against source files, the previous README content, and the install script workflow, then move this goal from `TODO.md` to `TODO_COMPLETED.md`.
+
+## repository readme cli surface completion completed
+
+- [x] Expand the README command documentation again so the documented CLI surfaces match the current direct `scplus-mcp` subcommands, bridge commands, persistent `bridge-serve` controls, and direct `scplus-cli` subcommands.
+- [x] Add the interactive `scplus-cli` operator command catalog and keybindings so the human CLI surface is documented as an actual command surface rather than only as a launcher.
+- [x] Re-verify the README against `src/cli/commands.ts`, `cli/cmd/scplus-cli/main.go`, and `cli/internal/ui/model.go` so the listed commands and actions correspond to live source.
 
 ## ascii magician likeness refinement completed
 

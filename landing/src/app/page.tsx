@@ -1,4 +1,4 @@
-// summary: Renders the main landing page for the current Context+ public product surface.
+// summary: Renders the main landing page for the current scplus public product surface.
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
 // inputs: Static marketing content, composed landing components, and tool reference data.
 // outputs: The landing page React tree for the marketing homepage.
@@ -15,10 +15,10 @@ export const dynamic = "force-dynamic";
 const toolRefRows = [
   {
     name: "index",
-    desc: "Create or refresh repo-local .contextplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
+    desc: "Create or refresh repo-local .scplus state. Defaults to full mode and writes the authoritative sqlite index plus generated hub suggestions.",
     input: "{}",
     output:
-      '"Indexed my-repo\nRoot: /workspace/my-repo\nscplus root: .contextplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .contextplus/state/index.sqlite\n  .contextplus/hubs/suggested/auth.md"',
+      '"Indexed my-repo\nRoot: /workspace/my-repo\nscplus root: .scplus\nMode: full\nFiles: 84\nDirectories: 12\n\nCreated or updated:\n  .scplus/state/index.sqlite\n  .scplus/hubs/suggested/auth.md"',
   },
   {
     name: "validate_index",

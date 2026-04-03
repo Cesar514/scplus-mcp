@@ -7,7 +7,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 describe("semantic-navigate", () => {
   it("exports semanticNavigate as a function", async () => {
@@ -24,7 +24,7 @@ describe("semantic-navigate", () => {
     const { semanticNavigate } = await import("../../build/tools/semantic-navigate.js");
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const rootDir = await mkdtemp(
-      join(tmpdir(), "contextplus-semantic-navigate-"),
+      join(tmpdir(), "scplus-semantic-navigate-"),
     );
 
     try {

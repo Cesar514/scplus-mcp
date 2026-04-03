@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 describe("init-opencode", () => {
   it("writes valid opencode.json for npx runner", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-opencode-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-opencode-"));
     try {
       await execFileAsync(
         process.execPath,
@@ -46,7 +46,7 @@ describe("init-opencode", () => {
   });
 
   it("writes valid opencode.json for bunx runner", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-opencode-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-opencode-"));
     try {
       await execFileAsync(
         process.execPath,

@@ -1,4 +1,4 @@
-// summary: Serves the repo-authoritative Context+ instructions through a landing-site API route.
+// summary: Serves the repo-authoritative scplus instructions through a landing-site API route.
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
 // inputs: Incoming route requests and the repo-local INSTRUCTIONS.md source file.
 // outputs: HTTP responses containing the current instruction markdown payload.

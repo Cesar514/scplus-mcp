@@ -366,14 +366,14 @@ type Client struct {
 }
 
 func Discover() (*Client, error) {
-	nodeBin := os.Getenv("CONTEXTPLUS_NODE_BIN")
+	nodeBin := os.Getenv("SCPLUS_NODE_BIN")
 	if nodeBin == "" {
 		nodeBin = "node"
 	}
 	if _, err := exec.LookPath(nodeBin); err != nil {
 		return nil, fmt.Errorf("node runtime is required for the scplus-cli backend: %w", err)
 	}
-	entry := os.Getenv("CONTEXTPLUS_BACKEND_ENTRY")
+	entry := os.Getenv("SCPLUS_BACKEND_ENTRY")
 	if entry == "" {
 		exePath, err := os.Executable()
 		if err != nil {
@@ -622,6 +622,16 @@ func (c *Client) Cluster(ctx context.Context, root string) (TextPayload, error) 
 	var payload TextPayload
 	err := c.call(ctx, "cluster", map[string]any{"root": root}, &payload)
 	return payload, err
+}
+
+func (c *Client) ViewClusters(ctx context.Context, root string) (TextPayload, error) {
+	var payload TextPayload
+	err := c.call(ctx, "view-clusters", map[string]any{"root": root}, &payload)
+	return payload, err
+}
+
+func (c *Client) ClusterRefresh(ctx context.Context, root string) (TextPayload, error) {
+	return c.Cluster(ctx, root)
 }
 
 func (c *Client) RestorePoints(ctx context.Context, root string) ([]RestorePoint, error) {

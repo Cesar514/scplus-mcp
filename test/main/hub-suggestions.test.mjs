@@ -32,9 +32,9 @@ function getActiveGenerationFromDb(dbPath) {
 
 describe("hub suggestions", () => {
   it("persists suggested hubs and feature groups from full-index artifacts", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-hub-suggestions-"));
-    const previousProvider = process.env.CONTEXTPLUS_EMBED_PROVIDER;
-    process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hub-suggestions-"));
+    const previousProvider = process.env.SCPLUS_EMBED_PROVIDER;
+    process.env.SCPLUS_EMBED_PROVIDER = "mock";
     try {
       await mkdir(join(rootDir, "src", "auth"), { recursive: true });
       await mkdir(join(rootDir, "src", "billing"), { recursive: true });
@@ -107,8 +107,8 @@ describe("hub suggestions", () => {
       assert.match(rankedOutput, /Ranking mode: both/);
       assert.match(rankedOutput, /\.scplus\/hubs\/suggested\/authentication\.md \[suggested\]/);
     } finally {
-      if (previousProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
-      else process.env.CONTEXTPLUS_EMBED_PROVIDER = previousProvider;
+      if (previousProvider === undefined) delete process.env.SCPLUS_EMBED_PROVIDER;
+      else process.env.SCPLUS_EMBED_PROVIDER = previousProvider;
       await rm(rootDir, { recursive: true, force: true });
     }
   });

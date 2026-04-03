@@ -122,11 +122,11 @@ export interface EmbeddingRuntimeStats {
   generationInvalidations: number;
 }
 
-const EMBED_PROVIDER = (process.env.CONTEXTPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
+const EMBED_PROVIDER = (process.env.SCPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
 const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "qwen3-embedding:0.6b-32k";
-const OPENAI_EMBED_MODEL = process.env.CONTEXTPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
-const OPENAI_API_KEY = process.env.CONTEXTPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
-const OPENAI_BASE_URL = process.env.CONTEXTPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+const OPENAI_EMBED_MODEL = process.env.SCPLUS_OPENAI_EMBED_MODEL ?? process.env.OPENAI_EMBED_MODEL ?? "text-embedding-3-small";
+const OPENAI_API_KEY = process.env.SCPLUS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+const OPENAI_BASE_URL = process.env.SCPLUS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 const ACTIVE_EMBED_MODEL = EMBED_PROVIDER === "openai" ? OPENAI_EMBED_MODEL : EMBED_MODEL;
 const CACHE_FILE = `embeddings-cache-${EMBED_PROVIDER}-${ACTIVE_EMBED_MODEL.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
 const MIN_EMBED_BATCH_SIZE = 5;
@@ -239,12 +239,12 @@ function toOptionalBoolean(value: string | undefined): boolean | undefined {
 function getEmbedRuntimeOptions(): EmbedRuntimeOptions | undefined {
   if (EMBED_PROVIDER === "openai") return undefined;
   const options: EmbedRuntimeOptions = {
-    num_gpu: toOptionalInteger(process.env.CONTEXTPLUS_EMBED_NUM_GPU),
-    main_gpu: toOptionalInteger(process.env.CONTEXTPLUS_EMBED_MAIN_GPU),
-    num_thread: toOptionalInteger(process.env.CONTEXTPLUS_EMBED_NUM_THREAD),
-    num_batch: toOptionalInteger(process.env.CONTEXTPLUS_EMBED_NUM_BATCH),
-    num_ctx: toOptionalInteger(process.env.CONTEXTPLUS_EMBED_NUM_CTX),
-    low_vram: toOptionalBoolean(process.env.CONTEXTPLUS_EMBED_LOW_VRAM),
+    num_gpu: toOptionalInteger(process.env.SCPLUS_EMBED_NUM_GPU),
+    main_gpu: toOptionalInteger(process.env.SCPLUS_EMBED_MAIN_GPU),
+    num_thread: toOptionalInteger(process.env.SCPLUS_EMBED_NUM_THREAD),
+    num_batch: toOptionalInteger(process.env.SCPLUS_EMBED_NUM_BATCH),
+    num_ctx: toOptionalInteger(process.env.SCPLUS_EMBED_NUM_CTX),
+    low_vram: toOptionalBoolean(process.env.SCPLUS_EMBED_LOW_VRAM),
   };
 
   if (Object.values(options).every((value) => value === undefined)) return undefined;
@@ -252,12 +252,12 @@ function getEmbedRuntimeOptions(): EmbedRuntimeOptions | undefined {
 }
 
 export function getEmbeddingBatchSize(): number {
-  const requested = toIntegerOr(process.env.CONTEXTPLUS_EMBED_BATCH_SIZE, DEFAULT_EMBED_BATCH_SIZE);
+  const requested = toIntegerOr(process.env.SCPLUS_EMBED_BATCH_SIZE, DEFAULT_EMBED_BATCH_SIZE);
   return Math.min(MAX_EMBED_BATCH_SIZE, Math.max(MIN_EMBED_BATCH_SIZE, requested));
 }
 
 export function getEmbedChunkChars(): number {
-  const requested = toIntegerOr(process.env.CONTEXTPLUS_EMBED_CHUNK_CHARS, DEFAULT_EMBED_CHUNK_CHARS);
+  const requested = toIntegerOr(process.env.SCPLUS_EMBED_CHUNK_CHARS, DEFAULT_EMBED_CHUNK_CHARS);
   return Math.min(MAX_EMBED_CHUNK_CHARS, Math.max(MIN_EMBED_CHUNK_CHARS, requested));
 }
 

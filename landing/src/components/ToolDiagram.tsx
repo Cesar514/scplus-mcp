@@ -1,7 +1,7 @@
-// summary: Presents the landing diagram for the current Context+ tool groups.
+// summary: Presents the landing diagram for the current scplus tool groups.
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
 // inputs: Tool group definitions, layout settings, and marketing presentation copy.
-// outputs: Diagram markup describing the public Context+ tool surface.
+// outputs: Diagram markup describing the public scplus tool surface.
 "use client";
 
 import { useEffect, useState } from "react";

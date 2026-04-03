@@ -1052,27 +1052,27 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
   try {
     resetTreeSitterRuntimeStats();
 
-    const smallRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-small-"));
+    const smallRoot = await mkdtemp(join(tmpdir(), "scplus-eval-small-"));
     roots.push(smallRoot);
     await writeSmallSmokeRepo(smallRoot);
     const small = await indexScenario(smallRoot, "small-smoke", "small-smoke", ["tiny synthetic repo kept only as smoke test"]);
 
-    const mediumRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-medium-"));
+    const mediumRoot = await mkdtemp(join(tmpdir(), "scplus-eval-medium-"));
     roots.push(mediumRoot);
     await writeMediumRepo(mediumRoot);
     const medium = await indexScenario(mediumRoot, "medium", "medium", ["multi-feature TypeScript service repo"]);
 
-    const largeRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-large-"));
+    const largeRoot = await mkdtemp(join(tmpdir(), "scplus-eval-large-"));
     roots.push(largeRoot);
     await writeLargeMonorepo(largeRoot);
     const large = await indexScenario(largeRoot, "large-monorepo", "large-monorepo", ["multi-app monorepo with shared packages and suggested hubs"]);
 
-    const polyglotRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-polyglot-"));
+    const polyglotRoot = await mkdtemp(join(tmpdir(), "scplus-eval-polyglot-"));
     roots.push(polyglotRoot);
     await writePolyglotRepo(polyglotRoot);
     const polyglot = await indexScenario(polyglotRoot, "polyglot", "polyglot", ["TypeScript, Python, Rust, Go, and Markdown indexed together"]);
 
-    const ignoredRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-ignored-"));
+    const ignoredRoot = await mkdtemp(join(tmpdir(), "scplus-eval-ignored-"));
     roots.push(ignoredRoot);
     await writeIgnoredGeneratedRepo(ignoredRoot);
     const ignored = await indexScenario(ignoredRoot, "ignored-generated", "ignored-generated", ["generated/ is ignored through .gitignore"]);
@@ -1082,11 +1082,11 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
     const ignoredExcluded = ignoredManifest.files.every((filePath) => !filePath.startsWith("generated/"));
     ignored.summary.notes.push(ignoredExcluded ? "generated/ excluded from file manifest" : "generated/ unexpectedly indexed");
 
-    const brokenRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-broken-"));
+    const brokenRoot = await mkdtemp(join(tmpdir(), "scplus-eval-broken-"));
     roots.push(brokenRoot);
     const broken = await buildBrokenScenario(brokenRoot);
 
-    const renameRoot = await mkdtemp(join(tmpdir(), "contextplus-eval-rename-"));
+    const renameRoot = await mkdtemp(join(tmpdir(), "scplus-eval-rename-"));
     roots.push(renameRoot);
     const renameFreshness = await runRenameFreshnessScenario(renameRoot);
 

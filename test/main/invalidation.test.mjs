@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 describe("invalidation", () => {
   it("recomputes file, identifier, chunk, and structure artifacts when content changes without relying on size or mtime drift", async () => {
@@ -15,7 +15,7 @@ describe("invalidation", () => {
     const { ensureIdentifierSearchIndex } = await import("../../build/tools/semantic-identifiers.js");
     const { refreshChunkIndexState } = await import("../../build/tools/chunk-index.js");
     const { refreshStructureIndexState } = await import("../../build/tools/full-index-artifacts.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-invalidation-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-invalidation-"));
 
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
@@ -65,7 +65,7 @@ describe("invalidation", () => {
 
   it("recomputes dependent structure artifacts when an imported local dependency changes", async () => {
     const { refreshStructureIndexState } = await import("../../build/tools/full-index-artifacts.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-dependency-invalidation-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-dependency-invalidation-"));
 
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });

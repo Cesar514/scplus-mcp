@@ -31,19 +31,19 @@ func envInt(key string, fallback int) int {
 }
 
 func TestVisualProbe(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = envInt("VISUAL_PROBE_WIDTH", 113)
 	model.height = envInt("VISUAL_PROBE_HEIGHT", 27)
 	model.commandBar.SetValue(os.Getenv("VISUAL_PROBE_QUERY"))
 	model.doctorLoaded = true
-	model.doctor.Root = "/tmp/contextplus"
+	model.doctor.Root = "/tmp/scplus"
 	model.doctor.Serving.ActiveGeneration = envInt("VISUAL_PROBE_GENERATION", 29)
 	model.doctor.Serving.ActiveGenerationFreshness = "fresh"
 
 	indexJob := model.job("index")
 	indexJob.State = "failed"
 	indexJob.Phase = "failed"
-	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/contextplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement: text index candidate exceeds max embed file size."
+	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/scplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement: text index candidate exceeds max embed file size."
 	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index.\nIndex validation: failed."
 	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
 

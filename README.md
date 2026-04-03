@@ -1,56 +1,261 @@
-# scplus
+# scplus-mcp
 
-Semantic intelligence for large-scale engineering.
+Prepared-index code intelligence for agents and operators.
 
-scplus is the public product brand for the Semantic Context Plus engine. The executable surface uses `scplus-mcp` for the MCP command, `scplus-cli` for the human CLI, and `scplus-mcp` as the npm package name. The repo-local machine state and runtime environment variables keep the stable `.contextplus/` and `CONTEXTPLUS_` prefixes.
+`scplus-mcp` is the repository and npm package for **scplus**, a local code-intelligence engine that serves structural, exact-query, related-search, and research workflows from a validated repo-local index. It ships three connected surfaces: the `scplus-mcp` MCP server for coding agents, a persistent local bridge for automation, and the `scplus-cli` Bubble Tea operator console for humans.
 
-The current committed benchmark artifact reports `22` golden operator questions, `0` stale-after-write failures, `0` restore failures, `3.14ms` exact p50 latency, `55.95ms` related-search p50 latency, and `63.52ms` research p50 latency. See [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md) and [latest.json](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.json).
+The project is built around one operating contract: build a prepared local index, read from one validated active generation at a time, and fail loudly when freshness or validation is broken instead of quietly answering from stale state.
 
 ![scplus operator console](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-cli-console.svg)
 
 ![scplus serving contract](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-serving-flow.svg)
 
-## Naming
+## Table of Contents
 
-- Public npm package: `scplus-mcp`
-- Public MCP command: `scplus-mcp`
-- Public human CLI command: `scplus-cli`
-- Stable repo-local state directory: `.contextplus/`
-- Stable runtime env prefix: `CONTEXTPLUS_`
-- Published repository, package, and deployable service identifiers should use `scplus-mcp` wherever the target system is configurable.
+- [Key Features](#key-features)
+- [Naming And Product Surfaces](#naming-and-product-surfaces)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+- [MCP Client Setup](#mcp-client-setup)
+- [Models And Embedding Providers](#models-and-embedding-providers)
+- [Architecture](#architecture)
+- [Environment Variables](#environment-variables)
+- [Available Scripts](#available-scripts)
+- [MCP Resource And Tool Catalog](#mcp-resource-and-tool-catalog)
+- [Bridge And Automation Surface](#bridge-and-automation-surface)
+- [Human CLI Surface](#human-cli-surface)
+- [Benchmarks](#benchmarks)
+- [References](#references)
+- [License](#license)
 
-## Local Install
+## Key Features
 
-For local development, install the linked `scplus` commands with:
+- Prepared exact-query tools for deterministic lookups such as `symbol`, `word`, `outline`, `deps`, `status`, and `changes`
+- Ranked related search and broad research over persisted file, chunk, identifier, structure, cluster, and hub artifacts
+- One shared backend core for MCP and the human CLI, with the CLI connected over the persistent `bridge-serve` JSON-line transport
+- Repo-local SQLite machine state rooted at `.scplus/`, with active/pending generation promotion and explicit `fresh`, `dirty`, and `blocked` freshness states
+- Loud failure semantics for invalid prepared state instead of silent fallback behavior
+- Suggested hubs and semantic clusters generated from the prepared full index
+- Shadow restore points for reversible AI-authored edits without mutating git history
+- A separate Next.js landing/docs app under `landing/`, wired to the local package during development
+- Committed real benchmark artifacts under `docs/benchmarks/`
+
+## Naming And Product Surfaces
+
+This repository uses a few names that matter in different contexts:
+
+| Surface | Current name |
+| --- | --- |
+| Public npm package | `scplus-mcp` |
+| Public MCP command | `scplus-mcp` |
+| Public human CLI command | `scplus-cli` |
+| Product/brand name | `scplus` |
+| Repo-local state directory used by current source | `.scplus/` |
+| Runtime env prefix used by current source | `SCPLUS_` |
+
+Important context:
+
+- The **current source code** uses `.scplus/` as the repo-local state root via `src/core/project-layout.ts`.
+- The runtime environment prefix used by current code is `SCPLUS_`.
+
+If code and docs disagree, treat the code as authoritative.
+
+## Tech Stack
+
+- **Primary language**: TypeScript (ESM)
+- **MCP transport**: `@modelcontextprotocol/sdk` over stdio
+- **Prepared state store**: SQLite at `.scplus/state/index.sqlite`
+- **Parsing**: `web-tree-sitter` and `tree-sitter-wasms`
+- **Retrieval**: lexical plus embedding-backed retrieval persisted into SQLite vector collections
+- **Embedding backends**: Ollama by default, OpenAI-compatible embeddings optionally
+- **Human CLI**: Go + Bubble Tea
+- **Go toolchain management**: Pixi (`go = 1.24.*`)
+- **Landing/docs app**: Next.js 16, React 19, Tailwind CSS 4, OpenNext/Cloudflare tooling
+- **Primary package manager**: npm
+
+## Prerequisites
+
+Install these before working on the repository:
+
+- **Node.js**
+- **npm**
+- **Pixi**
+- **Git**
+
+Usually also needed for semantic indexing:
+
+- **Ollama**, unless you explicitly choose an OpenAI-compatible embedding backend
+
+Optional:
+
+- **Bun**, if you prefer `bunx` when generating MCP config instead of `npx`
+
+Notes:
+
+- The repository does not currently ship a checked-in `.env.example`.
+- The canonical onboarding path for the core package is the install script, not manual npm and pixi commands typed from memory.
+
+## Getting Started
+
+### Canonical install path
+
+For the main developer/operator workflow, start with the installer:
 
 ```bash
+git clone https://github.com/Cesar514/scplus-mcp.git
+cd scplus-mcp
 ./install-scplus.sh
 ```
 
-What it does:
+Treat `./install-scplus.sh` as the primary local setup path for the package and CLI. Manual build steps are documented below so you understand what the installer is doing, but the intended bootstrap flow is through the script.
 
-- runs `npm install`
-- runs `npm run build`
-- runs `npm run build:cli`
-- runs `npm link`
-- verifies the linked `scplus-mcp` command resolves to this checkout
-- verifies the linked `scplus-cli` command resolves to this checkout
+### What `./install-scplus.sh` does
 
-After editing this repo, rebuild the linked CLI with:
+The installer:
+
+1. verifies `node`
+2. verifies `npm`
+3. verifies `pixi`
+4. runs `npm install`
+5. runs `npm run build`
+6. runs `npm run build:cli`
+7. runs `npm link`
+8. verifies that `scplus-mcp` points at `build/index.js`
+9. verifies that `scplus-cli` points at `build/cli-launcher.js`
+10. runs a lightweight `scplus-mcp tree "$ROOT_DIR"` check
+11. runs a lightweight `scplus-cli doctor --root "$ROOT_DIR"` check
+
+If any prerequisite is missing, the script exits fatally instead of guessing.
+
+### What you should have after install
+
+After a successful run:
+
+- `scplus-mcp` should be on your `PATH`
+- `scplus-cli` should be on your `PATH`
+- the TypeScript build output should exist under `build/`
+- the Bubble Tea launcher should exist under `build/scplus-cli`
+
+Quick verification:
+
+```bash
+scplus-mcp doctor .
+scplus-cli doctor --root .
+```
+
+### Rebuilding after edits
+
+After editing the TypeScript or Go sources, rebuild both shipped entrypoints with:
 
 ```bash
 npm run build:all
 ```
 
-The human CLI is built with Bubble Tea in Go and uses a project-local Go toolchain through Pixi. `pixi` must be installed before running the install script.
+This updates the already linked `scplus-mcp` and `scplus-cli` commands in place because `npm link` points them at this checkout’s build output.
 
-Because `npm link` points `scplus-mcp` at this checkout’s [build/index.js](/home/cesar514/Documents/agent_programming/contextplus/build/index.js) and `scplus-cli` at [build/cli-launcher.js](/home/cesar514/Documents/agent_programming/contextplus/build/cli-launcher.js), future builds update both commands in place.
+### Bootstrapping prepared state for the repository
 
-The renamed operator console snapshot used for the image above is committed in [cli-snapshot.txt](/home/cesar514/Documents/agent_programming/contextplus/docs/artifacts/cli-snapshot.txt).
+Once the commands are installed, create prepared repo-local state:
 
-The short authoritative runtime description now lives in [architecture.md](/home/cesar514/Documents/agent_programming/contextplus/docs/architecture.md).
+```bash
+scplus-mcp index .
+```
 
-To add the locally linked command to Codex, put this in `~/.codex/config.toml` as a separate manual step:
+Then validate it:
+
+```bash
+scplus-mcp validate-index .
+```
+
+The strongest success signal is a valid prepared index with:
+
+- one active generation
+- no pending generation unless a rebuild is in progress
+- serving freshness reported as `fresh`
+
+### Verifying the user-facing surfaces
+
+Run these from the repository root:
+
+```bash
+scplus-mcp tree .
+scplus-mcp status .
+scplus-cli snapshot --root .
+scplus-cli doctor --root .
+```
+
+What these confirm:
+
+- the MCP entrypoint is runnable
+- the exact-query/git-aware surfaces are reachable
+- the shared backend can serve the Go operator console
+- the linked human CLI works against the same backend state
+
+### Working on the landing app
+
+The landing/docs application under `landing/` is a separate app with its own dependencies. Only do this if you are editing the site itself:
+
+```bash
+cd landing
+npm install
+npm run dev
+```
+
+The landing app serves on `http://localhost:6767`.
+
+## MCP Client Setup
+
+### Supported client targets
+
+The `init` command can generate MCP config for:
+
+- `claude`
+- `cursor`
+- `vscode`
+- `windsurf`
+- `opencode`
+- `codex`
+
+Generated config paths:
+
+| Target | Output path |
+| --- | --- |
+| `claude` | `.mcp.json` |
+| `cursor` | `.cursor/mcp.json` |
+| `vscode` | `.vscode/mcp.json` |
+| `windsurf` | `.windsurf/mcp.json` |
+| `opencode` | `opencode.json` |
+| `codex` | `.codex/config.toml` |
+
+### Generate config files automatically
+
+Examples:
+
+```bash
+scplus-mcp init claude
+scplus-mcp init cursor
+scplus-mcp init vscode
+scplus-mcp init windsurf
+scplus-mcp init opencode
+scplus-mcp init codex
+```
+
+Runner selection:
+
+- by default, the command prefers `bunx` when it detects Bun and otherwise falls back to `npx`
+- you can force a runner with `--runner=npx` or `--runner=bunx`
+
+Examples:
+
+```bash
+scplus-mcp init codex --runner=npx
+scplus-mcp init claude --runner=bunx
+```
+
+### Manual Codex TOML configuration
+
+If you want to configure Codex manually after using the local install script, add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers."scplus-mcp"]
@@ -60,60 +265,19 @@ args = []
 [mcp_servers."scplus-mcp".env]
 OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
-CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
-CONTEXTPLUS_EMBED_TRACKER = "lazy"
+OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
+SCPLUS_EMBED_BATCH_SIZE = "8"
+SCPLUS_EMBED_TRACKER = "lazy"
 ```
 
-## Tools
+If you prefer running through `npx` or `bunx` instead of the locally linked command, the generated Codex config follows the same structure but sets:
 
-### Discovery
+- `command = "npx"` with `args = ["-y", "scplus-mcp"]`, or
+- `command = "bunx"` with `args = ["scplus-mcp"]`
 
-| Tool                         | Description                                                                                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index`                     | Create or refresh `.contextplus/` project state. Defaults to `full` mode, which eagerly builds persisted file, identifier, chunk, code-structure, semantic-cluster, and hub-suggestion artifacts, writes indexing status, preserves restore-point state, refreshes incrementally using content hashes plus dependency-aware structure invalidation, and prepares the unified ranking substrate used by canonical search. |
-| `validate_index`            | Check that the prepared sqlite-backed index is present, version-compatible, and internally consistent for `core` or `full` mode before query tools rely on it. |
-| `repair_index`              | Repair a broken prepared index by rerunning either the full pipeline or a specific durable stage, then revalidate the repaired state loudly. |
-| `tree`                      | Structural AST tree of a project with file headers and symbol ranges (line numbers for functions/classes/methods). Dynamic pruning shrinks output automatically. |
-| `skeleton`                  | Function signatures, class methods, and type definitions with line ranges, without reading full bodies. Shows the API surface.                                   |
-| `symbol`                    | Tiny exact symbol lookup over the prepared fast-query substrate. Use this when you already know the symbol name and want deterministic exact matches. |
-| `word`                      | Tiny indexed word lookup over paths, headers, symbols, and content snippets. Use this for exact words or short phrases before escalating to broader search. |
-| `outline`                   | Compact imports/exports/symbol outline for a known file from the prepared fast-query substrate. |
-| `deps`                      | Compact direct and reverse dependency report for one indexed file. |
-| `status`                    | Tiny git worktree status summary for the current repository. |
-| `changes`                   | Tiny git change summary, optionally scoped to one file, including line-range hunks when available. |
-| `search`                    | Query-intent router for repository search. Use `intent: "exact"` for deterministic fast-substrate answers when you already know the symbol or file target, and `intent: "related"` for ranked related-item and pattern discovery. `search_type` still selects `file`, `symbol`, or `mixed`, and related search now accepts explicit `retrieval_mode` values of `semantic`, `keyword`, or `both`. |
-| `research`                  | Broad repository research report. Use this for subsystem understanding after exact lookup and related-item search are no longer enough. |
-| `evaluate`                  | Run the built-in real benchmark harness across small, medium, monorepo, polyglot, ignored-tree, broken-state, and rename-freshness scenarios. Reports golden-query accuracy, validation rates, freshness reliability, and p50/p95/p99 query latency. |
-| `cluster`                   | Browse persisted semantic clusters from the full index. Renders labeled subsystem groupings, related files, and cluster summaries from sqlite-backed artifacts. |
+### Example JSON-style MCP config
 
-### Analysis
-
-| Tool                  | Description                                                                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `blast_radius`        | Trace every file and line where a symbol is imported or used. Prevents orphaned references.                                   |
-| `lint`                | Run native linters and compilers to find unused variables, dead code, and type errors. Supports TypeScript, Python, Rust, Go, and now reports a repo score plus lowest-scoring files from scplus repo-rule findings. |
-
-### Code Ops
-
-| Tool              | Description                                                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `checkpoint`   | The only way to write code. Validates against strict rules before saving. Creates a shadow restore point before writing. |
-| `find_hub`     | Obsidian-style feature hub navigator. Lists handwritten hubs plus persisted suggested hubs and feature-group candidates generated from the full index, and can rank hub candidates for a natural-language query with `keyword`, `semantic`, or `both` modes. |
-
-### Version Control
-
-| Tool                  | Description                                                                                                |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `restore_points` | List all shadow restore points created by `checkpoint`. Each captures file state before AI changes.    |
-| `restore`        | Restore files to their state before a specific AI change. Uses shadow restore points. Does not affect git. |
-
-## Setup
-
-### Quick Start (npx / bunx)
-
-No installation needed. Add `scplus-mcp` to your IDE MCP config.
-
-For Claude Code, Cursor, and Windsurf, use `mcpServers`:
+For clients that use JSON config files, the generated config follows this general shape:
 
 ```json
 {
@@ -124,156 +288,565 @@ For Claude Code, Cursor, and Windsurf, use `mcpServers`:
       "env": {
         "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
         "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
-        "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY"
+        "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY",
+        "SCPLUS_EMBED_BATCH_SIZE": "8",
+        "SCPLUS_EMBED_TRACKER": "lazy"
       }
     }
   }
 }
 ```
 
-For VS Code (`.vscode/mcp.json`), use `servers` and `inputs`:
+The exact top-level key differs by client:
 
-```json
-{
-  "servers": {
-    "scplus-mcp": {
-      "type": "stdio",
-      "command": "bunx",
-      "args": ["scplus-mcp"],
-      "env": {
-        "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
-        "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
-        "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY"
-      }
-    }
-  },
-  "inputs": []
-}
-```
+- `mcpServers` for Claude/Cursor/Windsurf-style configs
+- `servers` for VS Code’s `.vscode/mcp.json`
+- `mcp` for `opencode.json`
+- TOML tables for Codex
 
-If you prefer `npx`, use:
+## Models And Embedding Providers
 
-- `"command": "npx"`
-- `"args": ["-y", "scplus-mcp"]`
+### Important note on the Ollama model names in this repo
 
-Or generate the MCP config file directly in your current directory:
+The model tags shown in this repository, especially:
+
+- `qwen3-embedding:0.6b-32k`
+- `nemotron-3-nano:4b-128k`
+
+should be read as **local Ollama variants used in the maintainer environment**, not as a claim that these are wholly bespoke model families invented by the project.
+
+Per the current maintainer workflow:
+
+- the base models were downloaded from official Ollama sources
+- the local setup then modified the context window configuration
+
+So in practice, the README examples are documenting the project’s current local runtime tags and expectations, not asserting that the repository itself distributes new model architectures.
+
+### Provider overview
+
+The code supports two embedding-provider modes:
+
+| Provider mode | Env value | Typical use |
+| --- | --- | --- |
+| Ollama | `ollama` | local/private embeddings |
+| OpenAI-compatible | `openai` | API-backed embeddings through OpenAI-compatible endpoints |
+
+### Ollama path
+
+The default code path is Ollama. A typical local setup looks like:
 
 ```bash
-npx -y scplus-mcp init claude
-bunx scplus-mcp init cursor
-npx -y scplus-mcp init opencode
-bunx scplus-mcp init codex
+ollama pull qwen3-embedding:0.6b
+ollama pull nemotron-3-nano:4b
+ollama serve
 ```
 
-Supported coding agent names: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`.
+Then, if your local environment uses extended-context variants or custom local tags, configure the env values that `scplus-mcp` should actually use:
 
-Config file locations:
+```bash
+export OLLAMA_EMBED_MODEL=qwen3-embedding:0.6b-32k
+export OLLAMA_CHAT_MODEL=nemotron-3-nano:4b-128k
+```
 
-| IDE         | Config File          |
-| ----------- | -------------------- |
-| Claude Code | `.mcp.json`          |
-| Cursor      | `.cursor/mcp.json`   |
-| VS Code     | `.vscode/mcp.json`   |
-| Windsurf    | `.windsurf/mcp.json` |
-| OpenCode    | `opencode.json`      |
-| Codex       | `.codex/config.toml` |
+### OpenAI-compatible path
 
-### CLI Subcommands
+For API-backed embeddings:
 
-- `init [target]` - Generate MCP configuration (targets: `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, `codex`).
-- `index [path] [--mode=core|full]` - Create or refresh `.contextplus/` for the target repo. Defaults to `full` mode. The authoritative durable machine state now lives only in `state/index.sqlite`. `core` persists the project config, context-tree export, file manifest, stage state, indexing status, and eager file/identifier search state in SQLite. `full` also persists first-class AST chunk artifacts, hybrid chunk and identifier retrieval indexes, richer code-structure artifacts, and the full-manifest plus vector collections in SQLite. Dense retrieval now writes into `vector_collections` and `vector_entries` instead of artifact-shaped embedding-cache blobs, while the hybrid layer keeps lexical term maps plus embedding keys so later search surfaces can combine lexical and dense evidence without rebuilding transient indexes. The structure layer now includes per-file imports, exports, calls, symbols, dependency paths, normalized symbol records, file-to-symbol maps, ownership edges, module summaries, and module import edges. Refresh uses file content hashes for file and identifier artifacts, file-plus-chunk content hashes for chunk reuse, dependency hashes for structure artifacts so local import changes invalidate affected downstream files, and embed-provider/model-aware cache hashes so vector reuse stops immediately when the embedding backend changes. Legacy JSON artifact files are deleted during bootstrap so the database remains the only source of truth. The persisted contract metadata covers supported modes, stage order, sqlite-only storage, invalidation rules, and crash-only failure semantics.
-- `validate-index [path]` - Verify that a prepared `core` or `full` index is still version-compatible and internally consistent before query tools rely on it. `validate_index` remains supported as an alias.
-- `repair-index [path] --target=<core|full|bootstrap|file-search|identifier-search|full-artifacts>` - Repair a broken prepared index and revalidate it. `repair_index` remains supported as an alias.
-- `tree [path] [--json]` - Print the structural tree for a repo directly in the terminal.
-- `skeleton <file> [--root=<repo>] [--json]` - Print the structural skeleton for a single indexed file.
-- `status [path] [--json]` - Print the git-aware repo status summary from the fast exact-query substrate.
-- `changes [path] [--path=<file>] [--limit=<n>] [--json]` - Print changed-file summaries and optional line-range detail.
-- `cluster [path] [--json]` - Render the persisted semantic cluster view for the prepared full index.
-- `hubs [path] [--query=<text>] [--feature-name=<name>] [--hub-path=<file>] [--show-orphans] [--json]` - Browse hub summaries, suggestions, and hub details from the terminal.
-- `restore-points [path] [--json]` - Print restore-point history for the repository.
-- `doctor [path] [--json]` - Print a combined repo, index, hub, restore-point, Ollama, and observability report, including stage timing, cache, integrity, and scheduler metrics.
-- `bridge <subcommand>` - Machine-readable JSON output for the shared local backend used by the human CLI and automation, not the full MCP catalog. Shared high-value subcommands now include `doctor`, `tree`, `status`, `changes`, `restore-points`, `validate-index`, `cluster`, `hubs`, `symbol`, `word`, `outline`, `deps`, `search`, `research`, `lint`, `blast-radius`, `checkpoint`, `restore`, and `repair-index`.
-- `bridge-serve` - Persistent JSON-line session used by `scplus-cli` and other local operator tooling. Requests use `{"type":"request","id":<n>,"command":"...","args":{...}}`; responses mirror the same id, and async backend events stream as `{"type":"event", ...}` frames.
-- `[path]` - Start the MCP server (stdio) for the specified path (defaults to current directory).
+```bash
+export SCPLUS_EMBED_PROVIDER=openai
+export SCPLUS_OPENAI_API_KEY=YOUR_API_KEY
+export SCPLUS_OPENAI_EMBED_MODEL=text-embedding-3-small
+```
 
-### Human CLI
+Optional custom base URL:
 
-The Bubble Tea terminal app is exposed as `scplus-cli`.
+```bash
+export SCPLUS_OPENAI_BASE_URL=https://your-proxy.example.com/v1
+```
 
-- `scplus-cli` - Launch the interactive dashboard.
-- `scplus-cli snapshot --root .` - Render the overview screen once and exit. Useful for tests and automation.
-- `scplus-cli doctor --root .` - Print a concise health summary from the human CLI.
-- `scplus-cli index --root .` - Trigger a full index run through the backend.
-- `scplus-cli tree --root .`
-- `scplus-cli hubs --root .`
-- `scplus-cli cluster --root .`
-- `scplus-cli restore-points --root .`
-- `scplus-cli hub-create --root . --title "Main Flow" --summary "Operator entrypoint" --files "src/index.ts,README.md"`
+## Architecture
 
-The dashboard includes:
+### Directory Structure
 
-- an animated magician header
-- a left navigation-and-actions sidebar, a center content pane, a right detail pane, and a bottom jobs/logs pane on wide terminals
-- a stacked vertical fallback layout for narrower terminals
-- a real bottom status line showing watcher state, current active stage, pending change count, backend connectivity, active repo, active generation, and navigation-history position
-- observability details for stage timing, vector coverage, refresh failures, lexical candidate counts, and watcher scheduler state
-- typed section navigation for overview, tree, hubs, ranked `find-hub` results, restore points, clusters, dependency browsing, search, symbol, word, outline, research, lint, blast-radius, checkpoint, status, and changes instead of a tab-only card wall
-- Bubble `list` and `table` components for operator sections instead of raw text dumps, with typed status and changes tables, ranked search inspection, ranked hub triage, and typed list renderers for tree, hubs, restore points, clusters, dependencies, and engine result views
-- a structured jobs table for index, refresh, restore, lint, and query task slots, with stage, percent, current file, elapsed time, queue depth, and pending-state context on the active index or refresh row
-- a real scrollable log panel instead of a fixed 12-line activity buffer
-- operator controls for retrying the last index and canceling or superseding queued watch work directly from the console sidebar and jobs pane hints
-- a command palette bound to `:` or `Ctrl+P` for ranked `find-hub`, exact lookup, related search, research, exact symbol lookup, word lookup, outline, dependencies, go-to file, go-to symbol, lint, blast-radius, checkpoint-detail, restore-point, status, and changes workflows
-- in-UI section filtering bound to `/`, with palette-driven go-to file and go-to symbol flows that land in the typed Search section
-- a help overlay bound to `?` that documents navigation, command, filter, export, and mouse usage
-- export actions bound to `e` that write logs, section output, or the selected detail content into `.contextplus/exports/`
-- back/forward navigation history bound to `b` and `f`, covering active view, focused pane, and selected section row state
-- mouse focus and wheel scrolling support across sidebar, content, detail, jobs, and logs panes
-- direct diff patch preview in the Changes detail pane, restore execution from the Restore section with `u`, and dedicated dependency / hub / search ranking inspection views
-- a persistent backend session shared through `bridge-serve`
-- a backend-owned watcher that collapses bursty file changes into one pending watch plan, runs a background incremental refresh for normal code edits, escalates to a full rebuild only for dependency or tooling config changes, and surfaces the pending job kind plus changed paths through the UI and doctor output
-- a human hub-creation flow
+```text
+.
+├── src/                     # TypeScript MCP server, backend core, indexing, retrieval, and tool implementations
+│   ├── cli/                 # Shared backend core, bridge commands, doctor/report formatting
+│   ├── core/                # Project layout, embeddings, parser runtime, locks, lifecycle helpers
+│   ├── git/                 # Shadow restore-point logic
+│   └── tools/               # Public indexing, query, lint, research, hub, and recovery tools
+├── cli/                     # Go Bubble Tea operator console
+│   ├── cmd/scplus-cli/      # Go CLI entrypoint
+│   └── internal/            # Backend client, hubs flow, watcher integration, UI rendering
+├── landing/                 # Separate Next.js marketing/docs application
+├── docs/                    # Architecture notes, benchmark artifacts, snapshots, and images
+├── test/                    # TypeScript tests, demos, and fixtures
+├── .scplus/                 # Generated repo-local prepared state
+├── package.json             # Root package metadata and Node build/test scripts
+├── pixi.toml                # Project-local Go toolchain and CLI tasks
+└── install-scplus.sh        # Canonical local install script
+```
 
-### Surface Boundaries
+### Runtime Surfaces
 
-| Surface | What it exposes | What it does not expose |
-|---------|------------------|--------------------------|
-| MCP stdio server (`scplus-mcp`) | The full agent-facing MCP tool catalog over one repository root. This remains the authoritative surface for agent workflows, including MCP-only tools such as `evaluate`. | The human operator console layout, palette, filters, help overlay, exports, or mouse interactions. |
-| Shared local backend (`bridge` and `bridge-serve`) | One persistent backend process shared by `scplus-cli` and local automation. It exposes the shared query, repair, restore, lint, status, cluster, hub, and observability commands plus async job, log, watcher, and scheduler events. | The full MCP catalog. If a command is not exposed through `bridge` or `bridge-serve`, treat it as MCP-only. |
-| Human CLI (`scplus-cli`) | The operator console over the shared backend: panes, command palette, history, filters, help overlay, exports, jobs/logs views, mouse support, and the human hub-creation flow. | A second backend, an independent watcher, or direct access to every MCP tool. It only renders what the shared backend exposes. |
+The repository exposes three distinct but connected runtime surfaces:
 
-### Serving Contract
+| Surface | Purpose | Backing implementation |
+| --- | --- | --- |
+| `scplus-mcp` | Agent-facing MCP server and CLI-style local commands | `src/index.ts` |
+| `bridge` / `bridge-serve` | Structured local automation interface over the shared backend core | `src/cli/commands.ts` |
+| `scplus-cli` | Human operator console and a few direct Go subcommands | `cli/cmd/scplus-cli/main.go` |
 
-- Prepared queries read from exactly one active sqlite generation at a time. Rebuilds write into a pending generation and switch the serving pointer only after validation succeeds, so failed rebuilds never leak partial stage output into live `symbol`, `word`, `search`, `research`, or `deps` results.
-- `checkpoint` and `restore` mutate the working tree first, then mark the active generation `dirty` and synchronously rebuild the prepared index before returning. While freshness is `dirty`, prepared-query surfaces reject instead of answering from stale filesystem truth.
-- `blocked` means the automatic post-write refresh failed. The block reason is reported through `validate-index`, `doctor`, bridge payloads, backend logs, and the human CLI. Repair requires fixing the underlying indexing problem and rerunning `repair-index --target=full` or `index --mode=full`.
-- There is no silent degraded mode. Missing, invalid, dirty, or blocked prepared state fails loudly; scplus does not fall back to partial results, implicit background fixes, or success-shaped empty answers.
+Important constraint:
+
+- the Go CLI is **not** a second indexing engine
+- it is a client of the same backend core used by the MCP server
+
+### Request Lifecycle
+
+For agent/MCP requests:
+
+```text
+Agent or MCP client
+  -> scplus-mcp (src/index.ts)
+  -> shared backend core / tool implementation
+  -> prepared index in .scplus/state/index.sqlite
+  -> formatted MCP response
+```
+
+For human operator requests:
+
+```text
+scplus-cli
+  -> Go backend client
+  -> persistent bridge-serve session
+  -> shared backend core
+  -> prepared index in .scplus/state/index.sqlite
+  -> operator UI panes / plain-text output
+```
+
+### Serving And Generation Contract
+
+The prepared-state contract documented by current code and architecture docs is:
+
+- one active generation is the serving source of truth
+- rebuilds and repairs can write a pending generation first
+- pending generations are promoted only after validation succeeds
+- serving freshness is explicit and can be `fresh`, `dirty`, or `blocked`
+- invalid or blocked prepared state is supposed to fail loudly rather than degrade silently
+
+The short authoritative architecture summary lives in [architecture.md](/home/cesar514/Documents/agent_programming/contextplus/docs/architecture.md).
+
+### Query Model
+
+The codebase implements a two-lane query model:
+
+- **Exact lane**: `symbol`, `word`, `outline`, `deps`, `status`, `changes`
+- **Ranked lane**: `search` with `intent="related"`
+- **Broad report lane**: `research`
+
+The product contract is that exact lookups remain the cheapest deterministic path and broader retrieval only runs when exact lookup is insufficient.
+
+### Project State Layout
+
+Current code uses this repo-local state root:
+
+```text
+.scplus/
+├── state/
+│   └── index.sqlite
+├── hubs/
+│   └── suggested/
+└── locks/
+```
+
+Observed in the current checkout after indexing:
+
+- `.scplus/state/index.sqlite`
+- `.scplus/hubs/suggested/`
+- `.scplus/locks/`
+
+Current source code uses `.scplus/`.
+
+### Core Component Map
+
+#### `src/core/`
+
+- `project-layout.ts` defines the `.scplus/` layout
+- `embeddings.ts` manages provider-backed embeddings, SQLite vector namespaces, runtime options, and generation-aware cache invalidation
+- `tree-sitter.ts` and `parser.ts` provide structural parsing
+- `runtime-locks.ts` coordinates cross-process ownership
+- `process-lifecycle.ts` manages idle shutdown, parent monitoring, and cleanup
+
+#### `src/tools/`
+
+- `index-codebase.ts`, `index-stages.ts`, and `index-reliability.ts` drive indexing, validation, and repair
+- `exact-query.ts` implements the fast exact-query substrate
+- `query-intent.ts`, `unified-ranking.ts`, `semantic-search.ts`, and `semantic-identifiers.ts` implement ranked search
+- `research.ts` builds larger bounded subsystem reports
+- `feature-hub.ts`, `hub-suggestions.ts`, and `cluster-artifacts.ts` implement hub and cluster views
+- `static-analysis.ts` and `blast-radius.ts` provide diagnostics and usage tracing
+- `propose-commit.ts` and `write-freshness.ts` implement guarded writes and synchronous freshness repair
+
+#### `cli/`
+
+- `cli/cmd/scplus-cli/main.go` is the Go entrypoint
+- `cli/internal/backend/` is the bridge client layer
+- `cli/internal/ui/` renders the operator console
+- `cli/internal/hubs/` powers manual hub creation
+
+### Operator Console Behavior
+
+The shipped human CLI is more than a thin wrapper. The previous README’s high-value description is still accurate enough to preserve at a high level:
+
+- it has a navigation pane, overview/content pane, detail pane, and jobs/logs area
+- it exposes operator health, serving state, queue state, history, and observability
+- it supports a command palette, filtering, export, and navigation history
+- it streams backend events over the persistent `bridge-serve` transport
+
+The committed plain snapshot is in [cli-snapshot.txt](/home/cesar514/Documents/agent_programming/contextplus/docs/artifacts/cli-snapshot.txt).
 
 ### Watcher And Scheduler Semantics
 
-- `scplus-cli` talks to one backend-owned watcher through `bridge-serve`. The Go frontend does not keep a second watcher, queue, or cache of its own.
-- Bursty filesystem edits are deduped into one pending watch plan. If another backend job is already running, the scheduler keeps at most one queued plan and supersedes stale queued work when a newer change batch arrives.
-- Ordinary source edits schedule a background `refresh` job. Dependency or workspace configuration edits such as `package.json`, lockfiles, `pixi.toml`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `tsconfig*.json`, or `.gitignore` escalate to an `index` job with an explicit full-rebuild reason.
-- Pending paths, pending job kind, queue depth, canceled and superseded counts, and full rebuild reasons are surfaced through `doctor`, bridge payloads, backend logs, and the human CLI status and jobs panes.
-- If a watcher-triggered refresh or rebuild fails, operators should expect an explicit blocked or failed state, not a hidden retry loop or a fallback query answer.
+The backend, not the Go frontend, owns watcher behavior:
 
-### CLI Walkthrough
+- bursty path changes are deduped
+- the scheduler can queue or supersede stale pending work
+- ordinary edits can become refresh jobs
+- dependency/config changes can escalate to full index jobs
+- job, watch, and log events are streamed over `bridge-serve`
 
-- `Navigation` holds the typed sections and operator actions. It is not a cosmetic sidebar; it is the durable index of every shared-backend view the human CLI can open.
-- `Overview` is the operator health summary. It surfaces repository status, active and pending generation state, current freshness, stage timings, and runtime observability without requiring a separate doctor call.
-- `Detail` is the export-ready pane. It shows repository detail, selected result detail, diff patches, restore-point context, or ranked result explanation depending on the active section.
-- `Jobs` and `Logs` are first-class panes, not a footer. The jobs table exposes index and refresh progress, queue depth, current file, and operator controls; the logs pane streams backend-owned events over `bridge-serve`.
-- `:` and `Ctrl+P` open the command palette, `/` narrows the current typed section, `b` and `f` walk history, and `e` exports the current pane or detail view into `.contextplus/exports/`.
+## Environment Variables
 
-### Benchmarks
+The repository does not have a checked-in `.env.example`, so the source is the authority. The table below reflects variables verified in `src/core/embeddings.ts`, `src/index.ts`, and the generated config helpers.
 
-The committed benchmark artifacts are produced by the real evaluation harness, not a README-only sample:
+### Provider selection and model configuration
+
+| Variable | Required | Purpose | Default / source |
+| --- | --- | --- | --- |
+| `SCPLUS_EMBED_PROVIDER` | No | Select embedding provider mode | `ollama` |
+| `OLLAMA_EMBED_MODEL` | No | Ollama embedding model tag | `qwen3-embedding:0.6b-32k` |
+| `OLLAMA_CHAT_MODEL` | No | Chat model used in generated config examples | `nemotron-3-nano:4b-128k` |
+| `OLLAMA_HOST` | No | Override Ollama host | unset |
+| `OLLAMA_API_KEY` | Conditional | Required only if your Ollama setup needs auth | unset |
+| `SCPLUS_OPENAI_API_KEY` | Conditional | Preferred OpenAI-compatible API key when provider is `openai` | unset |
+| `OPENAI_API_KEY` | Conditional | Fallback alias for API key | unset |
+| `SCPLUS_OPENAI_BASE_URL` | No | Preferred OpenAI-compatible base URL | `https://api.openai.com/v1` |
+| `OPENAI_BASE_URL` | No | Fallback alias for base URL | `https://api.openai.com/v1` |
+| `SCPLUS_OPENAI_EMBED_MODEL` | No | Preferred OpenAI-compatible embedding model | `text-embedding-3-small` |
+| `OPENAI_EMBED_MODEL` | No | Fallback alias for embedding model | `text-embedding-3-small` |
+
+### Indexing, chunking, and refresh behavior
+
+| Variable | Required | Purpose | Default / source |
+| --- | --- | --- | --- |
+| `SCPLUS_EMBED_BATCH_SIZE` | No | Embedding batch size, clamped in code | `8` |
+| `SCPLUS_EMBED_CHUNK_CHARS` | No | Chunk chars before vector merge, clamped in code | `2000` |
+| `SCPLUS_MAX_EMBED_FILE_SIZE` | No | Max file size for embed-aware search paths | tool fallback in `semantic-search.ts` |
+| `SCPLUS_EMBED_TRACKER` | No | Enable/shape tracker behavior | read directly from env |
+| `SCPLUS_EMBED_TRACKER_MAX_FILES` | No | Max files processed per tracker tick | `8` |
+| `SCPLUS_EMBED_TRACKER_DEBOUNCE_MS` | No | Debounce window for tracker work | `700` |
+| `SCPLUS_IDLE_TIMEOUT_MS` | No | Idle shutdown timeout for MCP process | unset |
+| `SCPLUS_PARENT_POLL_MS` | No | Parent-process polling interval | unset |
+
+### Advanced Ollama runtime options
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SCPLUS_EMBED_NUM_GPU` | No | Pass `num_gpu` into Ollama embed options |
+| `SCPLUS_EMBED_MAIN_GPU` | No | Pass `main_gpu` into Ollama embed options |
+| `SCPLUS_EMBED_NUM_THREAD` | No | Pass `num_thread` into Ollama embed options |
+| `SCPLUS_EMBED_NUM_BATCH` | No | Pass `num_batch` into Ollama embed options |
+| `SCPLUS_EMBED_NUM_CTX` | No | Pass `num_ctx` into Ollama embed options |
+| `SCPLUS_EMBED_LOW_VRAM` | No | Pass `low_vram` into Ollama embed options |
+
+## Available Scripts
+
+### Root package scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run build` | Compile the TypeScript MCP server into `build/` |
+| `npm run build:cli` | Use Pixi to build the Go Bubble Tea CLI |
+| `npm run build:all` | Build both the TypeScript server and the Go CLI |
+| `npm run dev` | Run TypeScript in watch mode |
+| `npm start` | Start the built Node entrypoint |
+| `npm test` | Run the main TypeScript test suite |
+| `npm run test:cli` | Run the Go CLI test suite through Pixi |
+| `npm run test:demo` | Run the demo/test harness |
+| `npm run test:all` | Run all Node and Go test suites |
+
+### Landing app scripts
+
+Run these from `landing/`:
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the Next.js landing app on port `6767` |
+| `npm run build` | Build the landing app |
+| `npm run start` | Run the built landing app on port `6767` |
+| `npm run lint` | Lint the landing app |
+| `npm run cf:build` | Build the OpenNext/Cloudflare target |
+| `npm run cf:preview` | Build and run a Cloudflare preview |
+| `npm run cf:deploy` | Build and deploy the Cloudflare target |
+
+### `scplus-mcp` local command surface
+
+When you run `scplus-mcp` as a shell command after `./install-scplus.sh`, it supports both CLI-style local commands and the MCP stdio server mode.
+
+| Command | Purpose | Important flags / forms |
+| --- | --- | --- |
+| `scplus-mcp init <target>` | Generate client config for `claude`, `cursor`, `vscode`, `windsurf`, `opencode`, or `codex` | `--runner=npx`, `--runner=bunx` |
+| `scplus-mcp index [path]` | Build or refresh prepared repo-local state | `--mode=core`, `--mode=full` |
+| `scplus-mcp tree [path]` | Render the structural tree | `--json`, `--headers-only`, `--max-tokens=<n>` |
+| `scplus-mcp skeleton <file>` | Render a file skeleton | `--root=<repo>`, `--json` |
+| `scplus-mcp validate-index [path]` | Validate prepared state | `--mode=core`, `--mode=full`, `--json` |
+| `scplus-mcp validate_index [path]` | Alias for `validate-index` | same flags as above |
+| `scplus-mcp repair-index [path] --target=<...>` | Repair prepared state | `--json` |
+| `scplus-mcp repair_index [path] --target=<...>` | Alias for `repair-index` | `--json` |
+| `scplus-mcp status [path]` | Render a git-aware status summary | `--limit=<n>`, `--json` |
+| `scplus-mcp changes [path]` | Render a git-aware changes summary | `--path=<file>`, `--limit=<n>`, `--json` |
+| `scplus-mcp cluster [path]` | Render persisted semantic cluster output | `--max-depth=<n>`, `--max-clusters=<n>`, `--json` |
+| `scplus-mcp hubs [path]` | Render hub output | `--hub-path=<file>`, `--feature-name=<name>`, `--query=<text>`, `--ranking-mode=<keyword|semantic|both>`, `--show-orphans`, `--json` |
+| `scplus-mcp find-hub [path]` | Alias-style hub discovery entrypoint | same flags as `hubs` |
+| `scplus-mcp restore-points [path]` | Render restore-point history | `--json` |
+| `scplus-mcp restore_points [path]` | Alias for `restore-points` | `--json` |
+| `scplus-mcp doctor [path]` | Print a combined health/observability report | `--json` |
+| `scplus-mcp bridge <subcommand>` | Run one-shot structured backend commands | see bridge table below |
+| `scplus-mcp bridge-serve` | Start the persistent JSON-line bridge service | no flags |
+| `scplus-mcp [path]` | Start the MCP stdio server rooted at the given path or current directory | path only |
+
+The shell-entry aliases currently implemented in `src/cli/commands.ts` are:
+
+- `validate-index` and `validate_index`
+- `repair-index` and `repair_index`
+- `restore-points` and `restore_points`
+- `hubs` and `find-hub`
+
+## MCP Resource And Tool Catalog
+
+### Public MCP resource
+
+The MCP server exposes one resource:
+
+| Resource | URI | Purpose |
+| --- | --- | --- |
+| `scplus_mcp_instructions` | `scplus-mcp://instructions` | Fetch the current repo instruction markdown from the published instructions source URL |
+
+### Full public MCP tool list
+
+Current public MCP tools registered in `src/index.ts`:
+
+#### Index and navigation tools
+
+| Tool | Purpose | Key parameters |
+| --- | --- | --- |
+| `index` | Create or refresh `.scplus/` prepared state | `mode?: "core" | "full"` |
+| `validate_index` | Validate the prepared index for consistency and version compatibility | `mode?: "core" | "full"` |
+| `repair_index` | Repair a prepared index stage or full mode, then validate | `target: "core" | "full" | "bootstrap" | "file-search" | "identifier-search" | "full-artifacts"` |
+| `tree` | Render the structural repository tree | `target_path?`, `depth_limit?`, `include_symbols?`, `max_tokens?` |
+| `skeleton` | Show detailed signatures and type surfaces for one file | `file_path` |
+| `cluster` | Render persisted semantic cluster and subsystem views | `max_depth?`, `max_clusters?` |
+| `find_hub` | List, rank, inspect, or orphan-check manual/suggested hubs | `hub_path?`, `feature_name?`, `query?`, `ranking_mode?`, `show_orphans?` |
+
+#### Exact-query tools
+
+| Tool | Purpose | Key parameters |
+| --- | --- | --- |
+| `symbol` | Exact symbol lookup from the prepared fast-query substrate | `query`, `top_k?` |
+| `word` | Tiny indexed word/phrase lookup | `query`, `top_k?` |
+| `outline` | Compact imports/exports/symbol outline for a known file | `file_path` |
+| `deps` | Direct and reverse dependency info for one indexed file | `target` |
+| `status` | Tiny git worktree summary | `limit?` |
+| `changes` | Git change summary, optionally scoped to one file | `path?`, `limit?` |
+
+#### Search and research tools
+
+| Tool | Purpose | Key parameters |
+| --- | --- | --- |
+| `search` | Intent-routed exact or related search over prepared artifacts | `intent`, `search_type`, `query`, `retrieval_mode?`, `top_k?`, `include_kinds?` |
+| `research` | Broad bounded report combining retrieval, structure, clusters, and hubs | `query` |
+| `evaluate` | Run the built-in real benchmark harness | no parameters |
+
+#### Analysis, write, and recovery tools
+
+| Tool | Purpose | Key parameters |
+| --- | --- | --- |
+| `blast_radius` | Trace symbol usage before modification or deletion | `symbol_name`, `file_context?` |
+| `lint` | Run native linter/compiler-backed analysis | `target_path?` |
+| `checkpoint` | Guarded write path with restore-point creation | `file_path`, `new_content` |
+| `restore_points` | List shadow restore points | no parameters |
+| `restore` | Restore files from a specific restore point | `point_id` |
+
+## Bridge And Automation Surface
+
+The repository has two non-MCP local automation surfaces:
+
+- `bridge <subcommand>` for one-shot JSON output
+- `bridge-serve` for a persistent JSON-line session used by `scplus-cli` and local tooling
+
+### `bridge` subcommands
+
+The one-shot `bridge` wrapper exposes these subcommands:
+
+| Subcommand | Purpose | Key flags / args |
+| --- | --- | --- |
+| `doctor` | Return doctor output as JSON | `--root=<repo>` |
+| `tree` | Return tree output as JSON | `--root=<repo>`, `--headers-only`, `--max-tokens=<n>` |
+| `status` | Return worktree status as JSON | `--root=<repo>`, `--limit=<n>` |
+| `changes` | Return change summaries as JSON | `--root=<repo>`, `--path=<file>`, `--limit=<n>` |
+| `restore-points` | Return restore points as JSON | `--root=<repo>` |
+| `validate-index` | Return validation report as JSON | `--root=<repo>`, `--mode=<core|full>` |
+| `cluster` | Return cluster output as JSON | `--root=<repo>`, `--max-depth=<n>`, `--max-clusters=<n>` |
+| `hubs` / `find-hub` | Return hub output as JSON | `--root=<repo>`, `--hub-path=<file>`, `--feature-name=<name>`, `--query=<text>`, `--ranking-mode=<keyword|semantic|both>`, `--show-orphans` |
+| `symbol` | Return exact symbol results plus freshness header | `<query>` or `--query=<text>`, `--root=<repo>`, `--top-k=<n>` |
+| `word` | Return word results plus freshness header | `<query>` or `--query=<text>`, `--root=<repo>`, `--top-k=<n>` |
+| `outline` | Return outline payload plus freshness header | `<file>` or `--file-path=<file>`, `--root=<repo>` |
+| `deps` | Return dependency payload plus freshness header | `<target>` or `--target=<file>`, `--root=<repo>` |
+| `search` | Return search report plus freshness header | `<query>` or `--query=<text>`, `--root=<repo>`, `--intent=<exact|related>`, `--search-type=<file|symbol|mixed>`, `--retrieval-mode=<semantic|keyword|both>`, `--top-k=<n>`, `--include-kinds=a,b` |
+| `research` | Return research report plus freshness header | `<query>` or `--query=<text>`, `--root=<repo>`, `--top-k=<n>`, `--include-kinds=a,b`, `--max-related=<n>`, `--max-subsystems=<n>`, `--max-hubs=<n>` |
+| `lint` | Return lint/static-analysis report | `--root=<repo>`, `--target-path=<path>` |
+| `blast-radius` | Return blast-radius report | `<symbol>` or `--symbol-name=<name>`, `--root=<repo>`, `--file-context=<file>` |
+| `checkpoint` | Return checkpoint report | `<file>` or `--file-path=<file>`, `--root=<repo>`, `--new-content=<full file contents>` |
+| `restore` | Return restore payload | `<point-id>` or `--point-id=<id>`, `--root=<repo>` |
+| `repair-index` | Return repair payload | `--root=<repo>`, `--target=<core|full|bootstrap|file-search|identifier-search|full-artifacts>` |
+
+### Persistent `bridge-serve` protocol
+
+`bridge-serve` runs a long-lived JSON-line session with these frame shapes:
+
+```json
+{"type":"request","id":1,"command":"doctor","args":{"root":"."}}
+{"type":"response","id":1,"ok":true,"result":{...}}
+{"type":"event","kind":"log","message":"..."}
+```
+
+The persistent shared command executor supports everything listed above plus these backend-control commands:
+
+| Persistent command | Purpose |
+| --- | --- |
+| `index` | Trigger index or refresh work through the shared backend |
+| `job-control` | Control queued work with `cancel-pending`, `retry-last`, or `supersede-pending` |
+| `watch-set` | Enable or disable watching, optionally with debounce override |
+| `shutdown` | Ask the persistent bridge service to shut down |
+
+Alias notes for the bridge layer:
+
+- `find-hub` and `hubs` normalize onto the same implementation
+- underscore forms are normalized to hyphen forms where applicable
+- `validate-index` and `repair-index` are the canonical bridge names
+
+### Persistent-only command arguments
+
+| Command | Key arguments |
+| --- | --- |
+| `index` | `root`, `mode?: "auto" | "core" | "full"` |
+| `job-control` | `root`, `action: "cancel-pending" | "retry-last" | "supersede-pending"` |
+| `watch-set` | `root`, `enabled`, `debounceMs?` |
+| `shutdown` | none |
+
+## Human CLI Surface
+
+The Go operator console is exposed as `scplus-cli`.
+
+### Supported direct `scplus-cli` subcommands
+
+| Command | Purpose | Important args |
+| --- | --- | --- |
+| `scplus-cli` | Launch the interactive operator console | optional `--root=<repo>` |
+| `scplus-cli doctor --root .` | Print a plain-text health report | `--root=<repo>` |
+| `scplus-cli snapshot --root .` | Render a one-shot UI snapshot and exit | `--root=<repo>` |
+| `scplus-cli index --root . [auto|core|full]` | Trigger index work through the backend | `--root=<repo>` and optional positional mode |
+| `scplus-cli tree --root .` | Print the prepared tree view | `--root=<repo>` |
+| `scplus-cli hubs --root .` | Print hub output | `--root=<repo>` |
+| `scplus-cli cluster --root .` | Print cluster output | `--root=<repo>` |
+| `scplus-cli restore-points --root .` | Print restore-point history | `--root=<repo>` |
+| `scplus-cli hub-create --root . --title \"...\" --summary \"...\" --files \"a,b,c\"` | Create a manual hub file | `--title`, `--summary`, `--files`, `--root=<repo>` |
+
+`scplus-cli` only has the direct shell subcommands listed above. The much larger operator-facing command set lives inside the interactive UI and is routed over the persistent `bridge-serve` backend session.
+
+### Human CLI capabilities
+
+Based on the current UI implementation and the previous README’s still-useful context:
+
+- animated/operator-branded top shell
+- typed navigation across overview, tree, hubs, restore points, clusters, dependencies, search, research, lint, blast-radius, checkpoint, status, and changes
+- detail views for selected items and export-ready content
+- jobs and log panes fed by backend events
+- command palette, filtering, history, and export actions
+- shared backend session over `bridge-serve`
+- backend-owned watcher/scheduler state surfaced in the operator experience
+
+### Interactive operator commands exposed inside `scplus-cli`
+
+The Bubble Tea UI exposes a broader action catalog than the direct shell subcommands. These commands are available from the command palette and, where applicable, from the sidebar action list.
+
+| Operator command | What it does | Backing surface |
+| --- | --- | --- |
+| `exit` | Quit the operator console | local UI action |
+| `activity` | Return to the main operator surface | local UI action |
+| `back` | Move backward through navigation history | local UI action |
+| `forward` | Move forward through navigation history | local UI action |
+| `overview` | Open the health and observability overview | local UI view |
+| `tree` | Open the prepared tree section | `bridge-serve` `tree` |
+| `hubs` | Open manual and suggested hubs | `bridge-serve` `hubs` |
+| `issue` | Open the current issue/detail view | local UI view |
+| `log` | Open the backend log history pane | streamed `bridge-serve` events |
+| `restore` | Open restore points and recovery state | `bridge-serve` `restore-points` |
+| `cluster` | Open persisted semantic clusters | `bridge-serve` `cluster` |
+| `status` | Open the git worktree status table | `bridge-serve` `status` |
+| `changes` | Open changed-file stats and ranges | `bridge-serve` `changes` |
+| `search` | Open ranked search output | `bridge-serve` `search` |
+| `symbol` | Open exact symbol output | `bridge-serve` `symbol` |
+| `index` | Trigger indexing through the shared backend | `bridge-serve` `index` |
+| `retry-index` | Re-run the last sync strategy | `bridge-serve` `job-control` |
+| `refresh` | Refresh visible backend-backed sections | repeated bridge refresh calls |
+| `cancel-pending` | Drop queued watch work before it starts | `bridge-serve` `job-control` |
+| `supersede-pending` | Replace stale queued work with the newest plan | `bridge-serve` `job-control` |
+| `watch` | Enable or disable watcher-driven refreshes | `bridge-serve` `watch-set` |
+| `new-hub` | Start the manual hub-creation flow | local UI wizard plus hub creation |
+| `export` | Export the active pane or detail content to `.scplus/exports/` | local UI action |
+| `help` | Open keybinding and behavior help | local UI overlay |
+| `find-hub` | Rank hubs by natural-language query | `bridge-serve` `hubs` / `find-hub` |
+| `exact` | Run exact mixed search | `bridge-serve` `search` |
+| `search-related` | Run related ranked search | `bridge-serve` `search` |
+| `research` | Build the broad explanation-backed report | `bridge-serve` `research` |
+| `file` | Find an exact file/path hit and open it in Search | `bridge-serve` `search` |
+| `go-symbol` | Find an exact symbol hit and open it in Search | `bridge-serve` `search` |
+| `symbol-lookup` | Run exact symbol lookup directly | `bridge-serve` `symbol` |
+| `word` | Run exact word lookup directly | `bridge-serve` `word` |
+| `outline` | Load the prepared outline for one file | `bridge-serve` `outline` |
+| `deps` | Load direct and reverse dependencies for one file | `bridge-serve` `deps` |
+| `lint` | Run native lint diagnostics | `bridge-serve` `lint` |
+| `blast-radius` | Trace symbol usage across the repo | `bridge-serve` `blast-radius` |
+| `checkpoint-detail` | Save the current detail pane to a repo file via checkpoint flow | `bridge-serve` `checkpoint` |
+| `restore-point` | Restore one shadow restore point by id | `bridge-serve` `restore` |
+
+### Human CLI keybindings
+
+The current UI wiring exposes these interaction patterns directly in the Go operator console:
+
+- `:` or `Ctrl+P` opens the command palette.
+- `/` starts in-section filtering.
+- `b` and `f` move backward and forward through navigation history.
+- `e` exports the current pane or detail content into `.scplus/exports/`.
+- `?` opens the help overlay.
+- `Tab` and `Shift+Tab` move focus across panes and overlays.
+- Arrow keys plus `j` / `k` move through lists and tables.
+- `Enter` opens the selected row or confirms the active prompt action.
+- `Esc` exits overlays, prompts, or focus modes.
+- Mouse wheel and pointer focus are supported across sidebar, content, detail, jobs, and logs panes.
+
+## Benchmarks
+
+The committed benchmark artifacts are produced by the real evaluation harness under `docs/benchmarks/`.
 
 - Human-readable summary: [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md)
 - Machine-readable report: [latest.json](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.json)
 
 ![scplus benchmark overview](/home/cesar514/Documents/agent_programming/contextplus/docs/assets/contextpp-benchmark-overview.svg)
 
-Current committed numbers from [latest.md](/home/cesar514/Documents/agent_programming/contextplus/docs/benchmarks/latest.md):
+Current committed numbers from the checked-in benchmark summary:
 
 | Lane | Samples | p50 ms | p95 ms | p99 ms |
 | --- | ---: | ---: | ---: | ---: |
@@ -291,183 +864,20 @@ Current committed numbers from [latest.md](/home/cesar514/Documents/agent_progra
 | Hub suggestion quality | 4 | 4 |
 | Research quality | 3 | 3 |
 
-The latest committed run also recorded `0/4` stale-after-write failures, `0/2` restore failures, `251` Tree-sitter parses, and `247` parser reuses across the benchmark scenarios.
+The current committed run also records:
 
-What the harness proves:
+- `22` golden operator questions
+- `0/4` stale-after-write failures
+- `0/2` restore failures
+- `251` Tree-sitter parses
+- `247` parser reuses
 
-- Prepared-query latency is measured separately for exact, related, and research lanes instead of being collapsed into one average.
-- The suite checks both healthy repositories and hostile states such as broken prepared artifacts and post-rename freshness.
-- Validation quality is part of the contract: the benchmark fails if broken-state repos are treated as healthy or healthy repos are treated as broken.
-- Freshness is exercised through real `checkpoint` and `restore` writes so the serving pointer contract is covered, not just initial indexing.
-
-To regenerate the committed artifacts after a build:
-
-```bash
-node --input-type=module <<'EOF'
-import { writeFile } from "node:fs/promises";
-import { runEvaluationSuite, formatEvaluationReport } from "./build/tools/evaluation.js";
-
-const report = await runEvaluationSuite();
-await writeFile("docs/benchmarks/latest.json", JSON.stringify(report, null, 2));
-await writeFile("docs/benchmarks/latest.md", formatEvaluationReport(report) + "\n");
-EOF
-```
-
-### Codex
-
-Codex uses project-scoped TOML configuration in `.codex/config.toml`:
-
-```toml
-[mcp_servers."scplus-mcp"]
-command = "bunx"
-args = ["scplus-mcp"]
-
-[mcp_servers."scplus-mcp".env]
-OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
-OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
-OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
-CONTEXTPLUS_EMBED_BATCH_SIZE = "8"
-CONTEXTPLUS_EMBED_TRACKER = "lazy"
-```
-
-### From Source
-
-```bash
-npm install
-npm run build
-```
-
-## Embedding Providers
-
-scplus supports two embedding backends controlled by `CONTEXTPLUS_EMBED_PROVIDER`:
-
-| Provider | Value | Requires | Best For |
-|----------|-------|----------|----------|
-| **Ollama** (default) | `ollama` | Local Ollama server | Free, offline, private |
-| **OpenAI-compatible** | `openai` | API key | Gemini (free tier), OpenAI, Groq, vLLM |
-
-### Ollama (Default)
-
-No extra configuration needed. Just run Ollama with an embedding model:
-
-```bash
-ollama pull qwen3-embedding:0.6b-32k
-ollama pull nemotron-3-nano:4b-128k
-ollama serve
-```
-
-### Google Gemini (Free Tier)
-
-Full Claude Code `.mcp.json` example:
-
-```json
-{
-  "mcpServers": {
-    "scplus-mcp": {
-      "command": "npx",
-      "args": ["-y", "scplus-mcp"],
-      "env": {
-        "CONTEXTPLUS_EMBED_PROVIDER": "openai",
-        "CONTEXTPLUS_OPENAI_API_KEY": "YOUR_GEMINI_API_KEY",
-        "CONTEXTPLUS_OPENAI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "CONTEXTPLUS_OPENAI_EMBED_MODEL": "text-embedding-004"
-      }
-    }
-  }
-}
-```
-
-Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
-
-### OpenAI
-
-```json
-{
-  "mcpServers": {
-    "scplus-mcp": {
-      "command": "npx",
-      "args": ["-y", "scplus-mcp"],
-      "env": {
-        "CONTEXTPLUS_EMBED_PROVIDER": "openai",
-        "OPENAI_API_KEY": "sk-...",
-        "OPENAI_EMBED_MODEL": "text-embedding-3-small"
-      }
-    }
-  }
-}
-```
-
-### Other OpenAI-compatible APIs (Groq, vLLM, LiteLLM)
-
-Any endpoint implementing the [OpenAI Embeddings API](https://platform.openai.com/docs/api-reference/embeddings) works:
-
-```json
-{
-  "mcpServers": {
-    "scplus-mcp": {
-      "command": "npx",
-      "args": ["-y", "scplus-mcp"],
-      "env": {
-        "CONTEXTPLUS_EMBED_PROVIDER": "openai",
-        "CONTEXTPLUS_OPENAI_API_KEY": "YOUR_KEY",
-        "CONTEXTPLUS_OPENAI_BASE_URL": "https://your-proxy.example.com/v1",
-        "CONTEXTPLUS_OPENAI_EMBED_MODEL": "your-model-name"
-      }
-    }
-  }
-}
-```
-
-> **Note:** The `cluster` tool also uses a chat model for cluster labeling. When using the `openai` provider, set `CONTEXTPLUS_OPENAI_CHAT_MODEL` (default: `gpt-4o-mini`).
->
-> For VS Code, Cursor, or OpenCode, use the same `env` block inside your IDE's MCP config format (see [Config file locations](#setup) table above).
-
-## Architecture
-
-Three layers built with TypeScript over stdio using the Model Context Protocol SDK:
-
-**Core** (`src/core/`) - Multi-language AST parsing (tree-sitter, 43 extensions), gitignore-aware traversal, Ollama/OpenAI-compatible vector embeddings with sqlite vector collections, and wikilink hub graph.
-
-**Tools** (`src/tools/`) - MCP tools exposing structural, semantic, and operational codebase capabilities.
-
-**Git** (`src/git/`) - Shadow restore point system for undo without touching git history.
-
-**Project State** (`.contextplus/`) - created by `index`; stores authoritative machine state in `.contextplus/state/index.sqlite` plus generated suggested hub markdown under `.contextplus/hubs/suggested/` when full-mode hub suggestions exist. Legacy sqlite-migration directories such as `.contextplus/config/`, `.contextplus/embeddings/`, `.contextplus/checkpoints/`, and `.contextplus/derived/` are removed instead of being recreated empty. Prepared queries read only the active validated generation in sqlite; new rebuilds write into a pending generation and only switch serving after validation, while `checkpoint` and `restore` mark freshness dirty and synchronously refresh before prepared queries resume.
-
-## Config
-
-| Variable                                | Type                      | Default                                | Description                                                   |
-| --------------------------------------- | ------------------------- | -------------------------------------- | ------------------------------------------------------------- |
-| `CONTEXTPLUS_EMBED_PROVIDER`            | string                    | `ollama`                               | Embedding backend: `ollama` or `openai`                      |
-| `OLLAMA_EMBED_MODEL`                    | string                    | `qwen3-embedding:0.6b-32k`             | Ollama embedding model                                        |
-| `OLLAMA_API_KEY`                        | string                    | -                                      | Ollama Cloud API key                                          |
-| `OLLAMA_CHAT_MODEL`                     | string                    | `nemotron-3-nano:4b-128k`              | Ollama chat model for cluster labeling                        |
-| `CONTEXTPLUS_OPENAI_API_KEY`            | string                    | -                                      | API key for OpenAI-compatible provider (alias: `OPENAI_API_KEY`) |
-| `CONTEXTPLUS_OPENAI_BASE_URL`           | string                    | `https://api.openai.com/v1`            | OpenAI-compatible endpoint URL (alias: `OPENAI_BASE_URL`)    |
-| `CONTEXTPLUS_OPENAI_EMBED_MODEL`        | string                    | `text-embedding-3-small`               | OpenAI-compatible embedding model (alias: `OPENAI_EMBED_MODEL`) |
-| `CONTEXTPLUS_OPENAI_CHAT_MODEL`         | string                    | `gpt-4o-mini`                          | OpenAI-compatible chat model for labeling (alias: `OPENAI_CHAT_MODEL`) |
-| `CONTEXTPLUS_EMBED_BATCH_SIZE`          | string (parsed as number) | `8`                | Embedding batch size per GPU call, clamped to 5-10            |
-| `CONTEXTPLUS_EMBED_CHUNK_CHARS`         | string (parsed as number) | `2000`             | Per-chunk chars before merge, clamped to 256-8000             |
-| `CONTEXTPLUS_MAX_EMBED_FILE_SIZE`       | string (parsed as number) | `51200`            | Skip non-code text files larger than this many bytes          |
-| `CONTEXTPLUS_EMBED_NUM_GPU`             | string (parsed as number) | -                  | Optional Ollama embed runtime `num_gpu` override              |
-| `CONTEXTPLUS_EMBED_MAIN_GPU`            | string (parsed as number) | -                  | Optional Ollama embed runtime `main_gpu` override             |
-| `CONTEXTPLUS_EMBED_NUM_THREAD`          | string (parsed as number) | -                  | Optional Ollama embed runtime `num_thread` override           |
-| `CONTEXTPLUS_EMBED_NUM_BATCH`           | string (parsed as number) | -                  | Optional Ollama embed runtime `num_batch` override            |
-| `CONTEXTPLUS_EMBED_NUM_CTX`             | string (parsed as number) | -                  | Optional Ollama embed runtime `num_ctx` override              |
-| `CONTEXTPLUS_EMBED_LOW_VRAM`            | string (parsed as boolean)| -                  | Optional Ollama embed runtime `low_vram` override             |
-| `CONTEXTPLUS_EMBED_TRACKER`             | string (parsed as boolean)| `true`             | Enable realtime embedding refresh on file changes             |
-| `CONTEXTPLUS_EMBED_TRACKER_MAX_FILES`   | string (parsed as number) | `8`                | Max changed files processed per tracker tick, clamped to 5-10 |
-| `CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS` | string (parsed as number) | `700`              | Debounce window before tracker refresh                        |
-
-## Test
-
-```bash
-npm test
-npm run test:demo
-npm run test:all
-```
+This matters because the benchmark suite is exercising not just indexing latency, but also validation quality, rename/write freshness, and broken-state behavior.
 
 ## References
 
-- [ForLoopCodes/contextplus](https://github.com/ForLoopCodes/contextplus) - original upstream codebase this project started from before the standalone `scplus-mcp` evolution.
-- [zilliztech/claude-context](https://github.com/zilliztech/claude-context) - influential prior art for codebase-context workflows and related repository navigation ideas.
+- [zilliztech/claude-context](https://github.com/zilliztech/claude-context): prior art for codebase-context workflows, repository navigation patterns, and agent-facing context tooling that influenced the product direction.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](/home/cesar514/Documents/agent_programming/contextplus/LICENSE) for the full text.

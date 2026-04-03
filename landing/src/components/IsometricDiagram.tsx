@@ -1,4 +1,4 @@
-// summary: Renders the animated isometric diagram that cycles through current Context+ tools.
+// summary: Renders the animated isometric diagram that cycles through current scplus tools.
 // FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
 // inputs: Tool presentation data, animation timing, and landing layout constraints.
 // outputs: Interactive isometric diagram markup for landing surfaces.

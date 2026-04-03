@@ -7,13 +7,13 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 describe("query-engine", () => {
   it("persists explanation cards for files, modules, subsystems, and hubs", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { loadQueryExplanationState } = await import("../../build/tools/query-engine.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-query-engine-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-query-engine-"));
     try {
       await mkdir(join(rootDir, "src", "auth"), { recursive: true });
       await mkdir(join(rootDir, "docs"), { recursive: true });

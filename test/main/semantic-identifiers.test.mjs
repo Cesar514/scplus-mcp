@@ -50,7 +50,7 @@ describe("semantic-identifiers", () => {
   });
 
   it("persists identifier search state and refreshes only changed files on later searches", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-semantic-identifiers-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-semantic-identifiers-"));
     const originalEmbed = Ollama.prototype.embed;
 
     Ollama.prototype.embed = async function ({ input }) {

@@ -7,13 +7,13 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 describe("canonical-search", () => {
   it("formats mixed and symbol search output from the unified ranker", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { runCanonicalSearch } = await import("../../build/tools/unified-ranking.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-canonical-search-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-canonical-search-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(

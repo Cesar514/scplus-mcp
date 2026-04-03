@@ -1,4 +1,4 @@
-// Project indexing command creates durable Context+ repo-local search state
+// Project indexing command creates durable scplus repo-local search state
 // FEATURE: CLI coverage for .scplus layout and persisted search manifests
 
 import { describe, it } from "node:test";
@@ -63,7 +63,7 @@ function qualifyArtifactKey(artifactKey, generation) {
 
 describe("index", () => {
   it("creates the populated .scplus project layout and snapshots", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-index-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -81,7 +81,7 @@ describe("index", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
           },
         },
       );
@@ -123,7 +123,7 @@ describe("index", () => {
       assert.equal(config.contract.storage.mirrorPolicy, "sqlite-only");
       assert.equal(config.contract.invalidation.fileArtifacts, "content-hash");
       assert.equal(config.contract.failureSemantics.policy, "crash-only");
-      assert.equal(config.projectName.startsWith("contextplus-index-"), true);
+      assert.equal(config.projectName.startsWith("scplus-index-"), true);
       assert.ok(Array.isArray(manifest.files));
       assert.equal(manifest.generation, 1);
       assert.ok(manifest.files.includes("src/app.ts"));
@@ -280,7 +280,7 @@ describe("index", () => {
   });
 
   it("migrates legacy checkpoint manifests into sqlite and deletes legacy memory files on reindex", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-index-"));
     try {
       await mkdir(join(cwd, ".scplus", "memories"), { recursive: true });
       await mkdir(join(cwd, ".scplus", "checkpoints"), { recursive: true });
@@ -297,7 +297,7 @@ describe("index", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
           },
         },
       );
@@ -323,7 +323,7 @@ describe("index", () => {
   });
 
   it("supports core mode without writing full derived artifacts", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-core-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-index-core-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -342,7 +342,7 @@ describe("index", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
           },
         },
       );
@@ -368,10 +368,10 @@ describe("index", () => {
   });
 
   it("persists stage dependencies and allows individual stage reruns", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-stages-"));
-    const originalProvider = process.env.CONTEXTPLUS_EMBED_PROVIDER;
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-stages-"));
+    const originalProvider = process.env.SCPLUS_EMBED_PROVIDER;
     try {
-      process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+      process.env.SCPLUS_EMBED_PROVIDER = "mock";
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
         join(cwd, "src", "app.ts"),
@@ -400,8 +400,8 @@ describe("index", () => {
       assert.equal(stageState.stages["full-artifacts"].runCount >= 1, true);
       assert.ok(readArtifactFromDb(dbPath, "full-index-manifest"));
     } finally {
-      if (originalProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
-      else process.env.CONTEXTPLUS_EMBED_PROVIDER = originalProvider;
+      if (originalProvider === undefined) delete process.env.SCPLUS_EMBED_PROVIDER;
+      else process.env.SCPLUS_EMBED_PROVIDER = originalProvider;
       await rm(cwd, { recursive: true, force: true });
     }
   });

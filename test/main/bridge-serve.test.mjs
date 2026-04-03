@@ -28,7 +28,7 @@ class BridgeSession {
       cwd,
       env: {
         ...process.env,
-        CONTEXTPLUS_EMBED_PROVIDER: "mock",
+        SCPLUS_EMBED_PROVIDER: "mock",
         NODE_NO_WARNINGS: "1",
       },
       stdio: ["pipe", "pipe", "pipe"],
@@ -133,7 +133,7 @@ async function requestWithRetry(session, command, args, predicate, attempts = 6,
 
 describe("bridge-serve", () => {
   it("keeps one backend process alive across requests and streams watcher-driven index events", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-serve-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-serve-"));
     const filePath = join(cwd, "src", "app.ts");
     const packageJsonPath = join(cwd, "package.json");
     try {
@@ -145,13 +145,13 @@ describe("bridge-serve", () => {
       await writeFile(
         packageJsonPath,
         JSON.stringify({
-          name: "contextplus-bridge-serve-fixture",
+          name: "scplus-bridge-serve-fixture",
           version: "1.0.0",
           type: "module",
         }, null, 2) + "\n",
       );
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -163,7 +163,7 @@ describe("bridge-serve", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
             NODE_NO_WARNINGS: "1",
           },
         },
@@ -257,7 +257,7 @@ describe("bridge-serve", () => {
         await writeFile(
           packageJsonPath,
           JSON.stringify({
-            name: "contextplus-bridge-serve-fixture",
+            name: "scplus-bridge-serve-fixture",
             version: "1.0.1",
             type: "module",
           }, null, 2) + "\n",
@@ -292,7 +292,7 @@ describe("bridge-serve", () => {
   });
 
   it("bootstraps with a full manual index when no prepared index exists yet", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-bootstrap-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -300,7 +300,7 @@ describe("bridge-serve", () => {
         "// Bridge bootstrap fixture\n// FEATURE: Verify manual index bootstraps a full prepared index when none exists\n\nexport function runApp() {\n  return 1;\n}\n",
       );
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -339,7 +339,7 @@ describe("bridge-serve", () => {
   });
 
   it("uses manual incremental refresh when a valid prepared index already exists", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-manual-refresh-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-manual-refresh-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -347,7 +347,7 @@ describe("bridge-serve", () => {
         "// Bridge manual refresh fixture\n// FEATURE: Verify manual index refreshes only changed files after bootstrap\n\nexport function runApp() {\n  return 1;\n}\n",
       );
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -359,7 +359,7 @@ describe("bridge-serve", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
             NODE_NO_WARNINGS: "1",
           },
         },
@@ -393,7 +393,7 @@ describe("bridge-serve", () => {
   });
 
   it("exposes pending-job cancel, supersede, and retry controls over the persistent session", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-controls-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-controls-"));
     const filePath = join(cwd, "src", "app.ts");
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
@@ -409,7 +409,7 @@ describe("bridge-serve", () => {
         ...manyFiles.map((file) => writeFile(file.path, file.content)),
       ]);
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -421,7 +421,7 @@ describe("bridge-serve", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
             NODE_NO_WARNINGS: "1",
           },
         },
@@ -512,7 +512,7 @@ describe("bridge-serve", () => {
   });
 
   it("serves the expanded bridge parity commands over the persistent session", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-parity-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-parity-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -524,7 +524,7 @@ describe("bridge-serve", () => {
         "// Bridge parity fixture for persistent backend command coverage\n// FEATURE: Verify bridge-serve exposes exact-query, search, lint, and restore commands\n\nimport { runApp } from \"./app\";\n\nexport function startRunner() {\n  return runApp();\n}\n",
       );
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -536,7 +536,7 @@ describe("bridge-serve", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
             NODE_NO_WARNINGS: "1",
           },
         },

@@ -94,6 +94,7 @@ export const CLI_SUBCOMMANDS = new Set([
   "tree",
   "validate-index",
   "validate_index",
+  "view-clusters",
 ]);
 
 const backendCore = createBackendCore();
@@ -209,7 +210,7 @@ async function runChangesCommand(args: string[], forceJson: boolean): Promise<vo
   process.stdout.write(`${formatRepoChangesSummary(changes, limit)}\n`);
 }
 
-async function runClusterCommand(args: string[], forceJson: boolean): Promise<void> {
+async function runViewClustersCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
   const rendered = await semanticNavigate({
@@ -222,6 +223,17 @@ async function runClusterCommand(args: string[], forceJson: boolean): Promise<vo
     return;
   }
   process.stdout.write(`${rendered}\n`);
+}
+
+async function runClusterCommand(args: string[], forceJson: boolean): Promise<void> {
+  const parsed = parseArgs(args);
+  const rootDir = resolveRoot(parsed);
+  const payload = await backendCore.refreshClusters(rootDir);
+  if (forceJson || hasFlag(parsed.flags, "json")) {
+    writeJson(payload);
+    return;
+  }
+  process.stdout.write(`${payload.text}\n`);
 }
 
 async function runHubsCommand(args: string[], forceJson: boolean): Promise<void> {
@@ -395,6 +407,9 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
     return { root, text: rendered };
   }
   if (normalizedCommand === "cluster") {
+    return bridgeServiceCore.refreshClusters(assertString(rawArgs.root, "root"));
+  }
+  if (normalizedCommand === "view-clusters") {
     const root = assertString(rawArgs.root, "root");
     const rendered = await semanticNavigate({
       rootDir: root,
@@ -691,6 +706,10 @@ async function runBridgeCommand(args: string[]): Promise<void> {
     await runClusterCommand(rest, true);
     return;
   }
+  if (subcommand === "view-clusters") {
+    await runViewClustersCommand(rest, true);
+    return;
+  }
   if (subcommand === "hubs" || subcommand === "find-hub") {
     await runHubsCommand(rest, true);
     return;
@@ -863,6 +882,10 @@ export async function handleCliCommand(args: string[]): Promise<boolean> {
   }
   if (subcommand === "cluster") {
     await runClusterCommand(rest, false);
+    return true;
+  }
+  if (subcommand === "view-clusters") {
+    await runViewClustersCommand(rest, false);
     return true;
   }
   if (subcommand === "hubs" || subcommand === "find-hub") {

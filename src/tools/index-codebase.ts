@@ -1,7 +1,7 @@
-// summary: Orchestrates the codebase indexing pipeline that materializes durable Context+ state.
+// summary: Orchestrates the codebase indexing pipeline that materializes durable scplus state.
 // FEATURE: Codebase indexing entrypoint for .scplus project initialization.
 // inputs: Repository roots, indexing mode selection, and stage execution dependencies.
-// outputs: Fresh generations of durable Context+ index artifacts and status metadata.
+// outputs: Fresh generations of durable scplus index artifacts and status metadata.
 
 import { relative } from "path";
 import { acquireRepoRuntimeLock } from "../core/runtime-locks.js";

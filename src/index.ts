@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// summary: Starts the Context+ MCP server and registers the public repository tools.
+// summary: Starts the scplus MCP server and registers the public repository tools.
 // FEATURE: Registers public tools and starts the stdio server.
 // inputs: Process environment, repository root selection, and MCP transport startup state.
-// outputs: Running MCP stdio server with the registered Context+ tool surface.
+// outputs: Running MCP stdio server with the registered scplus tool surface.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -481,9 +481,9 @@ async function main() {
   }
   const trackerController = createEmbeddingTrackerController({
     rootDir: ROOT_DIR,
-    mode: process.env.CONTEXTPLUS_EMBED_TRACKER,
-    debounceMs: Number.parseInt(process.env.CONTEXTPLUS_EMBED_TRACKER_DEBOUNCE_MS ?? "700", 10),
-    maxFilesPerTick: Number.parseInt(process.env.CONTEXTPLUS_EMBED_TRACKER_MAX_FILES ?? "8", 10),
+    mode: process.env.SCPLUS_EMBED_TRACKER,
+    debounceMs: Number.parseInt(process.env.SCPLUS_EMBED_TRACKER_DEBOUNCE_MS ?? "700", 10),
+    maxFilesPerTick: Number.parseInt(process.env.SCPLUS_EMBED_TRACKER_MAX_FILES ?? "8", 10),
   });
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -491,7 +491,7 @@ async function main() {
   let shuttingDown = false;
   let stopParentMonitor = () => { };
   const idleMonitor = createIdleMonitor({
-    timeoutMs: getIdleShutdownMs(process.env.CONTEXTPLUS_IDLE_TIMEOUT_MS),
+    timeoutMs: getIdleShutdownMs(process.env.SCPLUS_IDLE_TIMEOUT_MS),
     onIdle: () => requestShutdown("idle-timeout", 0),
     isTransportAlive: () => process.stdin.readable && !process.stdin.destroyed,
   });
@@ -534,7 +534,7 @@ async function main() {
 
   stopParentMonitor = startParentMonitor({
     parentPid: process.ppid,
-    pollIntervalMs: getParentPollMs(process.env.CONTEXTPLUS_PARENT_POLL_MS),
+    pollIntervalMs: getParentPollMs(process.env.SCPLUS_PARENT_POLL_MS),
     onParentExit: () => requestShutdown("parent-exit", 0),
   });
 

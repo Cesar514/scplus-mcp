@@ -36,7 +36,7 @@ async function createFixtureRepo(rootDir, fileCount = 12) {
   await writeFile(
     join(rootDir, "package.json"),
     JSON.stringify({
-      name: "contextplus-runtime-concurrency",
+      name: "scplus-runtime-concurrency",
       version: "1.0.0",
       type: "module",
     }, null, 2) + "\n",
@@ -55,7 +55,7 @@ class BridgeSession {
       cwd,
       env: {
         ...process.env,
-        CONTEXTPLUS_EMBED_PROVIDER: "mock",
+        SCPLUS_EMBED_PROVIDER: "mock",
         NODE_NO_WARNINGS: "1",
       },
       stdio: ["pipe", "pipe", "pipe"],
@@ -153,13 +153,13 @@ function getTextResult(result) {
 
 describe("runtime concurrency", () => {
   it("rejects a second watcher owner for the same repo across bridge processes", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-watch-lock-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-watch-lock-"));
     const left = new BridgeSession(rootDir);
     const right = new BridgeSession(rootDir);
     try {
       await createFixtureRepo(rootDir);
       await git(rootDir, "init");
-      await git(rootDir, "config", "user.email", "contextplus@example.com");
+      await git(rootDir, "config", "user.email", "scplus@example.com");
       await git(rootDir, "config", "user.name", "Context Plus");
       await git(rootDir, "add", ".");
       await git(rootDir, "commit", "-m", "init");
@@ -168,7 +168,7 @@ describe("runtime concurrency", () => {
 
       await assert.rejects(
         right.request("watch-set", { root: rootDir, enabled: true, debounceMs: 100 }),
-        /Context\+ watcher lock .* already held/i,
+        /scplus watcher lock .* already held/i,
       );
 
       const doctor = await right.request("doctor", { root: rootDir });
@@ -181,27 +181,27 @@ describe("runtime concurrency", () => {
   });
 
   it("rejects concurrent MCP and CLI index mutations for the same repo instead of racing", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-runtime-lock-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-runtime-lock-"));
     let client = null;
     let transport = null;
     const session = new BridgeSession(rootDir);
     try {
       await createFixtureRepo(rootDir, 220);
       await git(rootDir, "init");
-      await git(rootDir, "config", "user.email", "contextplus@example.com");
+      await git(rootDir, "config", "user.email", "scplus@example.com");
       await git(rootDir, "config", "user.name", "Context Plus");
       await git(rootDir, "add", ".");
       await git(rootDir, "commit", "-m", "init");
 
-      client = new Client({ name: "contextplus-runtime-lock-test", version: "1.0.0" });
+      client = new Client({ name: "scplus-runtime-lock-test", version: "1.0.0" });
       transport = new StdioClientTransport({
         command: process.execPath,
         args: [join(process.cwd(), "build", "index.js"), rootDir],
         cwd: process.cwd(),
         env: {
           ...process.env,
-          CONTEXTPLUS_EMBED_PROVIDER: "mock",
-          CONTEXTPLUS_EMBED_TRACKER: "disabled",
+          SCPLUS_EMBED_PROVIDER: "mock",
+          SCPLUS_EMBED_TRACKER: "disabled",
           NODE_NO_WARNINGS: "1",
         },
       });
@@ -220,7 +220,7 @@ describe("runtime concurrency", () => {
         arguments: { mode: "full" },
       });
       assert.equal(concurrentIndexResult.isError, true);
-      assert.match(getTextResult(concurrentIndexResult), /Context\+ mutation lock .* already held/i);
+      assert.match(getTextResult(concurrentIndexResult), /scplus mutation lock .* already held/i);
 
       const bridgeResult = await bridgeIndexPromise;
       assert.match(bridgeResult.output, /^Indexed /);

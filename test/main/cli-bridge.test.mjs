@@ -1,4 +1,4 @@
-// Human CLI bridge command coverage for machine-readable Context+ outputs
+// Human CLI bridge command coverage for machine-readable scplus outputs
 // FEATURE: CLI bridge verification for doctor, tree, and restore-point payloads
 
 import { describe, it } from "node:test";
@@ -22,7 +22,7 @@ async function execBridge(cwd, ...args) {
     {
       env: {
         ...process.env,
-        CONTEXTPLUS_EMBED_PROVIDER: "mock",
+        SCPLUS_EMBED_PROVIDER: "mock",
         NODE_NO_WARNINGS: "1",
       },
     },
@@ -32,7 +32,7 @@ async function execBridge(cwd, ...args) {
 
 describe("cli bridge", () => {
   it("returns structured query, analysis, and restore payloads for a prepared repo", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-cli-bridge-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-cli-bridge-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
       await writeFile(
@@ -44,7 +44,7 @@ describe("cli bridge", () => {
         "// Runner entrypoint used to exercise CLI bridge dependency paths\n// FEATURE: CLI bridge smoke fixture for dependency and blast-radius coverage\n\nimport { runApp } from \"./app.js\";\n\nexport function startRunner() {\n  return runApp();\n}\n",
       );
       await git(cwd, "init");
-      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.email", "scplus@example.com");
       await git(cwd, "config", "user.name", "Context Plus");
       await git(cwd, "add", ".");
       await git(cwd, "commit", "-m", "init");
@@ -56,7 +56,7 @@ describe("cli bridge", () => {
           cwd,
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            SCPLUS_EMBED_PROVIDER: "mock",
             NODE_NO_WARNINGS: "1",
           },
         },

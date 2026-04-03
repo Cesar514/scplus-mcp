@@ -1,5 +1,5 @@
 // summary: Formats human CLI reports for dashboard, status, and backend health views.
-// FEATURE: Human terminal interface bridge over Context+ backend commands surface.
+// FEATURE: Human terminal interface bridge over scplus backend commands surface.
 // inputs: Backend doctor payloads, status data, and health report structures.
 // outputs: Human-readable report sections for the terminal operator interface.
 

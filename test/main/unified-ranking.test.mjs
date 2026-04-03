@@ -9,14 +9,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 const execFileAsync = promisify(execFile);
 
 describe("unified-ranking", () => {
   it("combines file, chunk, identifier, and structure evidence for symbol ranking", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { rankUnifiedSearch } = await import("../../build/tools/unified-ranking.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-unified-ranking-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-unified-ranking-"));
     try {
       await mkdir(join(rootDir, "src", "lib"), { recursive: true });
       await mkdir(join(rootDir, "src", "services"), { recursive: true });
@@ -93,7 +93,7 @@ describe("unified-ranking", () => {
   });
 
   it("issues exactly one embedding request per unified top-level query", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-unified-ranking-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-unified-ranking-"));
     try {
       await mkdir(join(rootDir, "src", "lib"), { recursive: true });
       await mkdir(join(rootDir, "src", "services"), { recursive: true });
@@ -158,7 +158,7 @@ describe("unified-ranking", () => {
         {
           env: {
             ...process.env,
-            CONTEXTPLUS_EMBED_PROVIDER: "ollama",
+            SCPLUS_EMBED_PROVIDER: "ollama",
             TEST_ROOT: rootDir,
           },
         },
@@ -173,7 +173,7 @@ describe("unified-ranking", () => {
   it("does not classify a real symbol named file as a file hit", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { rankUnifiedSearch } = await import("../../build/tools/unified-ranking.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-unified-symbol-file-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-unified-symbol-file-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(

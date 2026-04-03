@@ -42,10 +42,10 @@ describe("index-codebase", () => {
   });
 
   it("persists stage timing and throughput observability in index status", async () => {
-    process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+    process.env.SCPLUS_EMBED_PROVIDER = "mock";
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { createIndexRuntime, loadIndexStatus } = await import("../../build/tools/index-stages.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-index-observability-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-index-observability-"));
     try {
       await mkdir(join(rootDir, "src"), { recursive: true });
       await writeFile(

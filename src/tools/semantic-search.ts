@@ -157,7 +157,7 @@ function toIntegerOr(value: string | undefined, fallback: number): number {
 }
 
 function getMaxEmbedFileSize(): number {
-  return Math.max(1024, toIntegerOr(process.env.CONTEXTPLUS_MAX_EMBED_FILE_SIZE, DEFAULT_MAX_EMBED_FILE_SIZE));
+  return Math.max(1024, toIntegerOr(process.env.SCPLUS_MAX_EMBED_FILE_SIZE, DEFAULT_MAX_EMBED_FILE_SIZE));
 }
 
 function normalizeMtimeMs(value: number): number {

@@ -1,4 +1,4 @@
-// summary: Owns the sqlite-backed durable storage layer for authoritative Context+ machine state.
+// summary: Owns the sqlite-backed durable storage layer for authoritative scplus machine state.
 // FEATURE: Full-engine sqlite-only state substrate, artifacts, vector collections, and backups.
 // inputs: Artifact records, vector entries, generation metadata, and transactional write requests.
 // outputs: Persisted sqlite state, durable query reads, and backup or maintenance operations.
@@ -15,7 +15,7 @@ import {
   type VectorEntryRow,
   type VectorStoreEntry,
 } from "./index-database-vectors.js";
-import { CONTEXTPLUS_INDEX_DB_FILE, ensureContextplusLayout } from "./project-layout.js";
+import { SCPLUS_INDEX_DB_FILE, ensureScplusLayout } from "./project-layout.js";
 
 export type { VectorStoreEntry } from "./index-database-vectors.js";
 
@@ -349,19 +349,19 @@ function initializeIndexDatabase(db: DatabaseSync): void {
 }
 
 function openIndexDatabase(rootDir: string): DatabaseSync {
-  const dbPath = join(resolve(rootDir), CONTEXTPLUS_INDEX_DB_FILE);
+  const dbPath = join(resolve(rootDir), SCPLUS_INDEX_DB_FILE);
   const db = new DatabaseSync(dbPath);
   initializeIndexDatabase(db);
   return db;
 }
 
 export async function getIndexDatabasePath(rootDir: string): Promise<string> {
-  const layout = await ensureContextplusLayout(resolve(rootDir));
+  const layout = await ensureScplusLayout(resolve(rootDir));
   return join(layout.state, "index.sqlite");
 }
 
 export async function loadIndexServingState(rootDir: string): Promise<IndexServingState> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     return readServingStateFromDb(db);
@@ -371,7 +371,7 @@ export async function loadIndexServingState(rootDir: string): Promise<IndexServi
 }
 
 export async function reservePendingIndexGeneration(rootDir: string): Promise<number> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     db.exec("BEGIN");
@@ -397,7 +397,7 @@ export async function activateIndexGeneration(
   generation: number,
   validatedAt: string,
 ): Promise<IndexServingState> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     db.exec("BEGIN");
@@ -422,7 +422,7 @@ export async function activateIndexGeneration(
 }
 
 export async function clearPendingIndexGeneration(rootDir: string, pendingGeneration?: number): Promise<IndexServingState> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     db.exec("BEGIN");
@@ -446,7 +446,7 @@ export async function updateIndexServingFreshness(
   freshness: IndexGenerationFreshness,
   blockedReason?: string,
 ): Promise<IndexServingState> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     db.exec("BEGIN");
@@ -484,7 +484,7 @@ export async function saveIndexArtifact<T>(
   value: T,
   options?: IndexArtifactOptions,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -510,7 +510,7 @@ export async function loadIndexArtifact<T>(
   emptyValue: () => T,
   options?: IndexArtifactOptions,
 ): Promise<T> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -536,7 +536,7 @@ export async function saveIndexTextArtifact(
   value: string,
   options?: IndexArtifactOptions,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -562,7 +562,7 @@ export async function loadIndexTextArtifact(
   emptyValue: () => string,
   options?: IndexArtifactOptions,
 ): Promise<string> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -587,7 +587,7 @@ export async function saveRestorePointBackup(
   filePath: string,
   fileContent: string,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     db.prepare(`
@@ -607,7 +607,7 @@ export async function loadRestorePointBackup(
   pointId: string,
   filePath: string,
 ): Promise<string | null> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const row = db.prepare(`
@@ -625,7 +625,7 @@ export async function pruneRestorePointBackups(
   rootDir: string,
   keepPointIds: string[],
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     if (keepPointIds.length === 0) {
@@ -650,7 +650,7 @@ export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
 }
 
 export async function inspectIndexDatabase(rootDir: string, options?: IndexArtifactOptions): Promise<IndexDatabaseInspection> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -711,7 +711,7 @@ export async function deleteIndexArtifact(
   kind: "artifact" | "text" = "artifact",
   options?: IndexArtifactOptions,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
@@ -731,7 +731,7 @@ export async function loadVectorCollection<TMetadata = unknown>(
   namespace: string,
   options?: IndexArtifactOptions,
 ): Promise<VectorStoreEntry<TMetadata>[]> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const storedNamespace = resolveStoredVectorNamespace(db, namespace, options);
@@ -753,7 +753,7 @@ export async function loadVectorEntriesById<TMetadata = unknown>(
   entryIds: string[],
   options?: IndexArtifactOptions,
 ): Promise<VectorStoreEntry<TMetadata>[]> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   if (entryIds.length === 0) return [];
   const uniqueEntryIds = Array.from(new Set(entryIds));
   const db = openIndexDatabase(rootDir);
@@ -778,7 +778,7 @@ export async function loadPresentVectorEntryIds(
   entryIds: string[],
   options?: IndexArtifactOptions,
 ): Promise<string[]> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   if (entryIds.length === 0) return [];
   const uniqueEntryIds = Array.from(new Set(entryIds));
   const db = openIndexDatabase(rootDir);
@@ -818,7 +818,7 @@ export async function replaceVectorCollection<TMetadata = unknown>(
   entries: VectorStoreEntry<TMetadata>[],
   options?: IndexArtifactOptions,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   const updatedAt = new Date().toISOString();
   try {
@@ -873,7 +873,7 @@ export async function upsertVectorEntries<TMetadata = unknown>(
   entries: VectorStoreEntry<TMetadata>[],
   options?: IndexArtifactOptions,
 ): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   const updatedAt = new Date().toISOString();
   try {
@@ -941,7 +941,7 @@ export async function upsertVectorEntries<TMetadata = unknown>(
 }
 
 export async function deleteVectorEntries(rootDir: string, namespace: string, entryIds: string[], options?: IndexArtifactOptions): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   if (entryIds.length === 0) return;
   const db = openIndexDatabase(rootDir);
   try {
@@ -974,7 +974,7 @@ export async function deleteVectorEntries(rootDir: string, namespace: string, en
 }
 
 export async function deleteVectorCollection(rootDir: string, namespace: string, options?: IndexArtifactOptions): Promise<void> {
-  await ensureContextplusLayout(resolve(rootDir));
+  await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);

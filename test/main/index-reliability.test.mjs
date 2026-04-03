@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 async function createFixtureRepo(rootDir) {
   await mkdir(join(rootDir, "src", "auth"), { recursive: true });
@@ -54,7 +54,7 @@ describe("index-reliability", () => {
     const { runResearch } = await import("../../build/tools/research.js");
     const { validatePreparedIndex, repairPreparedIndex } = await import("../../build/tools/index-reliability.js");
     const { deleteIndexArtifact } = await import("../../build/core/index-database.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-index-reliability-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-index-reliability-"));
     try {
       await createFixtureRepo(rootDir);
       await indexCodebase({ rootDir, mode: "full" });
@@ -92,7 +92,7 @@ describe("index-reliability", () => {
     const { runCanonicalSearch } = await import("../../build/tools/unified-ranking.js");
     const { validatePreparedIndex, repairPreparedIndex } = await import("../../build/tools/index-reliability.js");
     const { loadIndexArtifact, saveIndexArtifact } = await import("../../build/core/index-database.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-index-version-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-index-version-"));
     try {
       await createFixtureRepo(rootDir);
       await indexCodebase({ rootDir, mode: "full" });
@@ -133,7 +133,7 @@ describe("index-reliability", () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { validatePreparedIndex } = await import("../../build/tools/index-reliability.js");
     const { loadIndexArtifact, saveIndexArtifact } = await import("../../build/core/index-database.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-index-upgrade-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-index-upgrade-"));
     try {
       await createFixtureRepo(rootDir);
       await indexCodebase({ rootDir, mode: "full" });
@@ -177,7 +177,7 @@ describe("index-reliability", () => {
     const { runSearchByIntent } = await import("../../build/tools/query-intent.js");
     const { runResearch } = await import("../../build/tools/research.js");
     const { loadIndexServingState } = await import("../../build/core/index-database.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-write-refresh-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-write-refresh-"));
     try {
       await createFixtureRepo(rootDir);
       await indexCodebase({ rootDir, mode: "full" });
@@ -247,7 +247,7 @@ describe("index-reliability", () => {
     const { validatePreparedIndex } = await import("../../build/tools/index-reliability.js");
     const { lookupExactSymbol } = await import("../../build/tools/exact-query.js");
     const { updateIndexServingFreshness } = await import("../../build/core/index-database.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-dirty-serving-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-dirty-serving-"));
     try {
       await createFixtureRepo(rootDir);
       await indexCodebase({ rootDir, mode: "full" });

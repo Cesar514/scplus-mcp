@@ -1,11 +1,11 @@
-// summary: Defines shared schema contracts for durable Context+ indexing artifacts and stages.
+// summary: Defines shared schema contracts for durable scplus indexing artifacts and stages.
 // FEATURE: Explicit schemas for core and full indexing pipeline state.
 // inputs: Artifact version rules, generation metadata, and pipeline stage requirements.
 // outputs: Typed indexing contracts used across persistence, validation, and repair flows.
 
 import { join } from "path";
 import {
-  CONTEXTPLUS_INDEX_DB_FILE,
+  SCPLUS_INDEX_DB_FILE,
 } from "../core/project-layout.js";
 
 export type IndexMode = "core" | "full";
@@ -234,7 +234,7 @@ export const INDEX_FAILURE_SEMANTICS: IndexFailureSemantics = {
 
 export const INDEX_STORAGE_CONTRACT: IndexStorageContract = {
   substrate: "sqlite",
-  databasePath: CONTEXTPLUS_INDEX_DB_FILE,
+  databasePath: SCPLUS_INDEX_DB_FILE,
   mirrorPolicy: "sqlite-only",
   vectorStoreTable: "vector_entries",
   vectorCollectionTable: "vector_collections",
@@ -262,7 +262,7 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
       dependencies: [],
       modes: ["core", "full"],
       outputs: [
-        CONTEXTPLUS_INDEX_DB_FILE,
+        SCPLUS_INDEX_DB_FILE,
         "sqlite:index_artifacts/project-config",
         "sqlite:index_text_artifacts/context-tree",
         "sqlite:index_artifacts/file-manifest",

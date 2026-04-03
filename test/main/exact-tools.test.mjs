@@ -13,7 +13,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const execFileAsync = promisify(execFile);
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 async function git(rootDir, ...args) {
   await execFileAsync("git", args, { cwd: rootDir });
@@ -71,7 +71,7 @@ function getTextResult(result) {
 describe("exact-tools", () => {
   it("exposes tiny exact-query MCP tools over the prepared fast-query substrate", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-exact-tools-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-exact-tools-"));
     let client = null;
     let transport = null;
     try {
@@ -83,15 +83,15 @@ describe("exact-tools", () => {
       await git(rootDir, "commit", "-m", "initial");
       await indexCodebase({ rootDir, mode: "full" });
 
-      client = new Client({ name: "contextplus-test", version: "1.0.0" });
+      client = new Client({ name: "scplus-test", version: "1.0.0" });
       transport = new StdioClientTransport({
         command: process.execPath,
         args: [join(process.cwd(), "build", "index.js"), rootDir],
         cwd: process.cwd(),
         env: {
           ...process.env,
-          CONTEXTPLUS_EMBED_PROVIDER: "mock",
-          CONTEXTPLUS_EMBED_TRACKER: "disabled",
+          SCPLUS_EMBED_PROVIDER: "mock",
+          SCPLUS_EMBED_TRACKER: "disabled",
         },
         stderr: "pipe",
       });

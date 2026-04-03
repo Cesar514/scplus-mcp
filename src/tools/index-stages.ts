@@ -1,4 +1,4 @@
-// summary: Runs the durable stage graph for the sqlite-backed Context+ indexing pipeline.
+// summary: Runs the durable stage graph for the sqlite-backed scplus indexing pipeline.
 // FEATURE: Rerunnable sqlite-only indexing stages with legacy artifact cleanup.
 // inputs: Stage execution context, repo data, and generation-scoped artifact dependencies.
 // outputs: Completed stage records, persisted artifacts, and stage progress updates.
@@ -15,7 +15,7 @@ import {
   type IndexServingState,
 } from "../core/index-database.js";
 import { getContextTree } from "./context-tree.js";
-import { ensureContextplusLayout, type ContextplusLayout } from "../core/project-layout.js";
+import { ensureScplusLayout, type ScplusLayout } from "../core/project-layout.js";
 import { walkDirectory } from "../core/walker.js";
 import { ensureFileSearchIndex, type FileSearchIndexProgress, type FileSearchIndexStats } from "./semantic-search.js";
 import { ensureIdentifierSearchIndex, type IdentifierIndexProgress, type IdentifierIndexStats } from "./semantic-identifiers.js";
@@ -131,7 +131,7 @@ export interface IndexStageRuntime {
   mode: IndexMode;
   generation: number;
   servingState: IndexServingState;
-  layout: ContextplusLayout;
+  layout: ScplusLayout;
   config: ProjectIndexConfig;
   paths: IndexRuntimePaths;
 }
@@ -172,7 +172,7 @@ function buildProjectConfig(rootDir: string, mode: IndexMode, generation: number
   };
 }
 
-function buildRuntimePaths(layout: ContextplusLayout): IndexRuntimePaths {
+function buildRuntimePaths(layout: ScplusLayout): IndexRuntimePaths {
   return {
     databasePath: join(layout.state, "index.sqlite"),
   };
@@ -231,7 +231,7 @@ function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageSt
   };
 }
 
-async function cleanupLegacyArtifacts(layout: ContextplusLayout): Promise<void> {
+async function cleanupLegacyArtifacts(layout: ScplusLayout): Promise<void> {
   const embeddingEntries = await readdir(layout.embeddings, { withFileTypes: true }).catch(() => []);
   const checkpointEntries = await readdir(layout.checkpoints, { withFileTypes: true }).catch(() => []);
   const legacyEmbeddingArtifacts = embeddingEntries
@@ -348,7 +348,7 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
 export async function createIndexRuntime(options: { rootDir: string; mode?: IndexMode; generation?: number }): Promise<IndexStageRuntime> {
   const rootDir = resolve(options.rootDir);
   const mode = options.mode ?? DEFAULT_INDEX_MODE;
-  const layout = await ensureContextplusLayout(rootDir);
+  const layout = await ensureScplusLayout(rootDir);
   const servingState = await loadIndexServingState(rootDir);
   const generation = options.generation ?? servingState.activeGeneration;
   return {

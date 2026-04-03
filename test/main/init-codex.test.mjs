@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 describe("init-codex", () => {
   it("writes valid .codex/config.toml for npx runner", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-codex-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-codex-"));
     try {
       await execFileAsync(
         process.execPath,
@@ -35,7 +35,7 @@ describe("init-codex", () => {
   });
 
   it("writes valid .codex/config.toml for bunx runner", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "contextplus-codex-"));
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-codex-"));
     try {
       await execFileAsync(
         process.execPath,

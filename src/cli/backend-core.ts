@@ -42,7 +42,7 @@ const WATCH_IGNORE_PREFIXES = [
 export type BackendEventKind = "job" | "log" | "watch-batch" | "watch-state";
 export type BackendJobState = "canceled" | "completed" | "failed" | "progress" | "queued" | "running";
 export type BackendJobControlAction = "cancel-pending" | "retry-last" | "supersede-pending";
-export type BackendJobName = "index" | "refresh";
+export type BackendJobName = "cluster" | "index" | "refresh";
 type ManualIndexMode = IndexMode | "auto";
 
 export interface BackendEvent {
@@ -237,6 +237,142 @@ class BackendRootSession {
       changedPaths: [],
       reason: "manual incremental refresh using the existing prepared index",
     }, "manual");
+  }
+
+  async runManualCluster(): Promise<TextPayload> {
+    this.assertOpen();
+    if (this.activeJob) {
+      throw new Error(`Backend job already running for ${this.rootDir}.`);
+    }
+    const mutationLock = await this.acquireMutationLock("bridge manual cluster refresh");
+    this.activeJob = "cluster";
+    await this.emit({
+      kind: "job",
+      root: this.rootDir,
+      job: "cluster",
+      state: "running",
+      mode: DEFAULT_INDEX_MODE,
+      phase: "cluster-scan",
+      source: "manual",
+      queueDepth: this.getQueueDepth(),
+      pending: this.queuedWatchPlan !== null,
+      pendingPaths: this.getCurrentPendingPaths(),
+      pendingChangeCount: this.getCurrentPendingPaths().length,
+      pendingJobKind: this.queuedWatchPlan?.job,
+      message: "running semantic cluster refresh",
+    });
+    try {
+      await ensureFileSearchIndex(this.rootDir, async (progress) => {
+        await this.emit({
+          kind: "job",
+          root: this.rootDir,
+          job: "cluster",
+          state: "progress",
+          mode: DEFAULT_INDEX_MODE,
+          phase: progress.phase,
+          source: "manual",
+          queueDepth: this.getQueueDepth(),
+          pending: this.queuedWatchPlan !== null,
+          message: formatFileProgress(progress),
+          processedItems: progress.processedFiles,
+          totalItems: progress.totalFiles,
+          percentComplete: scaleRefreshPercent(0, 3, calculatePercentComplete(progress.processedFiles, progress.totalFiles)),
+          currentFile: progress.currentFile,
+          pendingPaths: this.getCurrentPendingPaths(),
+          pendingChangeCount: this.getCurrentPendingPaths().length,
+          pendingJobKind: this.queuedWatchPlan?.job,
+        });
+      });
+      await ensureIdentifierSearchIndex(this.rootDir, async (progress) => {
+        await this.emit({
+          kind: "job",
+          root: this.rootDir,
+          job: "cluster",
+          state: "progress",
+          mode: DEFAULT_INDEX_MODE,
+          phase: progress.phase,
+          source: "manual",
+          queueDepth: this.getQueueDepth(),
+          pending: this.queuedWatchPlan !== null,
+          message: formatIdentifierProgress(progress),
+          processedItems: progress.processedFiles,
+          totalItems: progress.totalFiles,
+          percentComplete: scaleRefreshPercent(1, 3, calculatePercentComplete(progress.processedFiles, progress.totalFiles)),
+          currentFile: progress.currentFile,
+          pendingPaths: this.getCurrentPendingPaths(),
+          pendingChangeCount: this.getCurrentPendingPaths().length,
+          pendingJobKind: this.queuedWatchPlan?.job,
+        });
+      });
+      await ensureFullIndexArtifacts({ rootDir: this.rootDir }, async (progress) => {
+        await this.emit({
+          kind: "job",
+          root: this.rootDir,
+          job: "cluster",
+          state: "progress",
+          mode: DEFAULT_INDEX_MODE,
+          phase: progress.phase,
+          source: "manual",
+          queueDepth: this.getQueueDepth(),
+          pending: this.queuedWatchPlan !== null,
+          message: formatFullProgress(progress),
+          processedItems: progress.processedFiles,
+          totalItems: progress.totalFiles,
+          percentComplete: scaleRefreshPercent(2, 3, calculatePercentComplete(progress.processedFiles, progress.totalFiles)),
+          currentFile: progress.currentFile,
+          pendingPaths: this.getCurrentPendingPaths(),
+          pendingChangeCount: this.getCurrentPendingPaths().length,
+          pendingJobKind: this.queuedWatchPlan?.job,
+        });
+      });
+      const rendered = await semanticNavigate({
+        rootDir: this.rootDir,
+        maxDepth: 3,
+        maxClusters: 20,
+      });
+      const summary = "semantic cluster refresh completed";
+      this.emitLog(summary);
+      await this.emit({
+        kind: "job",
+        root: this.rootDir,
+        job: "cluster",
+        state: "completed",
+        mode: DEFAULT_INDEX_MODE,
+        phase: "completed",
+        source: "manual",
+        queueDepth: this.getQueueDepth(),
+        pending: this.queuedWatchPlan !== null,
+        percentComplete: 100,
+        pendingPaths: this.getCurrentPendingPaths(),
+        pendingChangeCount: this.getCurrentPendingPaths().length,
+        pendingJobKind: this.queuedWatchPlan?.job,
+        message: summary,
+      });
+      return { root: this.rootDir, text: rendered };
+    } catch (error) {
+      const message = toErrorMessage(error);
+      this.emitLog(message, "error");
+      await this.emit({
+        kind: "job",
+        root: this.rootDir,
+        job: "cluster",
+        state: "failed",
+        mode: DEFAULT_INDEX_MODE,
+        phase: "failed",
+        source: "manual",
+        queueDepth: this.getQueueDepth(),
+        pending: this.queuedWatchPlan !== null,
+        pendingPaths: this.getCurrentPendingPaths(),
+        pendingChangeCount: this.getCurrentPendingPaths().length,
+        pendingJobKind: this.queuedWatchPlan?.job,
+        message,
+      });
+      throw error;
+    } finally {
+      this.activeJob = null;
+      this.syncSchedulerObservability();
+      await mutationLock.release();
+    }
   }
 
   async cancelPendingJob(): Promise<JobControlPayload> {
@@ -979,6 +1115,10 @@ export class BackendCore {
         maxClusters: 20,
       }),
     };
+  }
+
+  async refreshClusters(rootDir: string): Promise<TextPayload> {
+    return this.getSession(rootDir).runManualCluster();
   }
 
   async restorePoints(rootDir: string): Promise<Awaited<ReturnType<typeof listRestorePoints>>> {

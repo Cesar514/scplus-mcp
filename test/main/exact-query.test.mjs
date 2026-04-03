@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 async function git(rootDir, ...args) {
   await execFileAsync("git", args, { cwd: rootDir });
@@ -71,7 +71,7 @@ describe("exact-query", () => {
       lookupExactSymbol,
       lookupWord,
     } = await import("../../build/tools/exact-query.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-exact-query-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-exact-query-"));
     try {
       await createFixtureRepo(rootDir);
       await git(rootDir, "init");

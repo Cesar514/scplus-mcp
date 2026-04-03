@@ -7,7 +7,7 @@ import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { extractFeatureTag, formatHubLink } from "../core/hub.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
-import { ensureContextplusLayout } from "../core/project-layout.js";
+import { ensureScplusLayout } from "../core/project-layout.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
 
 interface PersistedStructureIndexState {
@@ -220,7 +220,7 @@ function countSuggestionLinks(
 }
 
 export async function refreshHubSuggestionState(rootDir: string): Promise<{ state: PersistedHubSuggestionState; stats: HubSuggestionStats }> {
-  const layout = await ensureContextplusLayout(rootDir);
+  const layout = await ensureScplusLayout(rootDir);
   const structureState = await loadStructureState(rootDir);
   const clusterState = await loadClusterState(rootDir);
   const suggestionsDir = join(layout.hubs, "suggested");

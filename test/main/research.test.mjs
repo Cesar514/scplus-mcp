@@ -7,14 +7,14 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.CONTEXTPLUS_EMBED_PROVIDER = "mock";
+process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
 describe("research", () => {
   it("aggregates ranked code hits with related files, subsystem context, and hubs", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const { runResearch, buildResearchReport } = await import("../../build/tools/research.js");
     const { loadQueryExplanationState } = await import("../../build/tools/query-engine.js");
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-research-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-research-"));
     try {
       await mkdir(join(rootDir, "src", "auth"), { recursive: true });
       await mkdir(join(rootDir, "docs"), { recursive: true });
@@ -73,7 +73,11 @@ describe("research", () => {
       assert.equal(report.fileCards.length >= 1, true);
       assert.equal(report.moduleCards.length >= 1, true);
       assert.equal(report.layers.explanation.artifactKeys.includes("query-explanation-index"), true);
+      assert.match(report.semanticSummary.answer, /src\/auth\/jwt\.ts|src\/auth\/session\.ts/);
       assert.match(output, /^Research: "auth token session verification"/);
+      assert.match(output, /Semantic answer:/);
+      assert.match(output, /Key findings:/);
+      assert.match(output, /Recommended files:/);
       assert.match(output, /Code hits:/);
       assert.match(output, /Explanation context:/);
       assert.match(output, /Module context:/);

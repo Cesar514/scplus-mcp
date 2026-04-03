@@ -4,6 +4,7 @@
 // outputs: Aggregated research summaries with supporting repository context.
 
 import { assertValidPreparedIndex } from "./index-reliability.js";
+import { generateStructuredChat } from "../core/chat.js";
 import {
   loadQueryExplanationState,
   type FileExplanationCard,
@@ -59,6 +60,12 @@ interface ResearchModuleCardHit {
   card: ModuleExplanationCard;
 }
 
+export interface ResearchSemanticSummary {
+  answer: string;
+  keyFindings: string[];
+  recommendedFiles: string[];
+}
+
 export interface ResearchReport {
   query: string;
   layers: QueryEngineContract;
@@ -69,6 +76,7 @@ export interface ResearchReport {
   relatedHits: ResearchRelatedHit[];
   subsystemHits: ResearchSubsystemHit[];
   hubHits: ResearchHubHit[];
+  semanticSummary: ResearchSemanticSummary;
 }
 
 function splitTerms(text: string): string[] {
@@ -221,6 +229,122 @@ function dedupeHubHits(hits: ResearchHubHit[]): ResearchHubHit[] {
   return Array.from(deduped.values());
 }
 
+interface ResearchSemanticSummaryResponse {
+  answer: string;
+  keyFindings: string[];
+  recommendedFiles: string[];
+}
+
+function buildResearchSemanticSummarySchema(): object {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["answer", "keyFindings", "recommendedFiles"],
+    properties: {
+      answer: { type: "string" },
+      keyFindings: {
+        type: "array",
+        items: { type: "string" },
+      },
+      recommendedFiles: {
+        type: "array",
+        items: { type: "string" },
+      },
+    },
+  };
+}
+
+function buildMockResearchSemanticSummary(report: Omit<ResearchReport, "semanticSummary">): ResearchSemanticSummary {
+  const leadPaths = Array.from(new Set(report.codeHits.slice(0, 3).map((hit) => hit.path)));
+  const subsystemLabel = report.subsystemHits.find((hit) => hit.card.label !== "Project")?.card.label ?? report.subsystemHits[0]?.card.label;
+  const hubLabel = report.hubHits[0]?.card.label;
+  return {
+    answer: [
+      `"${report.query}" is primarily grounded in ${leadPaths.join(", ") || "the prepared repository evidence"}.`,
+      subsystemLabel ? `The strongest subsystem signal is ${subsystemLabel}.` : "",
+      hubLabel ? `The strongest hub signal is ${hubLabel}.` : "",
+    ].filter(Boolean).join(" "),
+    keyFindings: [
+      leadPaths[0] ? `Primary implementation evidence is ${leadPaths[0]}.` : "No primary code hit was available.",
+      report.moduleCards[0] ? `Most relevant module is ${report.moduleCards[0].modulePath}.` : "No relevant module card was available.",
+      subsystemLabel ? `Subsystem context is anchored by ${subsystemLabel}.` : "No subsystem summary matched strongly.",
+    ],
+    recommendedFiles: leadPaths,
+  };
+}
+
+function normalizeResearchSemanticSummary(value: ResearchSemanticSummaryResponse): ResearchSemanticSummary {
+  const answer = value.answer?.trim();
+  if (!answer) throw new Error("Research chat summary is missing answer.");
+  const keyFindings = Array.isArray(value.keyFindings)
+    ? value.keyFindings.map((entry) => entry?.trim()).filter((entry): entry is string => Boolean(entry))
+    : [];
+  const recommendedFiles = Array.isArray(value.recommendedFiles)
+    ? value.recommendedFiles.map((entry) => entry?.trim()).filter((entry): entry is string => Boolean(entry))
+    : [];
+  return {
+    answer,
+    keyFindings,
+    recommendedFiles,
+  };
+}
+
+async function buildSemanticResearchSummary(report: Omit<ResearchReport, "semanticSummary">): Promise<ResearchSemanticSummary> {
+  const response = await generateStructuredChat<ResearchSemanticSummaryResponse>({
+    system: [
+      "You synthesize grounded repository research answers from ranked code evidence.",
+      "Return strict JSON only.",
+      "The answer must directly answer the user's question in 2 to 4 sentences and cite concrete file paths or module paths from the evidence.",
+      "Do not invent files or subsystems that are not present in the prompt.",
+      "keyFindings must be short standalone sentences grounded in the evidence.",
+      "recommendedFiles must contain the most important file paths to inspect next.",
+    ].join(" "),
+    prompt: JSON.stringify({
+      task: "semantic-research-summary",
+      query: report.query,
+      codeHits: report.codeHits.slice(0, 5).map((hit) => ({
+        path: hit.path,
+        score: Number(hit.score.toFixed(4)),
+        title: hit.title,
+        kind: hit.kind,
+        matchedTerms: hit.evidence.matchedTerms.slice(0, 5),
+      })),
+      fileCards: report.fileCards.slice(0, 4).map((hit) => ({
+        path: hit.path,
+        purposeSummary: hit.card.purposeSummary,
+        publicApiCard: hit.card.publicApiCard,
+        changeRiskNote: hit.card.changeRiskNote,
+      })),
+      moduleCards: report.moduleCards.slice(0, 3).map((hit) => ({
+        modulePath: hit.modulePath,
+        purposeSummary: hit.card.purposeSummary,
+      })),
+      subsystemHits: report.subsystemHits.slice(0, 3).map((hit) => ({
+        label: hit.card.label,
+        overview: hit.card.overview,
+        rationale: hit.card.rationale,
+        filePaths: hit.card.filePaths.slice(0, 5),
+      })),
+      hubHits: report.hubHits.slice(0, 3).map((hit) => ({
+        kind: hit.card.kind,
+        label: hit.card.label,
+        path: hit.card.path,
+        overview: hit.card.overview,
+      })),
+      responseShape: {
+        answer: "2-4 sentence grounded answer",
+        keyFindings: ["finding one", "finding two"],
+        recommendedFiles: ["src/example.ts"],
+      },
+    }, null, 2),
+    mock: () => buildMockResearchSemanticSummary(report),
+    temperature: 0.2,
+    maxTokens: 900,
+    schema: buildResearchSemanticSummarySchema(),
+  });
+  return normalizeResearchSemanticSummary(response);
+}
+
 export async function buildResearchReport(options: ResearchOptions): Promise<ResearchReport> {
   await assertValidPreparedIndex({
     rootDir: options.rootDir,
@@ -261,7 +385,7 @@ export async function buildResearchReport(options: ResearchOptions): Promise<Res
     .sort((left, right) => right.score - left.score || left.card.path.localeCompare(right.card.path))
     .slice(0, maxHubs);
 
-  return {
+  const partialReport = {
     query: options.query,
     layers: explanationState.queryEngine,
     searchDiagnostics: unifiedReport.diagnostics,
@@ -272,14 +396,36 @@ export async function buildResearchReport(options: ResearchOptions): Promise<Res
     subsystemHits,
     hubHits,
   };
+  return {
+    ...partialReport,
+    semanticSummary: await buildSemanticResearchSummary(partialReport),
+  };
 }
 
 export function formatResearchReport(report: ResearchReport): string {
   const lines = [
     `Research: "${report.query}"`,
     "",
-    "Code hits:",
+    "Semantic answer:",
+    `  ${report.semanticSummary.answer}`,
   ];
+
+  if (report.semanticSummary.keyFindings.length > 0) {
+    lines.push("");
+    lines.push("Key findings:");
+    for (const finding of report.semanticSummary.keyFindings) {
+      lines.push(`  - ${finding}`);
+    }
+  }
+  if (report.semanticSummary.recommendedFiles.length > 0) {
+    lines.push("");
+    lines.push(`Recommended files: ${report.semanticSummary.recommendedFiles.join(", ")}`);
+  }
+
+  lines.push("");
+  lines.push(
+    "Code hits:",
+  );
 
   if (report.codeHits.length === 0) {
     lines.push("  No ranked code hits found in the prepared full-engine artifacts.");

@@ -209,7 +209,7 @@ describe("tree-sitter", () => {
   describe("parseWithTreeSitter - failure reporting", () => {
     it("throws explicit grammar-load errors and tracks them by language", async () => {
       resetTreeSitterRuntimeStateForTests();
-      setTreeSitterGrammarDirForTests(join(tmpdir(), `contextplus-missing-grammar-${Date.now()}`));
+      setTreeSitterGrammarDirForTests(join(tmpdir(), `scplus-missing-grammar-${Date.now()}`));
 
       await assert.rejects(
         () => parseWithTreeSitter("function hello() { return 1; }", ".ts"),

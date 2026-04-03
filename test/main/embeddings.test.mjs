@@ -112,7 +112,7 @@ function deleteVectorEntry(dbPath, namespace, entryId) {
 
 describe("embeddings", () => {
   it("tracks process-cache hits, misses, and sqlite loads for embedding lookups", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-runtime-"));
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-runtime-"));
     try {
       resetEmbeddingRuntimeStats();
       const pendingGeneration = await reservePendingIndexGeneration(rootDir);
@@ -173,7 +173,7 @@ describe("embeddings", () => {
 
     it("re-embeds when content changes beyond first 8000 characters", async () => {
       const originalEmbed = Ollama.prototype.embed;
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-"));
       let callCount = 0;
       Ollama.prototype.embed = async function ({ input }) {
         const batch = Array.isArray(input) ? input : [input];
@@ -321,21 +321,21 @@ describe("embeddings", () => {
     it("forwards configured embed runtime options to Ollama", async () => {
       const originalEmbed = Ollama.prototype.embed;
       const previousEnv = {
-        CONTEXTPLUS_EMBED_NUM_GPU: process.env.CONTEXTPLUS_EMBED_NUM_GPU,
-        CONTEXTPLUS_EMBED_MAIN_GPU: process.env.CONTEXTPLUS_EMBED_MAIN_GPU,
-        CONTEXTPLUS_EMBED_NUM_THREAD: process.env.CONTEXTPLUS_EMBED_NUM_THREAD,
-        CONTEXTPLUS_EMBED_NUM_BATCH: process.env.CONTEXTPLUS_EMBED_NUM_BATCH,
-        CONTEXTPLUS_EMBED_NUM_CTX: process.env.CONTEXTPLUS_EMBED_NUM_CTX,
-        CONTEXTPLUS_EMBED_LOW_VRAM: process.env.CONTEXTPLUS_EMBED_LOW_VRAM,
+        SCPLUS_EMBED_NUM_GPU: process.env.SCPLUS_EMBED_NUM_GPU,
+        SCPLUS_EMBED_MAIN_GPU: process.env.SCPLUS_EMBED_MAIN_GPU,
+        SCPLUS_EMBED_NUM_THREAD: process.env.SCPLUS_EMBED_NUM_THREAD,
+        SCPLUS_EMBED_NUM_BATCH: process.env.SCPLUS_EMBED_NUM_BATCH,
+        SCPLUS_EMBED_NUM_CTX: process.env.SCPLUS_EMBED_NUM_CTX,
+        SCPLUS_EMBED_LOW_VRAM: process.env.SCPLUS_EMBED_LOW_VRAM,
       };
       const requests = [];
 
-      process.env.CONTEXTPLUS_EMBED_NUM_GPU = "1";
-      process.env.CONTEXTPLUS_EMBED_MAIN_GPU = "0";
-      process.env.CONTEXTPLUS_EMBED_NUM_THREAD = "6";
-      process.env.CONTEXTPLUS_EMBED_NUM_BATCH = "64";
-      process.env.CONTEXTPLUS_EMBED_NUM_CTX = "4096";
-      process.env.CONTEXTPLUS_EMBED_LOW_VRAM = "true";
+      process.env.SCPLUS_EMBED_NUM_GPU = "1";
+      process.env.SCPLUS_EMBED_MAIN_GPU = "0";
+      process.env.SCPLUS_EMBED_NUM_THREAD = "6";
+      process.env.SCPLUS_EMBED_NUM_BATCH = "64";
+      process.env.SCPLUS_EMBED_NUM_CTX = "4096";
+      process.env.SCPLUS_EMBED_LOW_VRAM = "true";
 
       Ollama.prototype.embed = async function (request) {
         requests.push(request);
@@ -369,7 +369,7 @@ describe("embeddings", () => {
 
   describe("saveEmbeddingCache", () => {
     it("stores vectors as sqlite blobs instead of JSON text", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-binary-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-binary-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "src/a.ts": { hash: "hash-a-v1", vector: [1, 0.5, -2] },
@@ -388,7 +388,7 @@ describe("embeddings", () => {
     });
 
     it("updates only changed entries and deletes removed entries without rewriting untouched vectors", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-cache-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-cache-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "src/a.ts": { hash: "hash-a-v1", vector: [1, 0, 0] },
@@ -420,7 +420,7 @@ describe("embeddings", () => {
     });
 
     it("preserves split identifier namespaces and materializes empty callsite collections", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-identifier-cache-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-identifier-cache-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "id:run": { hash: "hash-run", vector: [1, 2, 3] },
@@ -448,7 +448,7 @@ describe("embeddings", () => {
     });
 
     it("reuses process-cached namespace entries for repeated candidate loads", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-process-cache-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-process-cache-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "src/a.ts": { hash: "hash-a", vector: [1, 0, 0] },
@@ -471,7 +471,7 @@ describe("embeddings", () => {
     });
 
     it("invalidates process-cached namespace entries when the active generation changes", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-generation-cache-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-generation-cache-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "src/a.ts": { hash: "hash-generation-0", vector: [1, 0, 0] },
@@ -497,7 +497,7 @@ describe("embeddings", () => {
     });
 
     it("upserts only requested embedding cache entries without replacing the namespace", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-partial-upsert-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-partial-upsert-"));
       try {
         await saveEmbeddingCache(rootDir, {
           "src/a.ts": { hash: "hash-a", vector: [1, 0, 0] },
@@ -524,7 +524,7 @@ describe("embeddings", () => {
     });
 
     it("migrates legacy JSON vector rows to binary blobs when opening an existing database", async () => {
-      const rootDir = await mkdtemp(join(tmpdir(), "contextplus-embed-migrate-"));
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-migrate-"));
       try {
         const dbPath = await getIndexDatabasePath(rootDir);
         const db = new DatabaseSync(dbPath);

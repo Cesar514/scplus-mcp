@@ -36,7 +36,7 @@ func maxRenderedLineWidth(value string) int {
 
 func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report := backend.DoctorReport{
-		Root: "/tmp/contextplus",
+		Root: "/tmp/scplus",
 		RepoStatus: backend.RepoStatusSummary{
 			Branch:         "main",
 			UnstagedCount:  2,
@@ -87,7 +87,7 @@ func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 
 	rendered := RenderDoctorPlain(report)
 	for _, needle := range []string{
-		"scplus-cli doctor for /tmp/contextplus",
+		"scplus-cli doctor for /tmp/scplus",
 		"Branch: main",
 		"Prepared index: OK",
 		"Ollama: 1 running models",
@@ -113,12 +113,12 @@ func floatPtr(value float64) *float64 {
 }
 
 func TestViewRendersOperatorConsolePanes(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 160
 	model.height = 40
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
-		Root: "/tmp/contextplus",
+		Root: "/tmp/scplus",
 		Serving: struct {
 			ActiveGeneration              int    `json:"activeGeneration"`
 			PendingGeneration             *int   `json:"pendingGeneration"`
@@ -160,7 +160,7 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 		"stage: identifier-search",
 		"pending: 2",
 		"backend: connected",
-		"repo: /tmp/contextplus",
+		"repo: /tmp/scplus",
 		"serving build: 7",
 		"Index",
 		"running",
@@ -188,12 +188,12 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 }
 
 func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 90
 	model.height = 26
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
-		Root: "/tmp/contextplus",
+		Root: "/tmp/scplus",
 		Ollama: backend.OllamaRuntimeStatus{
 			OK: true,
 		},
@@ -211,7 +211,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"SCPLUS-CLI",
-		"The magician is resting",
+		"Runtime is idle",
 		"Type command",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -230,7 +230,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 }
 
 func TestActivityShellShowsRestingStatusWhenNoModelIsActive(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.doctorLoaded = true
 	model.doctor.Ollama = backend.OllamaRuntimeStatus{OK: true, Models: nil}
 
@@ -241,14 +241,14 @@ func TestActivityShellShowsRestingStatusWhenNoModelIsActive(t *testing.T) {
 	if strings.Contains(rendered, "Activity |") {
 		t.Fatalf("expected activity shell to drop the old title prefix: %s", rendered)
 	}
-	if !strings.Contains(rendered, "The magician is resting") {
+	if !strings.Contains(rendered, "Runtime is idle") {
 		t.Fatalf("expected resting status in activity title: %s", rendered)
 	}
 }
 
 func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	t.Setenv("OLLAMA_CHAT_MODEL", "nemotron-3-nano:4b-128k")
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.doctorLoaded = true
 	model.doctor.Ollama = backend.OllamaRuntimeStatus{
 		OK: true,
@@ -262,91 +262,55 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	queryJob.Phase = "research"
 
 	rendered := model.renderActivityShell(120, 18)
-	if !strings.Contains(rendered, "The magician is using 'nemotron-3-nano:4b-128k' for query") {
+	if !strings.Contains(rendered, "Runtime is using 'nemotron-3-nano:4b-128k' for query") {
 		t.Fatalf("expected active model status in activity title: %s", rendered)
 	}
 }
 
-func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
-	rendered := renderMagicianASCII(magicianFrames[0])
-	for _, needle := range []string{"K", "W", "R", "S", "H", "E", "I", "G"} {
-		if strings.Contains(rendered, needle) {
-			t.Fatalf("expected palette tokens to stay internal, found %q in %s", needle, rendered)
-		}
+func TestActivityShellShowsChatModelStatusForClusterJob(t *testing.T) {
+	t.Setenv("OLLAMA_EMBED_MODEL", "qwen3-embedding:0.6b-32k")
+	t.Setenv("OLLAMA_CHAT_MODEL", "nemotron-3-nano:4b-128k")
+	model := NewModel("/tmp/scplus", nil)
+	model.doctorLoaded = true
+	model.doctor.Ollama = backend.OllamaRuntimeStatus{
+		OK: true,
+		Models: []backend.OllamaRuntimeModel{
+			{Name: "qwen3-embedding:0.6b-32k"},
+			{Name: "nemotron-3-nano:4b-128k"},
+		},
 	}
-	if renderedLineCount(rendered) != 8 {
-		t.Fatalf("expected compact sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
-	}
-	if maxRenderedLineWidth(rendered) != 20 {
-		t.Fatalf("expected dense visible sprite width 20, got %d in %s", maxRenderedLineWidth(rendered), rendered)
-	}
-	if strings.ContainsAny(rendered, "█▀▄⣿⣾⣷") {
-		t.Fatalf("expected ASCII sprite glyphs instead of block pixels: %s", rendered)
-	}
-	if !strings.ContainsAny(rendered, "@#%o0Q=*+-/|_:;xX") {
-		t.Fatalf("expected dense ASCII sprite glyphs in compact sprite: %s", rendered)
-	}
-	lines := strings.Split(rendered, "\n")
-	for _, line := range lines {
-		if lipgloss.Width(line) != 20 {
-			t.Fatalf("expected every rendered line to use the dense 20-column visible container, got %d in %q", lipgloss.Width(line), line)
-		}
-	}
-	eyeSeparated := false
-	for _, line := range lines {
-		first := strings.IndexAny(line, "0QO=")
-		last := strings.LastIndexAny(line, "0QO=")
-		if first >= 0 && last-first >= 6 {
-			eyeSeparated = true
-			break
-		}
-	}
-	if !eyeSeparated {
-		t.Fatalf("expected two visibly separated eyes in dense sprite: %s", rendered)
+	clusterJob := model.job("cluster")
+	clusterJob.State = "running"
+	clusterJob.Phase = "cluster-scan"
+
+	rendered := model.renderActivityShell(120, 18)
+	if !strings.Contains(rendered, "Runtime is using 'nemotron-3-nano:4b-128k' for cluster") {
+		t.Fatalf("expected cluster job to report chat model in activity title: %s", rendered)
 	}
 }
 
-func TestScaledFrameCanvasUsesDenseSquareVirtualContainer(t *testing.T) {
-	canvas := scaledFrameCanvas(magicianFrames[0], magicianVirtualCanvasSize)
-	if len(canvas) != 64 {
-		t.Fatalf("expected dense virtual canvas height 64, got %d", len(canvas))
-	}
-	for _, row := range canvas {
-		if len(row) != 64 {
-			t.Fatalf("expected dense virtual canvas width 64, got %d", len(row))
+func TestPaletteCommandsSeparateClusterRunFromView(t *testing.T) {
+	commands := paletteCommands()
+	clusterAction := ""
+	viewAction := ""
+	for _, command := range commands {
+		if command.Title == "cluster" {
+			clusterAction = command.Action
+		}
+		if command.Title == "view-clusters" {
+			viewAction = command.Action
 		}
 	}
-}
-
-func TestCenterBlockKeepsConsistentContainerOffsetAcrossAsciiRows(t *testing.T) {
-	plain := renderMagicianASCII(magicianFrames[0])
-	centered := centerBlock(plain, 96)
-	renderedLines := strings.Split(centered, "\n")
-	frameLines := strings.Split(plain, "\n")
-	if len(renderedLines) != len(frameLines) {
-		t.Fatalf("expected %d rendered lines, got %d", len(frameLines), len(renderedLines))
+	if clusterAction != "cluster" {
+		t.Fatalf("expected cluster command to run clustering, got %q", clusterAction)
 	}
-	blockOffset := -1
-	for index, frameLine := range frameLines {
-		if strings.TrimSpace(frameLine) == "" {
-			continue
-		}
-		offset := countLeadingSpaces(renderedLines[index]) - countLeadingSpaces(frameLine)
-		if blockOffset == -1 {
-			blockOffset = offset
-			continue
-		}
-		if offset != blockOffset {
-			t.Fatalf("expected consistent block offset, got %d on line %d after %d", offset, index, blockOffset)
-		}
-	}
-	if blockOffset <= 0 {
-		t.Fatalf("expected positive centering offset in wide container, got %d", blockOffset)
+	if viewAction != "open-cluster" {
+		t.Fatalf("expected view-clusters command to stay read-only, got %q", viewAction)
 	}
 }
 
 func TestManualIndexSelectionDoesNotLeaveOptimisticQueuedState(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.sidebarIndex = model.findSidebarAction("index")
 
 	command := model.executeSidebarSelection()
@@ -360,7 +324,7 @@ func TestManualIndexSelectionDoesNotLeaveOptimisticQueuedState(t *testing.T) {
 }
 
 func TestSuccessfulRefreshClearsStaleIssue(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.lastError = "cluster failed"
 	model.startRefreshJob("refreshing backend snapshots after index", 7)
 
@@ -377,7 +341,7 @@ func TestSuccessfulRefreshClearsStaleIssue(t *testing.T) {
 }
 
 func TestActivityShellHidesCommandsUntilLettersTyped(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 24
 
@@ -391,12 +355,12 @@ func TestActivityShellHidesCommandsUntilLettersTyped(t *testing.T) {
 }
 
 func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 10
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
-		Root:        "/tmp/contextplus",
+		Root:        "/tmp/scplus",
 		GeneratedAt: "2026-04-02T08:00:00Z",
 		Serving: struct {
 			ActiveGeneration              int    `json:"activeGeneration"`
@@ -444,7 +408,7 @@ func TestOverviewContentWindowShowsHiddenRowsWhenScrolled(t *testing.T) {
 }
 
 func TestStatusSectionRendersBubbleTable(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 140
 	model.height = 24
 	model.setStatusSummary(backend.RepoStatusSummary{
@@ -473,7 +437,7 @@ func TestStatusSectionRendersBubbleTable(t *testing.T) {
 }
 
 func TestChangesSectionRendersBubbleTable(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 140
 	model.height = 24
 	model.setChangesSummary(backend.RepoChangesSummary{
@@ -511,7 +475,7 @@ func TestChangesSectionRendersBubbleTable(t *testing.T) {
 }
 
 func TestChangesDetailIncludesPatchPreview(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.setChangesSummary(backend.RepoChangesSummary{
 		ChangedFiles: 1,
 		Files: []backend.ChangeEntry{
@@ -540,7 +504,7 @@ func TestChangesDetailIncludesPatchPreview(t *testing.T) {
 }
 
 func TestLogsViewportRetainsFullHistory(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 32
 	for i := 0; i < 24; i++ {
@@ -553,7 +517,7 @@ func TestLogsViewportRetainsFullHistory(t *testing.T) {
 }
 
 func TestJobsPanelShowsStructuredJobRows(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 144
 	model.height = 36
 	refreshJob := model.job("refresh")
@@ -650,7 +614,7 @@ func TestBuildSearchItemsCoversExactAndRelatedResults(t *testing.T) {
 }
 
 func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 140
 	model.height = 34
 	model.openPalette()
@@ -658,8 +622,6 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
-		"back",
-		"forward",
 		"overview",
 		"tree",
 		"issue",
@@ -669,10 +631,15 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 			t.Fatalf("expected %q in palette overlay: %s", needle, rendered)
 		}
 	}
+	for _, unwanted := range []string{"back", "forward", "activity"} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("expected internal navigation command %q to stay out of palette overlay: %s", unwanted, rendered)
+		}
+	}
 }
 
 func TestNavigationHistoryTracksViewTransitions(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.setActiveView(viewTree)
 	model.focus = focusContent
 	model.recordNavigation()
@@ -699,7 +666,7 @@ func TestNavigationHistoryTracksViewTransitions(t *testing.T) {
 }
 
 func TestStatusLineUsesUserFacingServingAndViewTrailLabels(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 160
 	model.doctorLoaded = true
 	model.doctor.Serving.ActiveGeneration = 29
@@ -713,21 +680,18 @@ func TestStatusLineUsesUserFacingServingAndViewTrailLabels(t *testing.T) {
 	if !strings.Contains(rendered, "serving build: 29") {
 		t.Fatalf("expected serving build label in status line: %s", rendered)
 	}
-	if !strings.Contains(rendered, "view trail: 3/3") {
-		t.Fatalf("expected explicit view trail label in status line: %s", rendered)
-	}
-	if strings.Contains(rendered, "generation:") || strings.Contains(rendered, "history:") {
+	if strings.Contains(rendered, "view trail:") || strings.Contains(rendered, "generation:") || strings.Contains(rendered, "history:") {
 		t.Fatalf("expected internal generation/history jargon to be removed from status line: %s", rendered)
 	}
 }
 
 func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 24
 	model.doctorLoaded = true
 	model.doctor = backend.DoctorReport{
-		Root: "/tmp/contextplus",
+		Root: "/tmp/scplus",
 		RepoStatus: backend.RepoStatusSummary{
 			Branch:         "main",
 			UnstagedCount:  1,
@@ -756,7 +720,7 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 }
 
 func TestLettersTypeIntoActivityCommandBar(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	next := updated.(Model)
 	if next.overlay.Mode != overlayNone {
@@ -768,7 +732,7 @@ func TestLettersTypeIntoActivityCommandBar(t *testing.T) {
 }
 
 func TestPaletteLetterQueryShowsCommands(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.openPalette()
 	model.overlay.Input.SetValue("tr")
 
@@ -782,7 +746,7 @@ func TestPaletteLetterQueryShowsCommands(t *testing.T) {
 }
 
 func TestActivityCommandBarRunsOverviewCommand(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.commandBar.SetValue("overview")
 
 	cmd := model.submitCommandBar()
@@ -795,7 +759,7 @@ func TestActivityCommandBarRunsOverviewCommand(t *testing.T) {
 }
 
 func TestActivityCommandBarRunsOverviewCommandWithoutSlash(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.commandBar.SetValue("overview")
 
 	cmd := model.submitCommandBar()
@@ -808,7 +772,7 @@ func TestActivityCommandBarRunsOverviewCommandWithoutSlash(t *testing.T) {
 }
 
 func TestActivityCommandBarAllowsRemovingTypedLetters(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	model = updated.(Model)
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -819,7 +783,7 @@ func TestActivityCommandBarAllowsRemovingTypedLetters(t *testing.T) {
 }
 
 func TestActivityCommandBarKeepsPlainLettersTyped(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	for _, key := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune("e")},
 		{Type: tea.KeyRunes, Runes: []rune("q")},
@@ -834,7 +798,7 @@ func TestActivityCommandBarKeepsPlainLettersTyped(t *testing.T) {
 }
 
 func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 100
 	model.height = 23
 	model.commandBar.SetValue("e")
@@ -850,7 +814,7 @@ func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 }
 
 func TestActivityCommandSuggestionsStayBoundedWhileTypingLetters(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 40
 	model.commandBar.SetValue("e")
@@ -858,7 +822,7 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingLetters(t *testing.T) {
 	rendered := model.renderActivityShell(90, 40)
 	for _, needle := range []string{
 		"SCPLUS-CLI",
-		"The magician is resting",
+		"Runtime is idle",
 		"Commands",
 		"exit",
 		"overview",
@@ -877,13 +841,13 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingLetters(t *testing.T) {
 }
 
 func TestActivityShellKeepsSameRenderedHeightWhenSlashCommandsAppear(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	indexJob := model.job("index")
 	indexJob.State = "failed"
 	indexJob.Phase = "failed"
-	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/contextplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement."
+	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/scplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement."
 	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index."
 	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
 
@@ -905,7 +869,7 @@ func TestActivityShellKeepsSameRenderedHeightWhenSlashCommandsAppear(t *testing.
 }
 
 func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	indexJob := model.job("index")
@@ -931,7 +895,7 @@ func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
 }
 
 func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 72
 	model.height = 22
 	indexJob := model.job("index")
@@ -957,19 +921,19 @@ func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 }
 
 func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 90
 	model.height = 25
 	model.lastError = "issue line one\nissue line two\nissue line three\nissue line four"
 	model.logs = append(model.logs, "log line one\nlog line two\nlog line three\nlog line four")
 
 	rendered := model.renderActivityShell(70, 25)
-	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one... (+3)", "[log] ... 3 more lines hidden"} {
+	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one", "log line two", "log line three... (+1)", "[log] ... 1 more lines hidden"} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("expected activity shell to include %q: %s", snippet, rendered)
 		}
 	}
-	for _, snippet := range []string{"issue line four", "log line three", "log line four"} {
+	for _, snippet := range []string{"issue line four", "log line four"} {
 		if strings.Contains(rendered, snippet) {
 			t.Fatalf("expected hidden preview content to stay out of the activity shell: %s", rendered)
 		}
@@ -977,7 +941,7 @@ func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
 }
 
 func TestActivityPanelClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.lastError = "panel issue one\npanel issue two\npanel issue three\npanel issue four"
 	model.logs = append(model.logs, "panel log one\npanel log two\npanel log three\npanel log four")
 
@@ -995,7 +959,7 @@ func TestActivityPanelClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
 }
 
 func TestIssueSlashCommandOpensFullIssueWindow(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.lastError = "first issue line\nsecond issue line\nthird issue line\nfourth issue line"
 
 	cmd := model.executePaletteAction("open-issue")
@@ -1012,7 +976,7 @@ func TestIssueSlashCommandOpensFullIssueWindow(t *testing.T) {
 }
 
 func TestIssueViewStaysWithinTerminalHeight(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	model.lastError = "first issue line\nsecond issue line\nthird issue line\nfourth issue line"
@@ -1029,7 +993,7 @@ func TestIssueViewStaysWithinTerminalHeight(t *testing.T) {
 }
 
 func TestIssueViewReplacesActivityWindow(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	model.lastError = "blocker line one\nblocker line two"
@@ -1054,13 +1018,13 @@ func TestIssueViewReplacesActivityWindow(t *testing.T) {
 }
 
 func TestActivityViewStaysWithinTerminalHeight(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	indexJob := model.job("index")
 	indexJob.State = "failed"
 	indexJob.Phase = "failed"
-	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/contextplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement: text index candidate exceeds max embed file size."
+	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/scplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement: text index candidate exceeds max embed file size."
 	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index.\nIndex validation: failed."
 	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
 
@@ -1074,7 +1038,7 @@ func TestActivityViewStaysWithinTerminalHeight(t *testing.T) {
 }
 
 func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 113
 	model.height = 27
 	model.commandBar.SetValue("lo")
@@ -1091,13 +1055,31 @@ func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
 	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
 		t.Fatalf("expected exactly one bordered window while browsing commands: %s", rendered)
 	}
-	if !strings.Contains(rendered, "/|_|\\--*") {
-		t.Fatalf("expected the centered magician to remain visible once in command mode: %s", rendered)
+	if strings.Contains(rendered, "/\\") || strings.Contains(rendered, "\\_\\/_/") {
+		t.Fatalf("expected command mode to render without the removed mascot: %s", rendered)
+	}
+}
+
+func TestCtrlXRequestsGlobalShutdown(t *testing.T) {
+	model := NewModel("/tmp/scplus", nil)
+	next, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd == nil {
+		t.Fatal("expected Ctrl+X to return a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg from Ctrl+X")
+	}
+	nextModel, ok := next.(Model)
+	if !ok {
+		t.Fatalf("expected Model after Ctrl+X, got %T", next)
+	}
+	if !nextModel.RequestedGlobalShutdown() {
+		t.Fatal("expected Ctrl+X to request global shutdown")
 	}
 }
 
 func TestLogSlashCommandOpensFullLogWindow(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.logs = append(model.logs, "alpha", "beta", "gamma")
 
 	cmd := model.executePaletteAction("open-log")
@@ -1114,7 +1096,7 @@ func TestLogSlashCommandOpensFullLogWindow(t *testing.T) {
 }
 
 func TestRightArrowDoesNothingInActivityShell(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.focus = focusContent
 	model.commandBar.SetValue("")
 
@@ -1132,7 +1114,7 @@ func TestRightArrowDoesNothingInActivityShell(t *testing.T) {
 }
 
 func TestColonOpensCommandPaletteFromNonActivityView(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.setActiveView(viewOverview)
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
@@ -1146,7 +1128,7 @@ func TestColonOpensCommandPaletteFromNonActivityView(t *testing.T) {
 }
 
 func TestEscReturnsToActivityFromSecondaryView(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.setActiveView(viewTree)
 	model.focus = focusContent
 	model.setActiveView(viewStatus)
@@ -1163,7 +1145,7 @@ func TestEscReturnsToActivityFromSecondaryView(t *testing.T) {
 }
 
 func TestEscDoesNothingInRootActivityView(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.focus = focusContent
 	model.commandBar.SetValue("log")
 
@@ -1181,7 +1163,7 @@ func TestEscDoesNothingInRootActivityView(t *testing.T) {
 }
 
 func TestCtrlFOpensSectionSearchOverlay(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.focus = focusContent
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
@@ -1198,7 +1180,7 @@ func TestCtrlFOpensSectionSearchOverlay(t *testing.T) {
 }
 
 func TestSidebarPanelShowsHiddenEntriesWhenScrolled(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 120
 	model.height = 18
 	model.sidebarIndex = len(model.sidebar) - 1
@@ -1216,7 +1198,7 @@ func TestSidebarPanelShowsHiddenEntriesWhenScrolled(t *testing.T) {
 }
 
 func TestQNoLongerQuitsWhileWatcherActive(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.watchEnabled = true
 	model.pendingPaths = []string{"src/app.ts"}
 	model.pendingJobKind = "refresh"
@@ -1235,7 +1217,7 @@ func TestQNoLongerQuitsWhileWatcherActive(t *testing.T) {
 }
 
 func TestPaletteExitCommandQuits(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.openPalette()
 	model.overlay.Input.SetValue("exit")
 
@@ -1301,7 +1283,7 @@ func TestFindHubItemsPreserveSuggestedBadge(t *testing.T) {
 }
 
 func TestRestoreLetterShortcutIsDisabled(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.setRestorePoints([]backend.RestorePoint{
 		{ID: "rp-123", Timestamp: 1, Message: "before refactor", Files: []string{"src/index.ts"}},
 	})
@@ -1320,7 +1302,7 @@ func TestRestoreLetterShortcutIsDisabled(t *testing.T) {
 }
 
 func TestMouseEventsAreIgnored(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 160
 	model.height = 40
 	model.focus = focusContent
@@ -1336,7 +1318,7 @@ func TestMouseEventsAreIgnored(t *testing.T) {
 }
 
 func TestMouseWheelScrollsIssueWindow(t *testing.T) {
-	model := NewModel("/tmp/contextplus", nil)
+	model := NewModel("/tmp/scplus", nil)
 	model.width = 100
 	model.height = 24
 	model.lastError = strings.Repeat("issue line that should scroll\n", 20)

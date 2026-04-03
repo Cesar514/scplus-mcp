@@ -5,6 +5,7 @@
 
 import { extname } from "path";
 import { fetchEmbedding } from "../core/embeddings.js";
+import { generateStructuredChat } from "../core/chat.js";
 import { clusterVectors, findPathPattern } from "../core/clustering.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";
 import { buildIndexContract, INDEX_ARTIFACT_VERSION } from "./index-contract.js";
@@ -91,6 +92,10 @@ interface ClusterDescriptor {
   distinguishingFeature: string;
 }
 
+interface ClusterDescriptorResponse {
+  clusters: ClusterDescriptor[];
+}
+
 const MAX_FILES_PER_LEAF = 20;
 const MAX_RELATED_FILES = 3;
 const MIN_RELATED_SCORE = 0.35;
@@ -147,9 +152,105 @@ function deriveClusterDescriptor(files: FileInfo[], pathPattern: string | null, 
   };
 }
 
+function buildMockClusterDescriptorResponse(
+  clusters: { files: FileInfo[]; pathPattern: string | null }[],
+): ClusterDescriptorResponse {
+  return {
+    clusters: clusters.map((cluster, index) => {
+      const fallback = deriveClusterDescriptor(cluster.files, cluster.pathPattern, index);
+      return {
+        label: `Semantic ${fallback.label}`,
+        overarchingTheme: `Semantic theme: ${fallback.overarchingTheme}`,
+        distinguishingFeature: `Semantic evidence: ${fallback.distinguishingFeature}`,
+      };
+    }),
+  };
+}
+
+function buildClusterDescriptorSchema(clusterCount: number): object {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["clusters"],
+    properties: {
+      clusters: {
+        type: "array",
+        minItems: clusterCount,
+        maxItems: clusterCount,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["label", "overarchingTheme", "distinguishingFeature"],
+          properties: {
+            label: { type: "string" },
+            overarchingTheme: { type: "string" },
+            distinguishingFeature: { type: "string" },
+          },
+        },
+      },
+    },
+  };
+}
+
+function normalizeClusterDescriptor(value: ClusterDescriptor, index: number): ClusterDescriptor {
+  const label = value.label?.trim();
+  const overarchingTheme = value.overarchingTheme?.trim();
+  const distinguishingFeature = value.distinguishingFeature?.trim();
+  if (!label) throw new Error(`Chat cluster descriptor ${index + 1} is missing label.`);
+  if (!overarchingTheme) throw new Error(`Chat cluster descriptor ${index + 1} is missing overarchingTheme.`);
+  if (!distinguishingFeature) throw new Error(`Chat cluster descriptor ${index + 1} is missing distinguishingFeature.`);
+  return {
+    label,
+    overarchingTheme,
+    distinguishingFeature,
+  };
+}
+
 async function describeClusters(clusters: { files: FileInfo[]; pathPattern: string | null }[]): Promise<ClusterDescriptor[]> {
   if (clusters.length === 0) return [];
-  return clusters.map((cluster, index) => deriveClusterDescriptor(cluster.files, cluster.pathPattern, index));
+  const response = await generateStructuredChat<ClusterDescriptorResponse>({
+    system: [
+      "You generate semantic labels for clustered source-code groups.",
+      "Return strict JSON only.",
+      "Preserve cluster order and cluster count exactly.",
+      "Each label must be 2 to 5 words and should describe the software capability, not generic words like cluster or files.",
+      "Each overarchingTheme must be one sentence that names the responsibility shared by the files.",
+      "Each distinguishingFeature must be one short sentence naming the most specific evidence that separates this group from neighbors.",
+    ].join(" "),
+    prompt: JSON.stringify({
+      task: "semantic-cluster-descriptors",
+      requiredClusterCount: clusters.length,
+      clusters: clusters.map((cluster, index) => ({
+        ordinal: index + 1,
+        pathPattern: cluster.pathPattern,
+        sampleFiles: cluster.files.slice(0, 5).map((file) => ({
+          path: file.relativePath,
+          header: file.header,
+          symbols: file.symbolPreview.slice(0, 3),
+        })),
+      })),
+      responseShape: {
+        clusters: [
+          {
+            label: "short semantic label",
+            overarchingTheme: "one-sentence shared responsibility",
+            distinguishingFeature: "one-sentence concrete evidence",
+          },
+        ],
+      },
+    }, null, 2),
+    mock: () => buildMockClusterDescriptorResponse(clusters),
+    temperature: 0.1,
+    maxTokens: 900,
+    schema: buildClusterDescriptorSchema(clusters.length),
+  });
+  if (!Array.isArray(response.clusters)) {
+    throw new Error("Chat cluster descriptor response is missing the clusters array.");
+  }
+  if (response.clusters.length !== clusters.length) {
+    throw new Error(`Chat cluster descriptor count mismatch: expected ${clusters.length}, received ${response.clusters.length}.`);
+  }
+  return response.clusters.map((descriptor, index) => normalizeClusterDescriptor(descriptor, index));
 }
 
 function buildFileInfoList(state: PersistedFileSearchState): FileInfo[] {
@@ -190,15 +291,18 @@ async function buildHierarchy(files: FileInfo[], vectors: number[][], maxCluster
   if (depth >= maxDepth || files.length <= MAX_FILES_PER_LEAF) {
     const grouped = depth === 0 ? groupFilesByModule(files).filter((group) => group.length < files.length) : [];
     if (grouped.length > 1) {
-      const children = await Promise.all(grouped.map(async (group, index) => {
-        const pathPattern = findPathPattern(group.map((file) => file.relativePath));
-        const descriptor = deriveClusterDescriptor(group, pathPattern, index);
+      const groupedMetas = grouped.map((group) => ({
+        files: group,
+        pathPattern: findPathPattern(group.map((file) => file.relativePath)),
+      }));
+      const descriptors = await describeClusters(groupedMetas);
+      const children = await Promise.all(groupedMetas.map(async (meta, index) => {
         return {
           id: `cluster-${depth + 1}-${index}`,
-          label: descriptor.label,
-          pathPattern,
-          summary: descriptor.overarchingTheme,
-          filePaths: group.map((file) => file.relativePath),
+          label: descriptors[index]?.label ?? "Cluster",
+          pathPattern: meta.pathPattern,
+          summary: `${descriptors[index]?.overarchingTheme ?? summarizeFiles(meta.files)} ${descriptors[index]?.distinguishingFeature ?? ""}`.trim(),
+          filePaths: meta.files.map((file) => file.relativePath),
           children: [],
         } satisfies SemanticClusterArtifactNode;
       }));
