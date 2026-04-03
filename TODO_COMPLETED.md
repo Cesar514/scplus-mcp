@@ -467,3 +467,9 @@
 - [x] Replace the old line-art magician with an in-place animated ASCII sprite based on the three provided girl-magician reference poses.
 - [x] Keep the reference-image background transparent by encoding the mascot as palette-indexed frame masks and rendering only the character pixels into terminal ASCII.
 - [x] Update UI regression coverage so the new sprite renderer, transparent palette conversion, and centered activity-shell placement stay verified.
+
+## compact braille magician completed
+
+- [x] Compress the girl-magician terminal sprite into roughly 8 real CLI rows by replacing the coarse double-glyph block renderer with a masked braille renderer.
+- [x] Keep the sprite visually dense in a much smaller footprint by upsampling the source mask into braille subpixels before terminal rendering.
+- [x] Update regressions so the compact output is verified for 8-line height, narrow width, dense braille glyph usage, and stable centering.

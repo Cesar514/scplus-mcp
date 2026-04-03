@@ -269,15 +269,19 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 
 func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
 	rendered := renderMagicianASCII(magicianFrames[0])
-	for _, needle := range []string{"@@", "%%", "oo", "**", "[]"} {
-		if !strings.Contains(rendered, needle) {
-			t.Fatalf("expected %q in plain magician sprite: %s", needle, rendered)
-		}
-	}
 	for _, needle := range []string{".", "K", "W", "R", "S", "H", "E", "G"} {
 		if strings.Contains(rendered, needle) {
 			t.Fatalf("expected palette tokens to stay internal, found %q in %s", needle, rendered)
 		}
+	}
+	if renderedLineCount(rendered) != 8 {
+		t.Fatalf("expected compact braille sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
+	}
+	if maxRenderedLineWidth(rendered) > 16 {
+		t.Fatalf("expected compact braille sprite width <= 16, got %d in %s", maxRenderedLineWidth(rendered), rendered)
+	}
+	if !strings.ContainsRune(rendered, '⣿') && !strings.ContainsRune(rendered, '⣾') && !strings.ContainsRune(rendered, '⣷') {
+		t.Fatalf("expected dense braille glyphs in compact sprite: %s", rendered)
 	}
 }
 
