@@ -69,15 +69,21 @@ const (
 )
 
 var magicianFrames = []string{
-	`  /\
- (=^.^=)
- /| |\`,
-	`  /\
- (= - =)
- /| |\`,
-	`  /\
- (=^o^=)
- /| |\`,
+	`    /^^\
+   /_==_\
+    (o o)
+   /|___|\--*
+    /   \`,
+	`    /^^\
+   /_==_\
+    (o -)
+   /|___|\--*
+    /   \`,
+	`    /^^\
+   /_==_\
+    (o o)
+   /|___|\--o
+    /   \`,
 }
 
 var (
@@ -369,7 +375,7 @@ func NewModel(root string, client *backend.Client) Model {
 			viewCheckpoint: newListSection(viewCheckpoint, "Checkpoint", "Checkpoint write and restore-save output", "Run a checkpoint command to load results."),
 		},
 	}
-	model.commandBar = newOverlayInput("", "Type /command")
+	model.commandBar = newOverlayInput("", "Type command")
 	model.commandBar.Focus()
 	model.overlay = newOverlayState()
 	model.seedJobs()
@@ -938,7 +944,7 @@ func (m *Model) openPaletteWithValue(initial string) {
 	m.overlay = newOverlayState()
 	m.overlay.Mode = overlayPalette
 	m.overlay.Title = "Command palette"
-	m.overlay.Subtitle = "Type slash commands to jump between windows, run actions, and launch exact results"
+	m.overlay.Subtitle = "Type command letters to jump between windows, run actions, and launch exact results"
 	m.overlay.PreviousFocus = m.focus
 	m.overlay.Commands = paletteCommands()
 	m.overlay.Input = newOverlayInput("", "type a command")
@@ -1126,7 +1132,7 @@ func (m *Model) filteredPaletteCommands() []paletteCommand {
 
 func (m *Model) activityCommandSuggestions() []paletteCommand {
 	query := strings.TrimSpace(m.commandBar.Value())
-	if !strings.HasPrefix(query, "/") {
+	if query == "" {
 		return nil
 	}
 	return filterPaletteCommands(paletteCommands(), query)
@@ -1423,7 +1429,7 @@ func singleWindowCardWidth(totalWidth int) int {
 	if totalWidth <= 0 {
 		return 1
 	}
-	target := int(float64(totalWidth) * 0.75)
+	target := int(float64(totalWidth) * 0.95)
 	return min(max(36, target), max(1, totalWidth-2))
 }
 
@@ -1431,7 +1437,7 @@ func singleWindowCardHeight(totalHeight int) int {
 	if totalHeight <= 0 {
 		return 1
 	}
-	target := int(float64(totalHeight) * 0.75)
+	target := int(float64(totalHeight) * 0.95)
 	return min(max(12, target), totalHeight)
 }
 
@@ -2068,13 +2074,9 @@ func (m *Model) submitCommandBar() tea.Cmd {
 	if query == "" {
 		return nil
 	}
-	if !strings.HasPrefix(query, "/") {
-		m.setError(fmt.Errorf("slash commands must start with /"))
-		return nil
-	}
 	commands := m.activityCommandSuggestions()
 	if len(commands) == 0 {
-		m.setError(fmt.Errorf("unknown slash command %q", query))
+		m.setError(fmt.Errorf("unknown command %q", query))
 		return nil
 	}
 	if m.commandSelect >= len(commands) {
@@ -2851,37 +2853,54 @@ func (m Model) renderActivityShell(width int, height int) string {
 	activeJob := m.activeStatusJob()
 	magician := renderMagician(magicianFrames[m.magicianFrame], innerWidth)
 	wrapWidth := max(24, innerWidth-2)
+	metaLines := m.renderWindowMeta(innerWidth)
 	lines := []string{
 		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent),
 		subtitleStyle.Width(innerWidth).Render(m.magicianRuntimeStatus(activeJob)),
-		"",
 		magician,
 		"",
 		bar.View(),
 	}
-	if strings.HasPrefix(query, "/") {
+	if query != "" {
 		lines = append(lines, "", subtitleStyle.Render("Commands"))
-		remainingHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n")))
+		remainingHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
 		lines = append(lines, m.renderActivityCommandRows(innerWidth, remainingHeight)...)
+		lines = append(lines, metaLines...)
 		return renderCard(width, height, strings.Join(lines, "\n"))
 	}
-	lines = append(lines, "")
-	lines = append(lines, subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
+	bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
+	bodyLines := strings.Split(subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
 		"Current status: %s | state=%s | phase=%s | pending=%d",
 		activeJob.Title,
 		jobStateLabel(activeJob),
 		formatBlankAsNone(activeJob.Phase),
 		m.pendingChangeCount(),
-	)))
-	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, renderPreviewSectionWithLimit("Current task", activeJob.Message, wrapWidth, 2, subtitleStyle)...)
+	)), "\n")
+	appendPreview := func(title string, value string, style lipgloss.Style, command string, defaultMax int) {
+		remaining := bodyHeight - len(bodyLines)
+		if remaining <= 0 || strings.TrimSpace(value) == "" {
+			return
+		}
+		maxPreviewLines := min(defaultMax, max(1, remaining-2))
+		block := renderPreviewSectionWithLimit(title, value, wrapWidth, maxPreviewLines, style, command)
+		if len(block) == 0 {
+			return
+		}
+		if len(block) > remaining {
+			block = block[:remaining]
+		}
+		bodyLines = append(bodyLines, block...)
 	}
-	if strings.TrimSpace(m.lastError) != "" {
-		lines = append(lines, renderPreviewSection("Current issue", m.lastError, wrapWidth, errorStyle)...)
-	}
+	appendPreview("Current task", activeJob.Message, subtitleStyle, "overview", 2)
+	appendPreview("Current issue", m.lastError, errorStyle, "issue", 3)
 	if len(m.logs) > 0 {
-		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], wrapWidth, subtitleStyle)...)
+		appendPreview("Latest log", m.logs[len(m.logs)-1], subtitleStyle, "log", 3)
 	}
+	if len(bodyLines) > bodyHeight {
+		bodyLines = bodyLines[:bodyHeight]
+	}
+	lines = append(lines, bodyLines...)
+	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
@@ -2895,6 +2914,7 @@ func (m Model) renderSingleContentWindow(width int, height int) string {
 		title = section.Title + " | scplus-cli"
 		subtitle = section.Subtitle
 	}
+	metaLines := m.renderWindowMeta(innerWidth)
 	lines := []string{
 		renderPaneTitle(title, m.focus == focusContent || m.focus == focusDetail || m.focus == focusWizard),
 		subtitleStyle.Width(innerWidth).Render(subtitle),
@@ -2911,12 +2931,13 @@ func (m Model) renderSingleContentWindow(width int, height int) string {
 		)))
 		lines = append(lines, "")
 	}
-	bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n")))
+	bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
 	viewportCopy := m.detail
 	viewportCopy.Width = innerWidth
 	viewportCopy.Height = bodyHeight
 	viewportCopy.SetContent(m.buildDetailContent())
 	lines = append(lines, viewportCopy.View())
+	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
@@ -2939,15 +2960,15 @@ func (m Model) renderActivityPanelWithHeight(width int, height int) string {
 		)),
 	}
 	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, renderPreviewSection("Current task", activeJob.Message, max(24, width-6), subtitleStyle)...)
+		lines = append(lines, renderPreviewSection("Current task", activeJob.Message, max(24, width-6), subtitleStyle, "overview")...)
 	}
 	if strings.TrimSpace(m.lastError) != "" {
 		lines = append(lines, "")
-		lines = append(lines, renderPreviewSection("Current issue", m.lastError, max(24, width-6), errorStyle)...)
+		lines = append(lines, renderPreviewSection("Current issue", m.lastError, max(24, width-6), errorStyle, "issue")...)
 	}
 	if len(m.logs) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], max(24, width-6), subtitleStyle)...)
+		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], max(24, width-6), subtitleStyle, "log")...)
 	}
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
@@ -3025,7 +3046,7 @@ func (m Model) renderLogsPanel(width int, height int) string {
 	return cardStyle.Width(width).Height(height).Render(strings.Join(body, "\n"))
 }
 
-func (m Model) renderStatusLine() string {
+func (m Model) statusLineText() string {
 	watcherState := "off"
 	if m.watchEnabled {
 		watcherState = "on"
@@ -3055,8 +3076,46 @@ func (m Model) renderStatusLine() string {
 	if len(m.history) > 1 {
 		statusParts = append(statusParts, fmt.Sprintf("view trail: %d/%d", m.historyIndex+1, len(m.history)))
 	}
-	status := strings.Join(statusParts, " | ")
-	return statusLineStyle.Width(max(0, m.width-2)).Render(status)
+	return strings.Join(statusParts, " | ")
+}
+
+func (m Model) renderStatusLine() string {
+	return statusLineStyle.Width(max(0, m.width-2)).Render(m.statusLineText())
+}
+
+func (m Model) windowHelpText() string {
+	if m.wizard.active {
+		return "Wizard: Tab move fields | Enter continue/create | Esc cancel"
+	}
+	switch m.overlay.Mode {
+	case overlayPalette:
+		return "Palette: type command letters | Up/Down select | Enter run | Esc close"
+	case overlayPrompt:
+		return "Prompt: Enter submit | Tab move fields | Esc cancel"
+	case overlayFilter:
+		return "Search: type to narrow current section | Enter apply | Esc cancel"
+	case overlayHelp:
+		return "Help: Enter or Esc closes"
+	}
+	if m.activeView == viewActivity {
+		return "Activity: type command letters | Up/Down choose | Enter run | Ctrl+P palette | Ctrl+C quit"
+	}
+	if m.activeView == viewRestore && m.focus == focusContent {
+		return "Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | restore-point | export | Ctrl+C quit"
+	}
+	return "Type command letters in Activity | Ctrl+P palette | Ctrl+F search | Esc back | Ctrl+C quit"
+}
+
+func (m Model) renderWindowMeta(width int) []string {
+	return []string{
+		"",
+		statusLineStyle.Width(width).Render(m.statusLineText()),
+		footerStyle.Width(width).Render(m.windowHelpText()),
+	}
+}
+
+func displayCommandTitle(raw string) string {
+	return strings.TrimLeft(strings.TrimSpace(raw), "/")
 }
 
 func (m Model) renderOverlayCard(width int) string {
@@ -3066,6 +3125,7 @@ func (m Model) renderOverlayCard(width int) string {
 func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 	frameWidth, _ := cardStyle.GetFrameSize()
 	innerWidth := max(12, width-frameWidth)
+	metaLines := m.renderWindowMeta(innerWidth)
 	lines := []string{
 		renderPaneTitle(m.overlay.Title+" | scplus-cli", true),
 		subtitleStyle.Width(innerWidth).Render(m.overlay.Subtitle),
@@ -3083,8 +3143,8 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 			"  Use /back and /forward to walk navigation history",
 			"",
 			"Commands",
-			"  /, :, or Ctrl+P opens the command palette",
-			"  Slash commands are the primary action surface: /overview, /index, /refresh, /status, /search, /help, /exit",
+			"  Type command letters in Activity, or use : / Ctrl+P to open the command palette",
+			"  Commands are the primary action surface: overview, index, refresh, status, search, help, exit",
 			"  Esc returns from detail or jumps back to the previous view",
 			"",
 			"Search and export",
@@ -3120,7 +3180,7 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 				prefix = "> "
 				style = contentSelected
 			}
-			lines = append(lines, style.Render(prefix+command.Title))
+			lines = append(lines, style.Render(prefix+displayCommandTitle(command.Title)))
 			if !compactCommands {
 				lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
 			}
@@ -3136,39 +3196,13 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 	if strings.TrimSpace(m.overlay.Message) != "" {
 		lines = append(lines, "", m.overlay.Message)
 	}
+	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m Model) View() string {
-	header := m.renderHeader()
-	status := m.renderStatusLine()
-	footer := footerStyle.Render("Type /command | Enter run/open | Ctrl+F search | Esc back | Ctrl+C quit")
-	if m.wizard.active {
-		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
-	} else if m.overlay.Mode == overlayPalette {
-		footer = footerStyle.Render("Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close")
-	} else if m.overlay.Mode == overlayPrompt {
-		footer = footerStyle.Render("Prompt: Enter submit | Tab move fields | Esc cancel")
-	} else if m.overlay.Mode == overlayFilter {
-		footer = footerStyle.Render("Search: type to narrow current section | Enter apply | Esc cancel")
-	} else if m.overlay.Mode == overlayHelp {
-		footer = footerStyle.Render("Help: Enter or Esc closes")
-	} else if m.activeView == viewActivity {
-		footer = footerStyle.Render("Activity: type /overview, /index, /status, /search, /help, or /exit | Enter run | Ctrl+C quit")
-	} else if m.activeView == viewRestore && m.focus == focusContent {
-		footer = footerStyle.Render("Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | /restore-point | /export | Ctrl+C quit")
-	}
-	availableHeight := max(1, m.height-lipgloss.Height(status)-lipgloss.Height(footer))
-	if strings.TrimSpace(header) != "" {
-		availableHeight -= lipgloss.Height(header)
-	}
-	availableHeight = max(1, availableHeight)
-	parts := make([]string, 0, 5)
-	if strings.TrimSpace(header) != "" {
-		parts = append(parts, header)
-	}
 	windowWidth := singleWindowCardWidth(m.width)
-	windowHeight := singleWindowCardHeight(availableHeight)
+	windowHeight := singleWindowCardHeight(m.height)
 	window := ""
 	switch {
 	case m.overlay.Mode != overlayNone:
@@ -3178,9 +3212,7 @@ func (m Model) View() string {
 	default:
 		window = m.renderSingleContentWindow(windowWidth, windowHeight)
 	}
-	parts = append(parts, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, window))
-	parts = append(parts, status, footer)
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, window)
 }
 
 func (m Model) Close() error {
@@ -3965,18 +3997,22 @@ func truncate(value string, limit int) string {
 	return value[:limit-3] + "..."
 }
 
-func renderPreviewSection(title string, value string, width int, style lipgloss.Style) []string {
-	return renderPreviewSectionWithLimit(title, value, width, 3, style)
+func renderPreviewSection(title string, value string, width int, style lipgloss.Style, command string) []string {
+	return renderPreviewSectionWithLimit(title, value, width, 3, style, command)
 }
 
-func renderPreviewSectionWithLimit(title string, value string, width int, maxLines int, style lipgloss.Style) []string {
-	lines := previewLines(value, width, maxLines)
+func renderPreviewSectionWithLimit(title string, value string, width int, maxLines int, style lipgloss.Style, command string) []string {
+	lines, hiddenCount := previewLines(value, width, maxLines)
 	if len(lines) == 0 {
 		return nil
 	}
-	rendered := []string{style.Render(title + ":")}
+	label := "[" + displayCommandTitle(command) + "] " + title + ":"
+	rendered := []string{style.Render(label)}
 	for _, line := range lines {
 		rendered = append(rendered, style.Width(width).Render(line))
+	}
+	if hiddenCount > 0 {
+		rendered = append(rendered, style.Width(width).Render(fmt.Sprintf("[%s] ... %d more lines hidden", displayCommandTitle(command), hiddenCount)))
 	}
 	return rendered
 }
@@ -4004,7 +4040,7 @@ func (m Model) renderActivityCommandRows(width int, height int) []string {
 	start, end := visibleRange(len(commands), m.commandSelect, commandRows)
 	lines := make([]string, 0, end-start+2)
 	if start > 0 {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d earlier commands hidden", start)))
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("[commands] ... %d earlier commands hidden", start)))
 	}
 	commandWidth := max(24, width-2)
 	commandTitleWidth := max(12, min(22, commandWidth/4))
@@ -4021,24 +4057,24 @@ func (m Model) renderActivityCommandRows(width int, height int) []string {
 			"%s%-*s %s",
 			prefix,
 			commandTitleWidth,
-			truncate(command.Title, commandTitleWidth),
+			truncate(displayCommandTitle(command.Title), commandTitleWidth),
 			truncate(command.Subtitle, commandSubtitleWidth),
 		)
 		lines = append(lines, style.Width(commandWidth).Render(line))
 	}
 	if end < len(commands) {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d more commands hidden", len(commands)-end)))
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("[commands] ... %d more commands hidden", len(commands)-end)))
 	}
 	return lines
 }
 
-func previewLines(value string, width int, maxLines int) []string {
+func previewLines(value string, width int, maxLines int) ([]string, int) {
 	if width <= 0 || maxLines <= 0 {
-		return nil
+		return nil, 0
 	}
 	value = strings.TrimSpace(strings.ReplaceAll(value, "\r\n", "\n"))
 	if value == "" {
-		return nil
+		return nil, 0
 	}
 	rawLines := splitNonEmptyLines(value)
 	wrapped := make([]string, 0, len(rawLines))
@@ -4052,25 +4088,30 @@ func previewLines(value string, width int, maxLines int) []string {
 		}
 	}
 	if len(wrapped) <= maxLines {
-		return wrapped
+		return wrapped, 0
 	}
 	visible := append([]string(nil), wrapped[:maxLines]...)
-	visible[maxLines-1] = appendEllipsis(visible[maxLines-1], width)
-	return visible
+	hiddenCount := len(wrapped) - maxLines
+	visible[maxLines-1] = appendEllipsis(visible[maxLines-1], width, hiddenCount)
+	return visible, hiddenCount
 }
 
-func appendEllipsis(value string, width int) string {
-	if width <= 3 {
-		return strings.Repeat(".", max(1, width))
+func appendEllipsis(value string, width int, hiddenCount int) string {
+	suffix := "..."
+	if hiddenCount > 0 {
+		suffix = fmt.Sprintf("... (+%d)", hiddenCount)
+	}
+	if width <= lipgloss.Width(suffix) {
+		return truncate(suffix, width)
 	}
 	value = strings.TrimRight(value, " ")
 	if value == "" {
-		return "..."
+		return suffix
 	}
-	if len(value)+3 <= width {
-		return value + "..."
+	if lipgloss.Width(value)+lipgloss.Width(suffix) <= width {
+		return value + suffix
 	}
-	return truncate(value, width)
+	return truncate(value, max(1, width-lipgloss.Width(suffix))) + suffix
 }
 
 func min(left int, right int) int {

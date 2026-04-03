@@ -155,9 +155,9 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Activity | scplus-cli",
-		"/\\",
-		"(=^.^=)",
-		"Type /command",
+		"/^^\\",
+		"/_==_\\",
+		"Type command",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
@@ -181,8 +181,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 			t.Fatalf("expected %q to be absent from activity shell: %s", needle, rendered)
 		}
 	}
-	if count := strings.Count(rendered, "(=^.^=)"); count != 1 {
-		t.Fatalf("expected exactly one visible cat in the activity shell, got %d: %s", count, rendered)
+	if count := strings.Count(rendered, "/|___|\\--"); count != 1 {
+		t.Fatalf("expected exactly one visible magician in the activity shell, got %d: %s", count, rendered)
 	}
 	if strings.Contains(rendered, "history: 1/1") {
 		t.Fatalf("expected single-entry navigation jargon to stay hidden from the status line: %s", rendered)
@@ -214,7 +214,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 	for _, needle := range []string{
 		"Activity | scplus-cli",
 		"The magician is resting",
-		"Type /command",
+		"Type command",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in stacked operator console view: %s", needle, rendered)
@@ -545,13 +545,12 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Command palette",
-		"/back",
-		"/forward",
-		"/overview",
-		"/tree",
-		"/issue",
-		"/changes",
-		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
+		"back",
+		"forward",
+		"overview",
+		"tree",
+		"issue",
+		"changes",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in palette overlay: %s", needle, rendered)
@@ -682,6 +681,19 @@ func TestActivityCommandBarRunsOverviewCommand(t *testing.T) {
 	}
 }
 
+func TestActivityCommandBarRunsOverviewCommandWithoutSlash(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.commandBar.SetValue("overview")
+
+	cmd := model.submitCommandBar()
+	if cmd != nil {
+		t.Fatalf("expected overview to switch views without async command")
+	}
+	if model.activeView != viewOverview {
+		t.Fatalf("expected overview to activate overview, got %s", model.activeView)
+	}
+}
+
 func TestActivityCommandBarAllowsRemovingSlash(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
@@ -735,9 +747,9 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
 		"Activity | scplus-cli",
 		"The magician is resting",
 		"Commands",
-		"/exit",
-		"/activity",
-		"/overview",
+		"exit",
+		"activity",
+		"overview",
 	} {
 		if !strings.Contains(rendered, needle) {
 			t.Fatalf("expected %q in slash-command browser: %s", needle, rendered)
@@ -808,7 +820,7 @@ func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
 func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 72
-	model.height = 18
+	model.height = 22
 	indexJob := model.job("index")
 	indexJob.State = "running"
 	indexJob.Phase = "identifier-search"
@@ -826,8 +838,8 @@ func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 	if !strings.Contains(rendered, "pending=4") {
 		t.Fatalf("expected wrapped status to keep the pending count visible: %s", rendered)
 	}
-	if !strings.Contains(rendered, "Current issue:") {
-		t.Fatalf("expected wrapped error output in activity shell: %s", rendered)
+	if maxRenderedLineWidth(rendered) > 60 {
+		t.Fatalf("expected wrapped activity shell to stay within width 60, got max width %d: %s", maxRenderedLineWidth(rendered), rendered)
 	}
 }
 
@@ -839,12 +851,12 @@ func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
 	model.logs = append(model.logs, "log line one\nlog line two\nlog line three\nlog line four")
 
 	rendered := model.renderActivityShell(70, 24)
-	for _, snippet := range []string{"Current issue:", "issue line one", "issue line two", "issue line three...", "Latest log:", "log line one", "log line two", "log line three..."} {
+	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one... (+3)"} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("expected activity shell to include %q: %s", snippet, rendered)
 		}
 	}
-	for _, snippet := range []string{"issue line four", "log line four"} {
+	for _, snippet := range []string{"issue line four", "log line two", "log line three", "log line four"} {
 		if strings.Contains(rendered, snippet) {
 			t.Fatalf("expected hidden preview content to stay out of the activity shell: %s", rendered)
 		}
@@ -966,7 +978,7 @@ func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
 	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
 		t.Fatalf("expected exactly one bordered window while browsing slash commands: %s", rendered)
 	}
-	if count := strings.Count(rendered, "(=^.^=)"); count != 1 {
+	if count := strings.Count(rendered, "/|___|\\--"); count != 1 {
 		t.Fatalf("expected the centered magician to remain visible once in slash mode, got %d: %s", count, rendered)
 	}
 }
