@@ -69,27 +69,30 @@ const (
 )
 
 var magicianFrames = []string{
-	`      /^\
-     /___\
-    /_____\
-     (o o)
-     \_-_/
-    /|___|\--*
-      / \`,
-	`      /^\
-     /___\
-    /_____\
-     (o -)
-     \_-_/
-    /|___|\--*
-      / \`,
-	`      /^\
-     /___\
-    /_____\
-     (o o)
-     \_~_/
-    /|___|\--*
-      / \`,
+	`       /^\
+      /___\
+     /_____\
+       | |
+      (o o)
+      /|_|\--*
+       / \
+      /___\`,
+	`       /^\
+      /___\
+     /_____\
+       | |
+      (o -)
+      /|_|\--*
+       / \
+      /___\`,
+	`       /^\
+      /___\
+     /_____\
+       | |
+      (o o)
+      /|~|\--*
+       / \
+      /___\`,
 }
 
 var (
@@ -683,6 +686,7 @@ func (m *Model) finishRefreshSubtask(task string, err error) {
 		job.ElapsedMs = 0
 		job.LastSuccessful = time.Now().Format(time.RFC3339)
 		job.CurrentFile = "doctor/tree/hubs/cluster/restore/status/changes"
+		m.setError(nil)
 	}
 	m.refreshJobTable()
 }
@@ -1736,14 +1740,6 @@ func (m *Model) executeSidebarSelection() tea.Cmd {
 			m.appendLog("index already running")
 			return nil
 		}
-		m.job("index").State = "queued"
-		m.job("index").Phase = "bootstrap"
-		m.job("index").Message = "manual full index requested"
-		m.job("index").Percent = intPtr(0)
-		m.job("index").QueueDepth = m.queueDepth
-		m.job("index").LastUpdatedAt = time.Now()
-		m.refreshJobTable()
-		m.refreshSidebar()
 		m.appendLog("manual full index requested")
 		return runIndexCmd(m.client, m.root)
 	case "retry-index":
@@ -2254,14 +2250,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finishRefreshSubtask("changes", nil)
 		return m, nil
 	case indexFinishedMsg:
-		m.refreshSidebar()
 		if message.err != nil {
+			indexJob := m.job("index")
+			indexJob.State = "failed"
+			indexJob.Phase = "failed"
+			indexJob.Message = message.err.Error()
+			indexJob.Percent = nil
+			indexJob.LastUpdatedAt = time.Now()
+			m.refreshJobTable()
+			m.refreshSidebar()
 			m.setError(message.err)
 		} else {
 			firstLine := strings.Split(strings.TrimSpace(message.output), "\n")[0]
 			if firstLine == "" {
 				firstLine = "index completed"
 			}
+			m.startRefreshJob("refreshing backend snapshots after index", 7)
 			m.appendLog(firstLine)
 		}
 		return m, refreshAllCmd(m.client, m.root)
@@ -2901,8 +2905,10 @@ func (m Model) renderActivityShell(width int, height int) string {
 	magician := renderMagician(magicianFrames[m.magicianFrame], innerWidth)
 	wrapWidth := max(24, innerWidth-2)
 	metaLines := m.renderWindowMeta(innerWidth)
+	runtimeStatus := subtitleStyle.Width(innerWidth).Render(m.magicianRuntimeStatus(activeJob))
 	lines := []string{
-		renderWindowHeader("Activity | scplus-cli", m.magicianRuntimeStatus(activeJob), innerWidth, m.focus == focusContent),
+		renderPaneTitle("SCPLUS-CLI", m.focus == focusContent),
+		runtimeStatus,
 		magician,
 		"",
 		bar.View(),

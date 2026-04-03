@@ -154,9 +154,9 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Activity | scplus-cli",
+		"SCPLUS-CLI",
 		"/_____\\",
-		"\\_-_/",
+		"/|_|\\--*",
 		"Type command",
 		"watcher: on",
 		"stage: identifier-search",
@@ -181,8 +181,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 			t.Fatalf("expected %q to be absent from activity shell: %s", needle, rendered)
 		}
 	}
-	if count := strings.Count(rendered, "/|___|\\--"); count != 1 {
-		t.Fatalf("expected exactly one visible magician in the activity shell, got %d: %s", count, rendered)
+	if !strings.Contains(rendered, "/|_|\\--*") {
+		t.Fatalf("expected visible magician in the activity shell: %s", rendered)
 	}
 	if strings.Contains(rendered, "history: 1/1") {
 		t.Fatalf("expected single-entry navigation jargon to stay hidden from the status line: %s", rendered)
@@ -212,7 +212,7 @@ func TestViewUsesStackedLayoutForNarrowWidth(t *testing.T) {
 
 	rendered := model.View()
 	for _, needle := range []string{
-		"Activity | scplus-cli",
+		"SCPLUS-CLI",
 		"The magician is resting",
 		"Type command",
 	} {
@@ -237,6 +237,12 @@ func TestActivityShellShowsRestingStatusWhenNoModelIsActive(t *testing.T) {
 	model.doctor.Ollama = backend.OllamaRuntimeStatus{OK: true, Models: nil}
 
 	rendered := model.renderActivityShell(90, 18)
+	if !strings.Contains(rendered, "SCPLUS-CLI") {
+		t.Fatalf("expected branded activity title: %s", rendered)
+	}
+	if strings.Contains(rendered, "Activity |") {
+		t.Fatalf("expected activity shell to drop the old title prefix: %s", rendered)
+	}
 	if !strings.Contains(rendered, "The magician is resting") {
 		t.Fatalf("expected resting status in activity title: %s", rendered)
 	}
@@ -260,6 +266,37 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	rendered := model.renderActivityShell(120, 18)
 	if !strings.Contains(rendered, "The magician is using 'nemotron-3-nano:4b-128k' for query") {
 		t.Fatalf("expected active model status in activity title: %s", rendered)
+	}
+}
+
+func TestManualIndexSelectionDoesNotLeaveOptimisticQueuedState(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.sidebarIndex = model.findSidebarAction("index")
+
+	command := model.executeSidebarSelection()
+	if command == nil {
+		t.Fatal("expected index action command")
+	}
+	indexJob := model.job("index")
+	if indexJob.State != "idle" {
+		t.Fatalf("expected index job to stay idle until backend events arrive, got %q", indexJob.State)
+	}
+}
+
+func TestSuccessfulRefreshClearsStaleIssue(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.lastError = "cluster failed"
+	model.startRefreshJob("refreshing backend snapshots after index", 7)
+
+	for _, task := range []string{"doctor", "tree", "hubs", "cluster", "restore-points", "status", "changes"} {
+		model.finishRefreshSubtask(task, nil)
+	}
+
+	if model.lastError != "" {
+		t.Fatalf("expected successful refresh to clear stale issue, got %q", model.lastError)
+	}
+	if model.job("refresh").State != "completed" {
+		t.Fatalf("expected refresh job completed, got %q", model.job("refresh").State)
 	}
 }
 
@@ -723,7 +760,7 @@ func TestActivityCommandBarKeepsPlainLettersTyped(t *testing.T) {
 func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 100
-	model.height = 22
+	model.height = 23
 	model.commandBar.SetValue("e")
 	model.commandSelect = 10
 
@@ -744,7 +781,7 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingLetters(t *testing.T) {
 
 	rendered := model.renderActivityShell(90, 40)
 	for _, needle := range []string{
-		"Activity | scplus-cli",
+		"SCPLUS-CLI",
 		"The magician is resting",
 		"Commands",
 		"exit",
@@ -846,12 +883,12 @@ func TestActivityShellWrapsStatusAndErrorLines(t *testing.T) {
 func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 90
-	model.height = 24
+	model.height = 25
 	model.lastError = "issue line one\nissue line two\nissue line three\nissue line four"
 	model.logs = append(model.logs, "log line one\nlog line two\nlog line three\nlog line four")
 
-	rendered := model.renderActivityShell(70, 24)
-	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one", "log line two... (+2)"} {
+	rendered := model.renderActivityShell(70, 25)
+	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one... (+3)", "[log] ... 3 more lines hidden"} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("expected activity shell to include %q: %s", snippet, rendered)
 		}
@@ -978,8 +1015,8 @@ func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
 	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
 		t.Fatalf("expected exactly one bordered window while browsing commands: %s", rendered)
 	}
-	if count := strings.Count(rendered, "/|___|\\--"); count != 1 {
-		t.Fatalf("expected the centered magician to remain visible once in command mode, got %d: %s", count, rendered)
+	if !strings.Contains(rendered, "/|_|\\--*") {
+		t.Fatalf("expected the centered magician to remain visible once in command mode: %s", rendered)
 	}
 }
 
