@@ -1,5 +1,11 @@
 # TODO List
 
+## Current Goal: Publish the standalone `scplus-mcp` GitHub repository and remove dead hosted-app metadata
+
+- [ ] {Capture a safe local backup plus the current GitHub metadata and ref state before publishing the standalone `Cesar514/scplus-mcp` repository.}
+- [ ] {Replace the dead hosted-app instruction source and tracked repo links with the standalone `scplus-mcp` repository metadata.}
+- [ ] {Publish `Cesar514/scplus-mcp` with the current local commit history and code intact, repoint `origin` to the new standalone repository, keep the original codebase remote available for syncing, verify the new standalone state, and move this goal out of `TODO.md`.}
+
 ```markdown
 - [ ] {Create one authoritative v1.5 control baseline before touching more engine code: synchronize `README.md`, `TODO.md`, `TODO_COMPLETED.md`, `plans/full-engine-roadmap.md`, `INSTRUCTIONS.md`, and any remote instruction endpoint so they all describe the same current storage contract, tool surface, roadmap reality, and product direction; remove stale references to dropped memory or ACP features and deleted legacy JSON layouts; synchronize version numbers across package metadata, MCP server metadata, release notes, and operator-visible banners; and add a maintenance rule that no milestone is complete until code, runtime behavior, and control documents match.}
 - [ ] {Encode the v1.5 non-negotiable rules directly into the repository workflow and review expectations: loud fatal errors over silent fallback, explicit `// FALLBACK` markers only where a framework-forced default cannot be removed, the active serving generation treated as the product contract, one shared backend truth source for MCP and the human CLI, and no claims of large-repo readiness or post-init speed until observability and benchmark gates pass.}

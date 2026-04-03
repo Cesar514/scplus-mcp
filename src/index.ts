@@ -45,7 +45,7 @@ const passthroughArgs = process.argv.slice(2);
 const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
   : process.cwd();
-const INSTRUCTIONS_SOURCE_URL = "https://contextplus.vercel.app/api/instructions";
+const INSTRUCTIONS_SOURCE_URL = "https://raw.githubusercontent.com/Cesar514/scplus-mcp/main/INSTRUCTIONS.md";
 const INSTRUCTIONS_RESOURCE_URI = "scplus-mcp://instructions";
 
 let noteServerActivity = () => { };

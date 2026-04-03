@@ -167,7 +167,7 @@ const toolRefRows = [
 
 async function getStars(): Promise<number> {
   const res = await fetch(
-    "https://api.github.com/repos/Cesar514/scplus-cli",
+    "https://api.github.com/repos/Cesar514/scplus-mcp",
     { cache: "no-store" },
   );
   if (!res.ok) {
@@ -523,7 +523,7 @@ export default async function Home() {
             </svg>
           </a>
           <a
-            href="https://github.com/Cesar514/scplus-cli"
+            href="https://github.com/Cesar514/scplus-mcp"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center"
