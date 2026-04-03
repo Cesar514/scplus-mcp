@@ -492,8 +492,21 @@
 - [x] Use Context+ discovery plus direct file inspection to replace stale README claims with the current branding, storage contract, setup flow, and command surface reflected by the codebase and architecture docs.
 - [x] Verify the rewritten `README.md` against the repository manifests and docs, then move this goal from `TODO.md` to `TODO_COMPLETED.md`.
 
+## repository readme expansion completed
+
+- [x] Expand the repository root `README.md` into a substantially more in-depth install-first guide that restores missing contextual detail from the previous README while staying aligned with the current codebase.
+- [x] Document the full MCP tool surface, bridge/local automation surface, human CLI command surface, supported client init/config flows, and Codex TOML configuration in the README.
+- [x] Correct the model wording in the README to reflect that the Ollama models were downloaded from official upstream models and then locally modified to extend context window configuration, rather than presented as bespoke model families.
+- [x] Verify the expanded README against source files, the previous README content, and the install script workflow, then move this goal from `TODO.md` to `TODO_COMPLETED.md`.
+
 ## ascii magician likeness refinement completed
 
 - [x] Rebuild the girl-magician animation on a consistent `16x16` source grid so the compressed CLI sprite keeps two distinct eyes, a visible center face split, and a silhouette closer to the provided PNG references.
 - [x] Replace the half-block pixel look with a compact square ASCII renderer that uses colored ASCII glyphs, mirrored movement frames, and blinking or winking eye variants.
 - [x] Verify the final likeness with focused UI tests, a rebuilt live `scplus-cli snapshot` render, and generated ASCII preview images inspected against the reference character.
+
+## dense ascii magician container completed
+
+- [x] Rework the CLI girl-magician renderer around a dense square inner canvas so the sprite keeps the PNG silhouette, distinct eyes, and colored ASCII glyphs instead of coarse pixel blocks.
+- [x] Keep the mascot constrained to about eight visible CLI lines while centering a denser inner projection backed by a `64x64` virtual canvas and a compact visible ASCII container.
+- [x] Verify the refined mascot through focused UI tests, a rebuilt live `scplus-cli snapshot`, and palette preview inspection of the resulting ASCII render.

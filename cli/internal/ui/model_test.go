@@ -277,33 +277,50 @@ func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
 	if renderedLineCount(rendered) != 8 {
 		t.Fatalf("expected compact sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
 	}
-	if maxRenderedLineWidth(rendered) > 8 {
-		t.Fatalf("expected compact square sprite width <= 8, got %d in %s", maxRenderedLineWidth(rendered), rendered)
+	if maxRenderedLineWidth(rendered) != 20 {
+		t.Fatalf("expected dense visible sprite width 20, got %d in %s", maxRenderedLineWidth(rendered), rendered)
 	}
 	if strings.ContainsAny(rendered, "█▀▄⣿⣾⣷") {
 		t.Fatalf("expected ASCII sprite glyphs instead of block pixels: %s", rendered)
 	}
-	if !strings.ContainsAny(rendered, "@#%o=*+-/|_") {
+	if !strings.ContainsAny(rendered, "@#%o0Q=*+-/|_:;xX") {
 		t.Fatalf("expected dense ASCII sprite glyphs in compact sprite: %s", rendered)
 	}
 	lines := strings.Split(rendered, "\n")
+	for _, line := range lines {
+		if lipgloss.Width(line) != 20 {
+			t.Fatalf("expected every rendered line to use the dense 20-column visible container, got %d in %q", lipgloss.Width(line), line)
+		}
+	}
 	eyeSeparated := false
 	for _, line := range lines {
-		first := strings.Index(line, "=")
-		last := strings.LastIndex(line, "=")
-		if first >= 0 && last-first >= 2 {
+		first := strings.IndexAny(line, "0QO=")
+		last := strings.LastIndexAny(line, "0QO=")
+		if first >= 0 && last-first >= 6 {
 			eyeSeparated = true
 			break
 		}
 	}
 	if !eyeSeparated {
-		t.Fatalf("expected two visibly separated eyes in compact sprite: %s", rendered)
+		t.Fatalf("expected two visibly separated eyes in dense sprite: %s", rendered)
+	}
+}
+
+func TestScaledFrameCanvasUsesDenseSquareVirtualContainer(t *testing.T) {
+	canvas := scaledFrameCanvas(magicianFrames[0], magicianVirtualCanvasSize)
+	if len(canvas) != 64 {
+		t.Fatalf("expected dense virtual canvas height 64, got %d", len(canvas))
+	}
+	for _, row := range canvas {
+		if len(row) != 64 {
+			t.Fatalf("expected dense virtual canvas width 64, got %d", len(row))
+		}
 	}
 }
 
 func TestCenterBlockKeepsConsistentContainerOffsetAcrossAsciiRows(t *testing.T) {
 	plain := renderMagicianASCII(magicianFrames[0])
-	centered := centerBlock(plain, 60)
+	centered := centerBlock(plain, 96)
 	renderedLines := strings.Split(centered, "\n")
 	frameLines := strings.Split(plain, "\n")
 	if len(renderedLines) != len(frameLines) {

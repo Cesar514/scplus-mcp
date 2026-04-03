@@ -8,6 +8,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	magicianVirtualCanvasSize = 64
+	magicianDisplayRows       = 8
+	magicianDefaultColumns    = 20
+	magicianMinimumColumns    = 14
+)
+
 var magicianFrames = []string{
 	`.......KK.......
 .....KKWWKK.....
@@ -122,28 +129,59 @@ func frameTokenRows(frame string) []string {
 	return strings.Split(frame, "\n")
 }
 
-func expandFrameTokens(frame string, xScale int, yScale int) [][]rune {
+func frameTokenBounds(frame string) (int, int) {
 	rows := frameTokenRows(frame)
-	expanded := make([][]rune, 0, len(rows)*yScale)
+	height := len(rows)
+	width := 0
 	for _, row := range rows {
-		source := []rune(row)
-		scaledRow := make([]rune, 0, len(source)*xScale)
-		for _, token := range source {
-			for repeat := 0; repeat < xScale; repeat++ {
-				scaledRow = append(scaledRow, token)
-			}
-		}
-		for repeat := 0; repeat < yScale; repeat++ {
-			copied := make([]rune, len(scaledRow))
-			copy(copied, scaledRow)
-			expanded = append(expanded, copied)
-		}
+		width = max(width, len([]rune(row)))
 	}
-	return expanded
+	return width, height
 }
 
 func opaqueToken(token rune) bool {
 	return token != '.'
+}
+
+func blankTokenRow(width int) []rune {
+	row := make([]rune, width)
+	for index := range row {
+		row[index] = '.'
+	}
+	return row
+}
+
+func scaledFrameCanvas(frame string, size int) [][]rune {
+	sourceRows := frameTokenRows(frame)
+	sourceWidth, sourceHeight := frameTokenBounds(frame)
+	canvas := make([][]rune, size)
+	for index := range canvas {
+		canvas[index] = blankTokenRow(size)
+	}
+	if sourceWidth == 0 || sourceHeight == 0 {
+		return canvas
+	}
+	scale := max(1, min(size/sourceWidth, size/sourceHeight))
+	scaledWidth := sourceWidth * scale
+	scaledHeight := sourceHeight * scale
+	xOffset := max(0, (size-scaledWidth)/2)
+	yOffset := max(0, (size-scaledHeight)/2)
+	for sourceY, row := range sourceRows {
+		tokens := []rune(row)
+		for sourceX, token := range tokens {
+			for deltaY := 0; deltaY < scale; deltaY++ {
+				for deltaX := 0; deltaX < scale; deltaX++ {
+					canvasY := yOffset + sourceY*scale + deltaY
+					canvasX := xOffset + sourceX*scale + deltaX
+					if canvasY >= size || canvasX >= size {
+						continue
+					}
+					canvas[canvasY][canvasX] = token
+				}
+			}
+		}
+	}
+	return canvas
 }
 
 func mirrorMaskedFrame(frame string) string {
@@ -171,113 +209,160 @@ func dominantToken(counts map[rune]int) rune {
 	return dominant
 }
 
-func denseGlyphForToken(token rune) rune {
+func dominantNonOutlineToken(counts map[rune]int) rune {
+	dominant := '.'
+	maxCount := 0
+	for _, token := range []rune{'W', 'R', 'S', 'H', 'E', 'I', 'G'} {
+		if counts[token] > maxCount {
+			dominant = token
+			maxCount = counts[token]
+		}
+	}
+	return dominant
+}
+
+func representativeToken(counts map[rune]int, opaque int) rune {
+	switch {
+	case counts['I']*4 >= opaque:
+		return 'I'
+	case counts['E']*4 >= opaque:
+		return 'E'
+	case counts['R']*3 >= opaque:
+		return 'R'
+	case counts['H']*3 >= opaque:
+		return 'H'
+	}
+	if opaque-counts['K'] > 0 {
+		if nonOutline := dominantNonOutlineToken(counts); nonOutline != '.' {
+			return nonOutline
+		}
+	}
+	return dominantToken(counts)
+}
+
+func glyphRampForToken(token rune) []rune {
 	switch token {
 	case 'K':
-		return '#'
+		return []rune(" .'`:;|/tiL#@")
 	case 'W':
-		return '@'
+		return []rune(" .,:-=+*#@")
 	case 'R':
-		return '%'
+		return []rune(" .,:-+xX%#")
 	case 'S':
-		return 'o'
+		return []rune(" .`':;coO0")
 	case 'H':
-		return '*'
+		return []rune(" .`':;*xX#")
 	case 'E':
-		return '='
+		return []rune(" .-~=oO0Q")
 	case 'I':
-		return '-'
+		return []rune("__--")
 	case 'G':
-		return '+'
+		return []rune(" .,:-=+*#")
 	default:
-		return '#'
+		return []rune(" .,:-=+*#@")
 	}
 }
 
-func asciiGlyphForBlock(mask int, token rune, count int) rune {
-	if token == 'I' {
-		return '-'
-	}
-	switch mask {
-	case 0:
+func pairedBandGlyph(token rune, opaque int, total int, topOpaque int, bottomOpaque int) rune {
+	if opaque <= 0 || total <= 0 {
 		return ' '
-	case 1:
-		return '`'
-	case 2:
-		return '\''
-	case 3:
-		return '-'
-	case 4:
-		return '.'
-	case 5:
-		return '|'
-	case 6:
-		return '/'
-	case 7:
-		return denseGlyphForToken(token)
-	case 8:
-		return ','
-	case 9:
-		return '\\'
-	case 10:
-		return '|'
-	case 11:
-		return denseGlyphForToken(token)
-	case 12:
+	}
+	if token == 'I' {
 		return '_'
-	case 13:
-		return denseGlyphForToken(token)
-	case 14:
-		return denseGlyphForToken(token)
-	case 15:
-		return denseGlyphForToken(token)
-	default:
-		if count >= 3 {
-			return denseGlyphForToken(token)
-		}
+	}
+	if token == 'E' {
+		return '0'
+	}
+	density := float64(opaque) / float64(total)
+	if density < 0.12 {
+		return '.'
+	}
+	if density < 0.22 && (topOpaque == 0 || bottomOpaque == 0) {
 		return ':'
 	}
+	switch token {
+	case 'K':
+		if density < 0.35 {
+			return ':'
+		}
+		return '#'
+	case 'W':
+		if density < 0.35 {
+			return '+'
+		}
+		return '@'
+	case 'R':
+		if density < 0.35 {
+			return 'x'
+		}
+		return '%'
+	case 'S':
+		if density < 0.35 {
+			return 'c'
+		}
+		return 'o'
+	case 'H':
+		if density < 0.35 {
+			return ';'
+		}
+		return '*'
+	case 'G':
+		if density < 0.35 {
+			return '='
+		}
+		return '+'
+	}
+	return glyphRampForToken(token)[len(glyphRampForToken(token))-1]
 }
 
-func renderASCIISprite(frame string, styled bool) string {
-	pixels := expandFrameTokens(frame, 1, 1)
-	if len(pixels) == 0 {
+func renderASCIISprite(frame string, styled bool, visibleColumns int) string {
+	canvas := scaledFrameCanvas(frame, magicianVirtualCanvasSize)
+	if len(canvas) == 0 {
 		return ""
 	}
-	if len(pixels)%2 != 0 {
-		padding := make([]rune, len(pixels[0]))
-		for index := range padding {
-			padding[index] = '.'
+	columns := min(magicianDefaultColumns, max(magicianMinimumColumns, visibleColumns))
+	rendered := make([]string, 0, magicianDisplayRows)
+	for row := 0; row < magicianDisplayRows; row++ {
+		yStart := row * magicianVirtualCanvasSize / magicianDisplayRows
+		yEnd := (row + 1) * magicianVirtualCanvasSize / magicianDisplayRows
+		if yEnd <= yStart {
+			yEnd = yStart + 1
 		}
-		pixels = append(pixels, padding)
-	}
-	height := len(pixels)
-	width := len(pixels[0])
-	rendered := make([]string, 0, height/2)
-	for y := 0; y < height; y += 2 {
 		var builder strings.Builder
-		for x := 0; x < width; x += 2 {
-			mask := 0
+		for column := 0; column < columns; column++ {
+			xStart := column * magicianVirtualCanvasSize / columns
+			xEnd := (column + 1) * magicianVirtualCanvasSize / columns
+			if xEnd <= xStart {
+				xEnd = xStart + 1
+			}
 			counts := make(map[rune]int)
-			samples := [4]rune{
-				pixels[y][x],
-				pixels[y][min(x+1, width-1)],
-				pixels[y+1][x],
-				pixels[y+1][min(x+1, width-1)],
-			}
-			for index, token := range samples {
-				if !opaqueToken(token) {
-					continue
+			opaque := 0
+			total := 0
+			topOpaque := 0
+			bottomOpaque := 0
+			halfHeight := max(1, (yEnd-yStart)/2)
+			for y := yStart; y < yEnd; y++ {
+				for x := xStart; x < xEnd; x++ {
+					total++
+					token := canvas[y][x]
+					if !opaqueToken(token) {
+						continue
+					}
+					opaque++
+					counts[token]++
+					if y-yStart < halfHeight {
+						topOpaque++
+					} else {
+						bottomOpaque++
+					}
 				}
-				mask |= 1 << index
-				counts[token]++
 			}
-			if mask == 0 {
+			if opaque == 0 {
 				builder.WriteRune(' ')
 				continue
 			}
-			token := dominantToken(counts)
-			glyph := asciiGlyphForBlock(mask, token, counts[token])
+			token := representativeToken(counts, opaque)
+			glyph := pairedBandGlyph(token, opaque, total, topOpaque, bottomOpaque)
 			if !styled {
 				builder.WriteRune(glyph)
 				continue
@@ -295,9 +380,10 @@ func renderASCIISprite(frame string, styled bool) string {
 }
 
 func renderMagicianASCII(frame string) string {
-	return renderASCIISprite(frame, false)
+	return renderASCIISprite(frame, false, magicianDefaultColumns)
 }
 
 func renderMagician(frame string, width int) string {
-	return centerBlock(renderASCIISprite(frame, true), max(12, width))
+	targetColumns := min(magicianDefaultColumns, max(magicianMinimumColumns, width))
+	return centerBlock(renderASCIISprite(frame, true, targetColumns), max(targetColumns, width))
 }
