@@ -5,6 +5,7 @@
 
 import { readdir, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
+import { acquireRepoRuntimeLock, type RepoRuntimeLockHandle } from "../core/runtime-locks.js";
 import { resetBackendSchedulerObservability, updateBackendSchedulerObservability } from "../core/runtime-observability.js";
 import { listRestorePoints } from "../git/shadow.js";
 import { semanticNavigate } from "../tools/semantic-navigate.js";
@@ -26,6 +27,7 @@ import {
   type WatchExecutionPlan,
 } from "./backend-core-helpers.js";
 import { buildDoctorReport } from "./reports.js";
+import { validatePreparedIndex } from "../tools/index-reliability.js";
 
 const WATCH_IGNORE_PREFIXES = [
   ".contextplus/",
@@ -41,6 +43,7 @@ export type BackendEventKind = "job" | "log" | "watch-batch" | "watch-state";
 export type BackendJobState = "canceled" | "completed" | "failed" | "progress" | "queued" | "running";
 export type BackendJobControlAction = "cancel-pending" | "retry-last" | "supersede-pending";
 export type BackendJobName = "index" | "refresh";
+type ManualIndexMode = IndexMode | "auto";
 
 export interface BackendEvent {
   kind: BackendEventKind;
@@ -87,7 +90,7 @@ interface JobControlPayload {
   pendingPaths: string[];
   pendingJobKind?: BackendJobName;
   lastWatchBatch: string[];
-  lastMode: IndexMode;
+  lastMode: ManualIndexMode;
 }
 
 type EventSink = (event: BackendEvent) => Promise<void> | void;
@@ -175,7 +178,8 @@ class BackendRootSession {
   private supersededJobs = 0;
   private canceledJobs = 0;
   private lastWatchBatch: string[] = [];
-  private lastIndexMode: IndexMode = DEFAULT_INDEX_MODE;
+  private lastIndexMode: ManualIndexMode = "auto";
+  private watchLock: RepoRuntimeLockHandle | null = null;
 
   constructor(
     private readonly rootDir: string,
@@ -200,7 +204,7 @@ class BackendRootSession {
     }
 
     if (this.watchEnabled) {
-      this.stopWatcher();
+      await this.stopWatcher();
       await this.emit({
         kind: "watch-state",
         root: this.rootDir,
@@ -215,12 +219,24 @@ class BackendRootSession {
     return { root: this.rootDir, enabled: false };
   }
 
-  async runManualIndex(mode: IndexMode = DEFAULT_INDEX_MODE): Promise<string> {
+  async runManualIndex(mode: ManualIndexMode = "auto"): Promise<string> {
     this.assertOpen();
     if (this.activeJob) {
       throw new Error(`Backend job already running for ${this.rootDir}.`);
     }
-    return this.runIndex(mode, "manual");
+    this.lastIndexMode = mode;
+    if (mode !== "auto") {
+      return this.runIndex(mode, "manual");
+    }
+    if (!await this.hasValidPreparedFullIndex()) {
+      return this.runIndex(DEFAULT_INDEX_MODE, "manual", "manual bootstrap rebuild because no valid prepared index exists yet");
+    }
+    return this.runRefresh({
+      job: "refresh",
+      mode: DEFAULT_INDEX_MODE,
+      changedPaths: [],
+      reason: "manual incremental refresh using the existing prepared index",
+    }, "manual");
   }
 
   async cancelPendingJob(): Promise<JobControlPayload> {
@@ -332,15 +348,15 @@ class BackendRootSession {
       throw new Error(`Cannot retry index for ${this.rootDir} while another run is active.`);
     }
     const mode = this.lastIndexMode;
-    this.emitLog(`retrying last index in ${mode} mode`);
-    await this.runIndex(mode, "manual");
-    return this.buildJobControlPayload("retry-last", `retried last index in ${mode} mode`);
+    this.emitLog(`retrying last prepared-index sync with ${mode} strategy`);
+    await this.runManualIndex(mode);
+    return this.buildJobControlPayload("retry-last", `retried last prepared-index sync with ${mode} strategy`);
   }
 
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.stopWatcher();
+    await this.stopWatcher();
     resetBackendSchedulerObservability(this.rootDir);
   }
 
@@ -358,6 +374,15 @@ class BackendRootSession {
     }
   }
 
+  private async hasValidPreparedFullIndex(): Promise<boolean> {
+    try {
+      const report = await validatePreparedIndex({ rootDir: this.rootDir, mode: DEFAULT_INDEX_MODE });
+      return report.ok;
+    } catch {
+      return false;
+    }
+  }
+
   private emitLog(message: string, level: "error" | "info" = "info"): void {
     void this.emit({
       kind: "log",
@@ -365,6 +390,16 @@ class BackendRootSession {
       message,
       level,
       queueDepth: this.getQueueDepth(),
+    });
+  }
+
+  private async acquireMutationLock(holder: string): Promise<RepoRuntimeLockHandle> {
+    return acquireRepoRuntimeLock(this.rootDir, "mutation", {
+      holder,
+      timeoutMs: 0,
+      onBusy: async (owner) => {
+        this.emitLog(`waiting blocked by ${owner.holder} in pid ${owner.pid} since ${owner.startedAt}`, "error");
+      },
     });
   }
 
@@ -459,11 +494,15 @@ class BackendRootSession {
   private async startWatcher(debounceMs?: number): Promise<void> {
     if (this.watchEnabled) return;
     this.watchDebounceMs = debounceMs ?? this.watchDebounceMs;
+    this.watchLock = await acquireRepoRuntimeLock(this.rootDir, "watcher", {
+      holder: "bridge watcher",
+      timeoutMs: 0,
+    });
     try {
       this.previousSnapshot = await this.scanSnapshot();
     } catch (error) {
       this.emitLog(`watcher failed: ${toErrorMessage(error)}`, "error");
-      this.stopWatcher();
+      await this.stopWatcher();
       await this.emit({
         kind: "watch-state",
         root: this.rootDir,
@@ -485,7 +524,7 @@ class BackendRootSession {
     this.scanTimer.unref?.();
   }
 
-  private stopWatcher(): void {
+  private async stopWatcher(): Promise<void> {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
@@ -500,6 +539,11 @@ class BackendRootSession {
     this.scanRunning = false;
     this.watchEnabled = false;
     this.syncSchedulerObservability();
+    const watchLock = this.watchLock;
+    this.watchLock = null;
+    if (watchLock) {
+      await watchLock.release();
+    }
   }
 
   private resetWatchDebounce(): void {
@@ -629,7 +673,7 @@ class BackendRootSession {
       }
     } catch (error) {
       this.emitLog(`watcher failed: ${toErrorMessage(error)}`, "error");
-      this.stopWatcher();
+      await this.stopWatcher();
       await this.emit({
         kind: "watch-state",
         root: this.rootDir,
@@ -645,7 +689,8 @@ class BackendRootSession {
     }
   }
 
-  private async runRefresh(plan: WatchExecutionPlan): Promise<string> {
+  private async runRefresh(plan: WatchExecutionPlan, source: "manual" | "watch" = "watch"): Promise<string> {
+    const mutationLock = await this.acquireMutationLock(source === "manual" ? "bridge manual refresh" : "bridge watch refresh");
     const stageCount = 3;
     const emitRefreshProgress = async (
       stageIndex: number,
@@ -663,7 +708,7 @@ class BackendRootSession {
         state: "progress",
         mode: plan.mode,
         phase,
-        source: "watch",
+        source,
         queueDepth: this.getQueueDepth(),
         rebuildReason: plan.reason,
         pending: this.queuedWatchPlan !== null,
@@ -679,24 +724,26 @@ class BackendRootSession {
       this.emitLog(message);
     };
 
-    this.activeJob = "refresh";
-    await this.emit({
-      kind: "job",
-      root: this.rootDir,
-      job: "refresh",
-      state: "running",
-      mode: plan.mode,
-      phase: "file-search",
-      source: "watch",
-      queueDepth: this.getQueueDepth(),
-      rebuildReason: plan.reason,
-      pending: this.queuedWatchPlan !== null,
-      pendingPaths: this.getCurrentPendingPaths(),
-      pendingChangeCount: this.getCurrentPendingPaths().length,
-      pendingJobKind: this.queuedWatchPlan?.job,
-      message: `running background incremental refresh for ${summarizeChangedPaths(plan.changedPaths)}`,
-    });
     try {
+      this.activeJob = "refresh";
+      await this.emit({
+        kind: "job",
+        root: this.rootDir,
+        job: "refresh",
+        state: "running",
+        mode: plan.mode,
+        phase: "file-search",
+        source,
+        queueDepth: this.getQueueDepth(),
+        rebuildReason: plan.reason,
+        pending: this.queuedWatchPlan !== null,
+        pendingPaths: this.getCurrentPendingPaths(),
+        pendingChangeCount: this.getCurrentPendingPaths().length,
+        pendingJobKind: this.queuedWatchPlan?.job,
+        message: source == "manual"
+          ? "running manual incremental refresh"
+          : `running background incremental refresh for ${summarizeChangedPaths(plan.changedPaths)}`,
+      });
       await ensureFileSearchIndex(this.rootDir, async (progress) => {
         await emitRefreshProgress(0, progress.phase, formatFileProgress(progress), progress.processedFiles, progress.totalFiles, progress.currentFile);
       });
@@ -709,7 +756,9 @@ class BackendRootSession {
         await emitRefreshProgress(2, progress.phase, formatFullProgress(progress), progress.processedFiles, progress.totalFiles, progress.currentFile);
       });
 
-      const summary = `background watch refresh completed for ${summarizeChangedPaths(plan.changedPaths)}`;
+      const summary = source == "manual"
+        ? "manual incremental refresh completed"
+        : `background watch refresh completed for ${summarizeChangedPaths(plan.changedPaths)}`;
       this.emitLog(summary);
       await this.emit({
         kind: "job",
@@ -718,7 +767,7 @@ class BackendRootSession {
         state: "completed",
         mode: plan.mode,
         phase: "completed",
-        source: "watch",
+        source,
         queueDepth: this.getQueueDepth(),
         rebuildReason: plan.reason,
         pending: this.queuedWatchPlan !== null,
@@ -747,7 +796,7 @@ class BackendRootSession {
         state: "failed",
         mode: plan.mode,
         phase: "failed",
-        source: "watch",
+        source,
         queueDepth: this.getQueueDepth(),
         rebuildReason: plan.reason,
         pending: this.queuedWatchPlan !== null,
@@ -760,6 +809,7 @@ class BackendRootSession {
     } finally {
       this.activeJob = null;
       this.syncSchedulerObservability();
+      await mutationLock.release();
       if (this.queuedWatchPlan) {
         const nextPlan = this.queuedWatchPlan;
         this.queuedWatchPlan = null;
@@ -771,7 +821,7 @@ class BackendRootSession {
   }
 
   private async runIndex(mode: IndexMode, source: "manual" | "watch", rebuildReasonOverride?: string): Promise<string> {
-    this.lastIndexMode = mode;
+    const mutationLock = await this.acquireMutationLock(source === "manual" ? "bridge manual index" : "bridge watch index");
     this.activeJob = "index";
     const rebuildReason = rebuildReasonOverride
       ?? (source === "watch"
@@ -798,6 +848,7 @@ class BackendRootSession {
       const output = await indexCodebase({
         rootDir: this.rootDir,
         mode,
+        skipRuntimeMutationLock: true,
         onProgress: async (progress) => {
           await this.emit({
             kind: "job",
@@ -873,6 +924,7 @@ class BackendRootSession {
     } finally {
       this.activeJob = null;
       this.syncSchedulerObservability();
+      await mutationLock.release();
       if (this.queuedWatchPlan) {
         const nextPlan = this.queuedWatchPlan;
         this.queuedWatchPlan = null;
@@ -933,7 +985,7 @@ export class BackendCore {
     return listRestorePoints(rootDir);
   }
 
-  async index(rootDir: string, mode: IndexMode = DEFAULT_INDEX_MODE): Promise<string> {
+  async index(rootDir: string, mode: ManualIndexMode = "auto"): Promise<string> {
     return this.getSession(rootDir).runManualIndex(mode);
   }
 

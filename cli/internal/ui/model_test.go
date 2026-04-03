@@ -10,9 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	"scplus-cli/cli/internal/backend"
 	tea "github.com/charmbracelet/bubbletea"
+	"scplus-cli/cli/internal/backend"
 )
+
+func renderedLineCount(value string) int {
+	if value == "" {
+		return 0
+	}
+	return strings.Count(value, "\n") + 1
+}
 
 func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
 	report := backend.DoctorReport{
@@ -135,15 +142,15 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Activity | scplus-cli",
-		"/\\_",
+		"/\\",
+		"(=^.^=)",
 		"Type /command",
 		"watcher: on",
 		"stage: identifier-search",
 		"pending: 2",
 		"backend: connected",
 		"repo: /tmp/contextplus",
-		"generation: 7",
-		"history: 1/1",
+		"serving build: 7",
 		"Index",
 		"running",
 		"observability indexing: identifier-search 62%",
@@ -161,8 +168,11 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 			t.Fatalf("expected %q to be absent from activity shell: %s", needle, rendered)
 		}
 	}
-	if count := strings.Count(rendered, "/\\_"); count != 1 {
+	if count := strings.Count(rendered, "(=^.^=)"); count != 1 {
 		t.Fatalf("expected exactly one visible cat in the activity shell, got %d: %s", count, rendered)
+	}
+	if strings.Contains(rendered, "history: 1/1") {
+		t.Fatalf("expected single-entry navigation jargon to stay hidden from the status line: %s", rendered)
 	}
 }
 
@@ -563,6 +573,29 @@ func TestNavigationHistoryTracksViewTransitions(t *testing.T) {
 	}
 }
 
+func TestStatusLineUsesUserFacingServingAndViewTrailLabels(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 160
+	model.doctorLoaded = true
+	model.doctor.Serving.ActiveGeneration = 29
+	model.doctor.Serving.ActiveGenerationFreshness = "fresh"
+	model.setActiveView(viewTree)
+	model.recordNavigation()
+	model.setActiveView(viewStatus)
+	model.recordNavigation()
+
+	rendered := model.renderStatusLine()
+	if !strings.Contains(rendered, "serving build: 29") {
+		t.Fatalf("expected serving build label in status line: %s", rendered)
+	}
+	if !strings.Contains(rendered, "view trail: 3/3") {
+		t.Fatalf("expected explicit view trail label in status line: %s", rendered)
+	}
+	if strings.Contains(rendered, "generation:") || strings.Contains(rendered, "history:") {
+		t.Fatalf("expected internal generation/history jargon to be removed from status line: %s", rendered)
+	}
+}
+
 func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 120
@@ -685,11 +718,76 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
 	model.commandBar.SetValue("/")
 
 	rendered := model.renderActivityShell(90, 40)
+	for _, needle := range []string{
+		"Commands | scplus-cli",
+		"Search slash commands and press Enter to run",
+		"/exit",
+		"/activity",
+		"/overview",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in slash-command browser: %s", needle, rendered)
+		}
+	}
 	if !strings.Contains(rendered, "more commands hidden") {
 		t.Fatalf("expected bounded command list to keep hidden commands even in a tall window: %s", rendered)
 	}
-	if strings.Contains(rendered, "/word") {
-		t.Fatalf("expected later commands to stay hidden until scrolled into view: %s", rendered)
+	if strings.Contains(rendered, "Current task:") || strings.Contains(rendered, "Current issue:") || strings.Contains(rendered, "Latest log:") {
+		t.Fatalf("expected slash-command browser to suppress activity previews: %s", rendered)
+	}
+}
+
+func TestActivityShellKeepsSameRenderedHeightWhenSlashCommandsAppear(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	indexJob := model.job("index")
+	indexJob.State = "failed"
+	indexJob.Phase = "failed"
+	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/contextplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement."
+	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index."
+	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
+
+	withoutCommands := model.View()
+	model.commandBar.SetValue("/")
+	withCommands := model.View()
+
+	withoutLines := renderedLineCount(withoutCommands)
+	withLines := renderedLineCount(withCommands)
+	if withoutLines > model.height {
+		t.Fatalf("expected non-command activity shell to stay within terminal height %d, got %d lines: %s", model.height, withoutLines, withoutCommands)
+	}
+	if withLines > model.height {
+		t.Fatalf("expected slash-command activity shell to stay within terminal height %d, got %d lines: %s", model.height, withLines, withCommands)
+	}
+	if withLines != withoutLines {
+		t.Fatalf("expected slash-command activity shell to keep the same rendered height, got %d lines before and %d after: before=%s after=%s", withoutLines, withLines, withoutCommands, withCommands)
+	}
+}
+
+func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	indexJob := model.job("index")
+	indexJob.State = "failed"
+	indexJob.Phase = "failed"
+	indexJob.Message = "blocked refresh message"
+	model.lastError = "backend command failed"
+	model.logs = append(model.logs, "doctor report refreshed")
+	model.commandBar.SetValue("/")
+
+	rendered := model.View()
+	for _, unwanted := range []string{"Current task:", "Current issue:", "Latest log:"} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("expected slash-command activity shell to hide %q: %s", unwanted, rendered)
+		}
+	}
+	if strings.Contains(rendered, "Current status:") {
+		t.Fatalf("expected slash-command browser to replace the activity status block: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Commands | scplus-cli") {
+		t.Fatalf("expected slash-command browser heading in slash mode: %s", rendered)
 	}
 }
 
@@ -771,6 +869,43 @@ func TestIssueSlashCommandOpensFullIssueWindow(t *testing.T) {
 	section := model.sections[viewIssue]
 	if section == nil || section.RawText != model.lastError {
 		t.Fatalf("expected full issue text in the issue view, got %#v", section)
+	}
+}
+
+func TestIssueViewStaysWithinTerminalHeight(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	model.lastError = "first issue line\nsecond issue line\nthird issue line\nfourth issue line"
+	model.logs = append(model.logs, "latest log line\nsecond log line\nthird log line\nfourth log line")
+
+	if cmd := model.executePaletteAction("open-issue"); cmd != nil {
+		t.Fatalf("expected issue command to switch views synchronously")
+	}
+
+	rendered := model.View()
+	if lines := renderedLineCount(rendered); lines > model.height {
+		t.Fatalf("expected issue view to stay within terminal height %d, got %d lines: %s", model.height, lines, rendered)
+	}
+}
+
+func TestActivityViewStaysWithinTerminalHeight(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	indexJob := model.job("index")
+	indexJob.State = "failed"
+	indexJob.Phase = "failed"
+	indexJob.Message = "File search refresh blocked for /home/cesar514/Documents/agent_programming/contextplus: TODO_COMPLETED.md: refresh would remove an indexed file without replacement: text index candidate exceeds max embed file size."
+	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index.\nIndex validation: failed."
+	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
+
+	rendered := model.View()
+	if lines := renderedLineCount(rendered); lines > model.height {
+		t.Fatalf("expected activity view to stay within terminal height %d, got %d lines: %s", model.height, lines, rendered)
+	}
+	if !strings.Contains(rendered, "Current issue:") {
+		t.Fatalf("expected activity issue preview to remain visible: %s", rendered)
 	}
 }
 

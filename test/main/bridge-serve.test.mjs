@@ -291,6 +291,107 @@ describe("bridge-serve", () => {
     }
   });
 
+  it("bootstraps with a full manual index when no prepared index exists yet", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-bootstrap-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// Bridge bootstrap fixture\n// FEATURE: Verify manual index bootstraps a full prepared index when none exists\n\nexport function runApp() {\n  return 1;\n}\n",
+      );
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      const session = new BridgeSession(cwd);
+      try {
+        const manualIndexPromise = session.request("index", { root: cwd });
+        const manualRunning = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "running" &&
+          event.job === "index" &&
+          event.source === "manual",
+        );
+        assert.equal(manualRunning.root, cwd);
+
+        const output = await manualIndexPromise;
+        assert.equal(typeof output.output, "string");
+        assert.equal(output.output.trim().length > 0, true);
+
+        const manualCompleted = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "completed" &&
+          event.job === "index" &&
+          event.source === "manual",
+        );
+        assert.equal(manualCompleted.root, cwd);
+
+        const doctor = await session.request("doctor", { root: cwd });
+        assert.equal(doctor.indexValidation.ok, true);
+      } finally {
+        await session.close();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("uses manual incremental refresh when a valid prepared index already exists", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-manual-refresh-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// Bridge manual refresh fixture\n// FEATURE: Verify manual index refreshes only changed files after bootstrap\n\nexport function runApp() {\n  return 1;\n}\n",
+      );
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "contextplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            CONTEXTPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const session = new BridgeSession(cwd);
+      try {
+        const manualIndexPromise = session.request("index", { root: cwd });
+        const manualRunning = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "running" &&
+          event.job === "refresh" &&
+          event.source === "manual",
+        );
+        assert.equal(manualRunning.root, cwd);
+
+        await manualIndexPromise;
+        const manualCompleted = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.state === "completed" &&
+          event.job === "refresh" &&
+          event.source === "manual",
+        );
+        assert.equal(manualCompleted.root, cwd);
+      } finally {
+        await session.close();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("exposes pending-job cancel, supersede, and retry controls over the persistent session", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-bridge-controls-"));
     const filePath = join(cwd, "src", "app.ts");
@@ -331,7 +432,7 @@ describe("bridge-serve", () => {
         await session.request("watch-set", { root: cwd, enabled: true, debounceMs: 100 });
         await session.waitForEvent((event) => event.kind === "watch-state" && event.enabled === true);
 
-        const manualIndexPromise = session.request("index", { root: cwd });
+        const manualIndexPromise = session.request("index", { root: cwd, mode: "full" });
         await session.waitForEvent((event) =>
           event.kind === "job" &&
           event.state === "running" &&

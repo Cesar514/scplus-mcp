@@ -122,7 +122,8 @@ async function runInitCommand(args: string[]): Promise<void> {
 async function runIndexCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
   const targetRoot = resolveRoot(parsed);
-  const mode = normalizeIndexMode(getFlag(parsed.flags, "mode"));
+  const requestedMode = getFlag(parsed.flags, "mode");
+  const mode = requestedMode === undefined ? "auto" : normalizeIndexMode(requestedMode);
   process.stdout.write(`${await backendCore.index(targetRoot, mode)}\n`);
 }
 
@@ -344,7 +345,13 @@ function assertRetrievalMode(value: unknown): RetrievalMode | undefined {
   throw new Error(`Persistent bridge command received invalid retrievalMode "${String(value)}".`);
 }
 
-function normalizePersistentIndexMode(value: unknown): "core" | "full" {
+function normalizeBridgeIndexMode(value: unknown): "auto" | "core" | "full" {
+  if (value === undefined) return "auto";
+  if (value === "auto" || value === "core" || value === "full") return value;
+  throw new Error(`Persistent bridge command received invalid mode "${String(value)}".`);
+}
+
+function normalizePreparedIndexMode(value: unknown): "core" | "full" {
   if (value === undefined) return DEFAULT_INDEX_MODE;
   if (value === "core" || value === "full") return value;
   throw new Error(`Persistent bridge command received invalid mode "${String(value)}".`);
@@ -401,7 +408,7 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
   }
   if (normalizedCommand === "index") {
     return {
-      output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizePersistentIndexMode(rawArgs.mode)),
+      output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizeBridgeIndexMode(rawArgs.mode)),
     };
   }
   if (normalizedCommand === "job-control") {
@@ -419,7 +426,7 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
   if (normalizedCommand === "validate-index") {
     return validatePreparedIndex({
       rootDir: assertString(rawArgs.root, "root"),
-      mode: normalizePersistentIndexMode(rawArgs.mode),
+      mode: normalizePreparedIndexMode(rawArgs.mode),
     });
   }
   if (normalizedCommand === "repair-index") {

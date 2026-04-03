@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"scplus-cli/cli/internal/backend"
 	"scplus-cli/cli/internal/hubs"
 	"scplus-cli/cli/internal/ui"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func runInteractive(root string, client *backend.Client) error {
@@ -168,7 +168,7 @@ func main() {
 	case "snapshot":
 		err = runSnapshot(root, client)
 	case "index":
-		mode := "full"
+		mode := "auto"
 		if len(remaining) > 0 {
 			mode = remaining[0]
 		}

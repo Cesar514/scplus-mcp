@@ -101,7 +101,7 @@ server.tool(
   withRequestActivity(async ({ mode }) => ({
     content: [{
       type: "text" as const,
-      text: await backendCore.index(ROOT_DIR, mode),
+      text: await backendCore.index(ROOT_DIR, mode ?? DEFAULT_INDEX_MODE),
     }],
   })),
 );

@@ -4,6 +4,7 @@
 // outputs: Fresh generations of durable Context+ index artifacts and status metadata.
 
 import { relative } from "path";
+import { acquireRepoRuntimeLock } from "../core/runtime-locks.js";
 import { activateIndexGeneration, clearPendingIndexGeneration, reservePendingIndexGeneration, runWithIndexGenerationContext } from "../core/index-database.js";
 import { type FileSearchIndexProgress } from "./semantic-search.js";
 import { type IdentifierIndexProgress } from "./semantic-identifiers.js";
@@ -26,6 +27,7 @@ export interface IndexCodebaseOptions {
   rootDir: string;
   mode?: IndexMode;
   onProgress?: (event: IndexCodebaseProgressEvent) => Promise<void> | void;
+  skipRuntimeMutationLock?: boolean;
 }
 
 export interface IndexCodebaseProgressEvent {
@@ -215,6 +217,13 @@ function formatFullProgress(progress: FullIndexProgress): string {
 export async function indexCodebase(options: IndexCodebaseOptions): Promise<string> {
   const rootDir = options.rootDir;
   const mode = options.mode ?? DEFAULT_INDEX_MODE;
+  const mutationLock = options.skipRuntimeMutationLock
+    ? null
+    : await acquireRepoRuntimeLock(rootDir, "mutation", {
+      holder: `prepared ${mode} index build`,
+      timeoutMs: 0,
+    });
+  try {
   const pendingGeneration = await reservePendingIndexGeneration(rootDir);
   const runtime = await createIndexRuntime({ rootDir, mode, generation: pendingGeneration });
   const { layout, paths, config } = runtime;
@@ -465,24 +474,27 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     throw error;
   }
 
-  const stageDefinitions = getStageDefinitions();
-  return [
-    `Indexed ${config.projectName}`,
-    `Root: ${runtime.rootDir}`,
-    `scplus root: ${relative(rootDir, layout.root) || ".contextplus"}`,
-    `Mode: ${mode}`,
-    `Files: ${status.bootstrap?.files ?? 0}`,
-    `Directories: ${status.bootstrap?.directories ?? 0}`,
-    "",
-    "Created or updated:",
-    ...stageDefinitions.bootstrap.outputs.map((path) => `  ${path}`),
-    ...stageDefinitions["file-search"].outputs.map((path) => `  ${path}`),
-    ...stageDefinitions["identifier-search"].outputs.map((path) => `  ${path}`),
-    ...(mode === "full"
-      ? stageDefinitions["full-artifacts"].outputs.map((path) => `  ${path}`)
-      : []),
-    "",
-    "Progress log:",
-    ...progressLog.map((line) => `  ${line}`),
-  ].join("\n");
+    const stageDefinitions = getStageDefinitions();
+    return [
+      `Indexed ${config.projectName}`,
+      `Root: ${runtime.rootDir}`,
+      `scplus root: ${relative(rootDir, layout.root) || ".contextplus"}`,
+      `Mode: ${mode}`,
+      `Files: ${status.bootstrap?.files ?? 0}`,
+      `Directories: ${status.bootstrap?.directories ?? 0}`,
+      "",
+      "Created or updated:",
+      ...stageDefinitions.bootstrap.outputs.map((path) => `  ${path}`),
+      ...stageDefinitions["file-search"].outputs.map((path) => `  ${path}`),
+      ...stageDefinitions["identifier-search"].outputs.map((path) => `  ${path}`),
+      ...(mode === "full"
+        ? stageDefinitions["full-artifacts"].outputs.map((path) => `  ${path}`)
+        : []),
+      "",
+      "Progress log:",
+      ...progressLog.map((line) => `  ${line}`),
+    ].join("\n");
+  } finally {
+    await mutationLock?.release();
+  }
 }

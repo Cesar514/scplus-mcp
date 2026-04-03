@@ -2,6 +2,12 @@
 
 ## Current Goal History
 
+- [x] Prevent MCP and the human CLI from corrupting shared repo state when both run at the same time by enforcing one cross-process watcher owner per repo and one cross-process mutating index/refresh lane per repo, then verify that concurrent MCP-plus-CLI sessions fail loudly instead of racing.
+- [x] fix the remaining confusing CLI operator surfaces by replacing unclear status jargon such as `history` and `generation` with user-facing wording, and make manual `index` bootstrap a full prepared index only when none exists while using incremental refresh on subsequent runs
+- [x] diagnose the CLI with real screenshots and remove the remaining visual defects in the activity slash-command view, including border overflow and irrelevant activity previews while `/` is active
+- [x] keep the full-screen activity shell height visually stable when slash commands appear by moving the inline slash-command list into a fixed-size tray
+- [x] fix the full-screen activity window so it respects terminal height budgets, and redesign the ASCII magician so it renders cleanly inside the bounded pane
+- [x] fix the operator console top-level layout budget so opening `/issue` and supplemental modal windows no longer renders more total lines than the current terminal height
 - [x] run Context+ lint for the repository and capture the active warning set
 - [x] migrate every flagged source file to the structured `summary:` / `FEATURE:` / `inputs:` / `outputs:` header format
 - [x] rerun Context+ lint and native checks until the repository reports zero lint issues for this goal

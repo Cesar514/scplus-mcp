@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"scplus-cli/cli/internal/backend"
-	"scplus-cli/cli/internal/hubs"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"scplus-cli/cli/internal/backend"
+	"scplus-cli/cli/internal/hubs"
 )
 
 const (
@@ -69,21 +69,15 @@ const (
 )
 
 var magicianFrames = []string{
-	`   /\_
- _( o.o)
-  > ^ <
- /|_|_\
-  / \ `,
-	`   /\_
- _( -.-)
-  > ^ <
- /|_|_\
- _/ \_`,
-	`   /\_
- _( o.o)
-  > ^ <
- /|_|_\
- /_ _\`,
+	`  /\
+ (=^.^=)
+ /| |\`,
+	`  /\
+ (= - =)
+ /| |\`,
+	`  /\
+ (=^o^=)
+ /| |\`,
 }
 
 var (
@@ -478,9 +472,9 @@ func paletteCommands() []paletteCommand {
 		{ID: "open-changes", Title: "/changes", Subtitle: "Open changed-file stats and ranges", Action: "open-changes"},
 		{ID: "open-search", Title: "/search", Subtitle: "Open the ranked search results window", Action: "open-search"},
 		{ID: "open-symbol", Title: "/symbol", Subtitle: "Open the exact symbol results window", Action: "open-symbol"},
-		{ID: "index", Title: "/index", Subtitle: "Run a full index refresh", Action: "index"},
-		{ID: "retry-index", Title: "/retry-index", Subtitle: "Re-run the last queued or failed index action", Action: "retry-index"},
-		{ID: "refresh", Title: "/refresh", Subtitle: "Reload backend snapshots", Action: "refresh"},
+		{ID: "index", Title: "/index", Subtitle: "Bootstrap once, then refresh only changed files", Action: "index"},
+		{ID: "retry-index", Title: "/retry-index", Subtitle: "Retry the last prepared-index sync strategy", Action: "retry-index"},
+		{ID: "refresh", Title: "/refresh", Subtitle: "Reload the visible CLI data from backend snapshots", Action: "refresh"},
 		{ID: "cancel-pending", Title: "/cancel-pending", Subtitle: "Drop queued watch work before it starts", Action: "cancel-pending"},
 		{ID: "supersede-pending", Title: "/supersede-pending", Subtitle: "Replace stale queued work with the latest changes", Action: "supersede-pending"},
 		{ID: "watch", Title: "/watch", Subtitle: "Toggle watcher-driven refresh jobs", Action: "watch"},
@@ -740,7 +734,7 @@ func loadChangesCmd(client *backend.Client, root string) tea.Cmd {
 
 func runIndexCmd(client *backend.Client, root string) tea.Cmd {
 	return func() tea.Msg {
-		output, err := client.Index(context.Background(), root, "full")
+		output, err := client.Index(context.Background(), root, "auto")
 		return indexFinishedMsg{output: output, err: err}
 	}
 }
@@ -1035,6 +1029,68 @@ func (m *Model) stackedPaneHeights() (int, int, int, int, int) {
 	return heights[0], heights[1], heights[2], heights[3], heights[4]
 }
 
+func allocateWindowHeights(available int, includeActivity bool, includeOverlay bool) (int, int, int) {
+	if includeOverlay {
+		return 0, 0, max(1, available)
+	}
+	mainHeight := max(1, available)
+	activityHeight := 0
+	overlayHeight := 0
+	if includeActivity {
+		desired := max(8, min(12, available/4))
+		grant := min(desired, max(0, mainHeight-8))
+		activityHeight = grant
+		mainHeight -= grant
+	}
+	if mainHeight < 1 {
+		mainHeight = 1
+	}
+	return mainHeight, activityHeight, overlayHeight
+}
+
+func renderCard(width int, height int, content string) string {
+	rendered := cardStyle.Width(width).Render(content)
+	if height <= 0 {
+		return rendered
+	}
+	lines := strings.Split(rendered, "\n")
+	if len(lines) < height {
+		if len(lines) < 2 {
+			return rendered
+		}
+		blank := blankRenderedCardLine(lines)
+		padded := append([]string{}, lines[:len(lines)-1]...)
+		for len(padded) < height-1 {
+			padded = append(padded, blank)
+		}
+		padded = append(padded, lines[len(lines)-1])
+		return strings.Join(padded, "\n")
+	}
+	if len(lines) == height {
+		return rendered
+	}
+	if height == 1 {
+		return lines[len(lines)-1]
+	}
+	clipped := append([]string{}, lines[:height-1]...)
+	clipped = append(clipped, lines[len(lines)-1])
+	return strings.Join(clipped, "\n")
+}
+
+func blankRenderedCardLine(lines []string) string {
+	if len(lines) < 2 {
+		return ""
+	}
+	template := []rune(lines[1])
+	if len(template) < 2 {
+		return lines[1]
+	}
+	for index := 1; index < len(template)-1; index++ {
+		template[index] = ' '
+	}
+	return string(template)
+}
+
 func filterPaletteCommands(commands []paletteCommand, rawQuery string) []paletteCommand {
 	query := strings.ToLower(strings.TrimSpace(rawQuery))
 	if query == "" {
@@ -1211,8 +1267,8 @@ func (m *Model) refreshSidebar() {
 		watchSubtitle = fmt.Sprintf("Changes detected (%d) | pending %s", m.pendingChangeCount(), m.pendingJobLabel())
 	}
 	indexJob := m.job("index")
-	indexLabel := "Run full index"
-	indexSubtitle := "Start a full engine refresh"
+	indexLabel := "Sync prepared index"
+	indexSubtitle := "Bootstrap once, then refresh only changed files"
 	if isActiveJobState(indexJob.State) {
 		indexLabel = "Index running"
 		indexSubtitle = fmt.Sprintf("Phase %s | queue %d", formatBlankAsNone(indexJob.Phase), indexJob.QueueDepth)
@@ -1255,9 +1311,9 @@ func (m *Model) refreshSidebar() {
 		{ID: viewLint, Title: "Lint", Subtitle: "Native lint diagnostics"},
 		{ID: viewBlast, Title: "Blast radius", Subtitle: "Symbol usage graph and blast radius"},
 		{ID: viewCheckpoint, Title: "Checkpoint", Subtitle: "Checkpoint write results"},
-		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload backend snapshots", IsAction: true, Action: "refresh"},
+		{ID: "refresh", Title: "Refresh data", Subtitle: "Reload the visible CLI data from backend snapshots", IsAction: true, Action: "refresh"},
 		{ID: "index", Title: indexLabel, Subtitle: indexSubtitle, IsAction: true, Action: "index"},
-		{ID: "retry-index", Title: "Retry last index", Subtitle: "Re-run the last index mode through the backend", IsAction: true, Action: "retry-index"},
+		{ID: "retry-index", Title: "Retry last sync", Subtitle: "Re-run the last prepared-index sync strategy", IsAction: true, Action: "retry-index"},
 		{ID: "cancel-pending", Title: cancelLabel, Subtitle: cancelSubtitle, IsAction: true, Action: "cancel-pending"},
 		{ID: "supersede-pending", Title: supersedeLabel, Subtitle: supersedeSubtitle, IsAction: true, Action: "supersede-pending"},
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
@@ -1409,12 +1465,12 @@ func (m *Model) refreshOverviewSection() {
 		},
 		{
 			ID:      "serving",
-			Title:   "Serving generation",
+			Title:   "Prepared index build",
 			Summary: fmt.Sprintf("active %d | pending %s | freshness %s", m.doctor.Serving.ActiveGeneration, formatOptionalInt(m.doctor.Serving.PendingGeneration), m.doctor.Serving.ActiveGenerationFreshness),
 			Detail: strings.Join([]string{
-				fmt.Sprintf("Active generation: %d", m.doctor.Serving.ActiveGeneration),
-				fmt.Sprintf("Pending generation: %s", formatOptionalInt(m.doctor.Serving.PendingGeneration)),
-				fmt.Sprintf("Latest generation: %d", m.doctor.Serving.LatestGeneration),
+				fmt.Sprintf("Active build: %d", m.doctor.Serving.ActiveGeneration),
+				fmt.Sprintf("Pending build: %s", formatOptionalInt(m.doctor.Serving.PendingGeneration)),
+				fmt.Sprintf("Latest build: %d", m.doctor.Serving.LatestGeneration),
 				fmt.Sprintf("Freshness: %s", m.doctor.Serving.ActiveGenerationFreshness),
 				fmt.Sprintf("Validated at: %s", formatBlankAsNone(m.doctor.Serving.ActiveGenerationValidatedAt)),
 				fmt.Sprintf("Blocked reason: %s", formatBlankAsNone(m.doctor.Serving.ActiveGenerationBlockedReason)),
@@ -2828,7 +2884,7 @@ func (m *Model) renderContentPanel(width int, height int) string {
 	}
 	if len(section.Items) == 0 {
 		lines = append(lines, section.EmptyMessage)
-		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+		return renderCard(width, height, strings.Join(lines, "\n"))
 	}
 	if section.Kind == sectionList {
 		windowSize := max(6, bodyHeight)
@@ -2840,10 +2896,10 @@ func (m *Model) renderContentPanel(width int, height int) string {
 		if end < len(section.Items) {
 			lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more items hidden", len(section.Items)-end)))
 		}
-		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+		return renderCard(width, height, strings.Join(lines, "\n"))
 	}
 	lines = append(lines, m.renderSectionTable(section, width-4, bodyHeight))
-	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderSectionList(section *sectionState, width int, height int) string {
@@ -2870,16 +2926,16 @@ func (m Model) renderActivityShell(width int, height int) string {
 	bar := m.commandBar
 	bar.Width = max(24, width-8)
 	query := strings.TrimSpace(bar.Value())
-	magician := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(magicianFrames[m.magicianFrame])
+	if strings.HasPrefix(query, "/") {
+		return m.renderActivityCommandBrowser(width, height, bar)
+	}
+	magician := renderMagician(magicianFrames[m.magicianFrame], width-4)
 	activeJob := m.activeStatusJob()
 	wrapWidth := max(24, int(float64(width)*0.7))
 	lines := []string{
 		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent) + subtitleStyle.Render(" | "+m.magicianRuntimeStatus(activeJob)),
-		"",
 		magician,
-		"",
 		bar.View(),
-		"",
 		subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
 			"Current status: %s | state=%s | phase=%s | pending=%d",
 			activeJob.Title,
@@ -2889,57 +2945,22 @@ func (m Model) renderActivityShell(width int, height int) string {
 		)),
 	}
 	if strings.TrimSpace(activeJob.Message) != "" {
-		lines = append(lines, renderPreviewSection("Current task", activeJob.Message, wrapWidth, subtitleStyle)...)
+		lines = append(lines, renderPreviewSectionWithLimit("Current task", activeJob.Message, wrapWidth, 2, subtitleStyle)...)
 	}
 	if strings.TrimSpace(m.lastError) != "" {
-		lines = append(lines, "")
 		lines = append(lines, renderPreviewSection("Current issue", m.lastError, wrapWidth, errorStyle)...)
 	}
 	if len(m.logs) > 0 {
-		lines = append(lines, "")
 		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], wrapWidth, subtitleStyle)...)
 	}
-	if !strings.HasPrefix(query, "/") {
-		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
-	}
-	commands := m.activityCommandSuggestions()
-	if len(commands) == 0 {
-		if strings.HasPrefix(query, "/") {
-			lines = append(lines, "", "No commands match the current input.")
-		}
-		return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
-	}
-	if m.commandSelect >= len(commands) {
-		m.commandSelect = len(commands) - 1
-	}
-	if m.commandSelect < 0 {
-		m.commandSelect = 0
-	}
-	lines = append(lines, "", subtitleStyle.Render("Commands"))
-	windowBudget := max(2, min(4, (height-len(lines)-4)/2))
-	windowSize := min(len(commands), windowBudget)
-	start, end := visibleRange(len(commands), m.commandSelect, windowSize)
-	if start > 0 {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d earlier commands hidden", start)))
-	}
-	for index := start; index < end; index++ {
-		command := commands[index]
-		prefix := "  "
-		style := contentIdle
-		if index == m.commandSelect {
-			prefix = "> "
-			style = contentSelected
-		}
-		lines = append(lines, style.Render(prefix+command.Title))
-		lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
-	}
-	if end < len(commands) {
-		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("  ... %d more commands hidden", len(commands)-end)))
-	}
-	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m Model) renderActivityPanel(width int) string {
+	return m.renderActivityPanelWithHeight(width, 0)
+}
+
+func (m Model) renderActivityPanelWithHeight(width int, height int) string {
 	activeJob := m.activeStatusJob()
 	lines := []string{
 		renderPaneTitle("Activity", false),
@@ -2964,7 +2985,7 @@ func (m Model) renderActivityPanel(width int) string {
 		lines = append(lines, "")
 		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], max(24, width-6), subtitleStyle)...)
 	}
-	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m Model) renderDetailPanel(width int, height int) string {
@@ -2992,7 +3013,7 @@ func (m Model) renderMainPanel(width int, height int) string {
 
 func (m Model) renderJobsPanel(width int, height int) string {
 	selectedJob := m.selectedJob()
-	tableHeight := max(4, height-9)
+	tableHeight := max(4, height-10)
 	m.jobTable.SetWidth(max(12, width-4))
 	m.jobTable.SetHeight(tableHeight)
 	if m.focus == focusJobs {
@@ -3007,7 +3028,6 @@ func (m Model) renderJobsPanel(width int, height int) string {
 		m.jobTable.View(),
 	}
 	if selectedJob != nil {
-		lines = append(lines, "")
 		lines = append(lines, subtitleStyle.Render(fmt.Sprintf(
 			"%s | phase=%s | percent=%s | queue=%d | file=%s",
 			selectedJob.Title,
@@ -3017,7 +3037,7 @@ func (m Model) renderJobsPanel(width int, height int) string {
 			truncate(formatBlankAsNone(selectedJob.CurrentFile), max(18, width/3)),
 		)))
 		lines = append(lines, truncate(formatBlankAsNone(selectedJob.Message), max(20, width-6)))
-		if strings.TrimSpace(selectedJob.RebuildReason) != "" {
+		if height >= 16 && strings.TrimSpace(selectedJob.RebuildReason) != "" {
 			lines = append(lines, subtitleStyle.Render("reason: "+truncate(selectedJob.RebuildReason, max(20, width-8))))
 		}
 		lines = append(lines, subtitleStyle.Render("controls: i run | t retry | x cancel pending | s supersede pending"))
@@ -3025,7 +3045,7 @@ func (m Model) renderJobsPanel(width int, height int) string {
 	if m.lastError != "" {
 		lines = append(lines, "", errorStyle.Render("Last error: "+m.lastError))
 	}
-	return cardStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m Model) renderLogsPanel(width int, height int) string {
@@ -3055,27 +3075,31 @@ func (m Model) renderStatusLine() string {
 	if !m.backendOnline {
 		backendState = "offline"
 	}
-	generation := "unknown"
-	if m.doctorLoaded {
-		generation = fmt.Sprintf("%d", m.doctor.Serving.ActiveGeneration)
-	}
-	historyState := "0/0"
-	if len(m.history) > 0 {
-		historyState = fmt.Sprintf("%d/%d", m.historyIndex+1, len(m.history))
-	}
-	status := strings.Join([]string{
+	statusParts := []string{
 		"watcher: " + watcherState,
 		"stage: " + stage,
 		"pending: " + fmt.Sprintf("%d", m.pendingChangeCount()),
 		"backend: " + backendState,
 		"repo: " + truncate(m.root, max(24, m.width/3)),
-		"generation: " + generation,
-		"history: " + historyState,
-	}, " | ")
+	}
+	if m.doctorLoaded {
+		statusParts = append(statusParts, "serving build: "+fmt.Sprintf("%d", m.doctor.Serving.ActiveGeneration))
+		if m.doctor.Serving.ActiveGenerationFreshness != "" && m.doctor.Serving.ActiveGenerationFreshness != "fresh" {
+			statusParts = append(statusParts, "freshness: "+m.doctor.Serving.ActiveGenerationFreshness)
+		}
+	}
+	if len(m.history) > 1 {
+		statusParts = append(statusParts, fmt.Sprintf("view trail: %d/%d", m.historyIndex+1, len(m.history)))
+	}
+	status := strings.Join(statusParts, " | ")
 	return statusLineStyle.Width(max(0, m.width-2)).Render(status)
 }
 
 func (m Model) renderOverlayCard(width int) string {
+	return m.renderOverlayCardWithHeight(width, 0)
+}
+
+func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(m.overlay.Title, true),
 		subtitleStyle.Render(m.overlay.Subtitle),
@@ -3108,6 +3132,17 @@ func (m Model) renderOverlayCard(width int) string {
 			break
 		}
 		windowSize := max(6, min(14, len(commands)))
+		compactCommands := false
+		if height > 0 {
+			lineBudget := max(1, height-len(lines)-1)
+			if len(commands)*2 > lineBudget {
+				compactCommands = true
+				windowSize = max(1, min(len(commands), lineBudget))
+			} else {
+				windowBudget := max(1, lineBudget/2)
+				windowSize = max(1, min(windowSize, windowBudget))
+			}
+		}
 		start, end := visibleRange(len(commands), m.overlay.Selected, windowSize)
 		for index := start; index < end; index++ {
 			command := commands[index]
@@ -3118,7 +3153,9 @@ func (m Model) renderOverlayCard(width int) string {
 				style = contentSelected
 			}
 			lines = append(lines, style.Render(prefix+command.Title))
-			lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
+			if !compactCommands {
+				lines = append(lines, subtitleStyle.Render("  "+command.Subtitle))
+			}
 		}
 	case overlayFilter:
 		lines = append(lines, m.overlay.Input.View())
@@ -3131,22 +3168,11 @@ func (m Model) renderOverlayCard(width int) string {
 	if strings.TrimSpace(m.overlay.Message) != "" {
 		lines = append(lines, "", m.overlay.Message)
 	}
-	return cardStyle.Width(width).Render(strings.Join(lines, "\n"))
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func (m Model) View() string {
 	header := m.renderHeader()
-	mainHeight := max(12, m.height-12)
-	if m.useStackedLayout() {
-		mainHeight = max(8, m.height-12)
-	}
-	body := m.renderMainPanel(max(36, m.width-4), mainHeight)
-	if m.activeView != viewActivity && (strings.TrimSpace(m.lastError) != "" || len(m.logs) > 0 || isActiveJobState(m.activeStatusJob().State)) {
-		body = lipgloss.JoinVertical(lipgloss.Left, body, m.renderActivityPanel(max(36, m.width-4)))
-	}
-	if m.overlay.Mode != overlayNone {
-		body = lipgloss.JoinVertical(lipgloss.Left, body, "", m.renderOverlayCard(max(48, m.width-4)))
-	}
 	status := m.renderStatusLine()
 	footer := footerStyle.Render("Type /command | Enter run/detail | / commands | Ctrl+F search | Esc back | Ctrl+C quit")
 	if m.wizard.active {
@@ -3164,10 +3190,35 @@ func (m Model) View() string {
 	} else if m.activeView == viewRestore && m.focus == focusContent {
 		footer = footerStyle.Render("Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | /restore-point | /export | Ctrl+C quit")
 	}
-	parts := []string{body, "", status, footer}
-	if strings.TrimSpace(header) != "" {
-		parts = append([]string{header, ""}, parts...)
+	showActivity := m.activeView != viewActivity &&
+		m.activeView != viewIssue &&
+		m.activeView != viewLog &&
+		(strings.TrimSpace(m.lastError) != "" || len(m.logs) > 0 || isActiveJobState(m.activeStatusJob().State))
+	showOverlay := m.overlay.Mode != overlayNone
+	if showOverlay {
+		showActivity = false
 	}
+	bodyWidth := max(36, m.width-4)
+	availableHeight := max(1, m.height-lipgloss.Height(status)-lipgloss.Height(footer))
+	if strings.TrimSpace(header) != "" {
+		availableHeight -= lipgloss.Height(header)
+	}
+	availableHeight = max(1, availableHeight)
+	mainHeight, activityHeight, overlayHeight := allocateWindowHeights(availableHeight, showActivity, showOverlay)
+	parts := make([]string, 0, 5)
+	if strings.TrimSpace(header) != "" {
+		parts = append(parts, header)
+	}
+	if mainHeight > 0 {
+		parts = append(parts, m.renderMainPanel(bodyWidth, mainHeight))
+	}
+	if showActivity && activityHeight > 0 {
+		parts = append(parts, m.renderActivityPanelWithHeight(bodyWidth, activityHeight))
+	}
+	if showOverlay && overlayHeight > 0 {
+		parts = append(parts, m.renderOverlayCardWithHeight(max(48, m.width-4), overlayHeight))
+	}
+	parts = append(parts, status, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
@@ -3954,7 +4005,11 @@ func truncate(value string, limit int) string {
 }
 
 func renderPreviewSection(title string, value string, width int, style lipgloss.Style) []string {
-	lines := previewLines(value, width, 3)
+	return renderPreviewSectionWithLimit(title, value, width, 3, style)
+}
+
+func renderPreviewSectionWithLimit(title string, value string, width int, maxLines int, style lipgloss.Style) []string {
+	lines := previewLines(value, width, maxLines)
 	if len(lines) == 0 {
 		return nil
 	}
@@ -3963,6 +4018,62 @@ func renderPreviewSection(title string, value string, width int, style lipgloss.
 		rendered = append(rendered, style.Width(width).Render(line))
 	}
 	return rendered
+}
+
+func renderMagician(frame string, width int) string {
+	return lipgloss.NewStyle().
+		Width(max(12, width)).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("212")).
+		Render(frame)
+}
+
+func (m Model) renderActivityCommandBrowser(width int, height int, bar textinput.Model) string {
+	lines := []string{
+		renderPaneTitle("Commands | scplus-cli", m.focus == focusContent),
+		subtitleStyle.Render("Search slash commands and press Enter to run"),
+		bar.View(),
+	}
+	commands := m.activityCommandSuggestions()
+	if len(commands) == 0 {
+		lines = append(lines, "", errorStyle.Render("No commands match the current input."))
+		return renderCard(width, height, strings.Join(lines, "\n"))
+	}
+	if m.commandSelect >= len(commands) {
+		m.commandSelect = len(commands) - 1
+	}
+	if m.commandSelect < 0 {
+		m.commandSelect = 0
+	}
+	commandRows := max(6, height-8)
+	start, end := visibleRange(len(commands), m.commandSelect, commandRows)
+	if start > 0 {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d earlier commands hidden", start)))
+	}
+	commandWidth := max(24, width-8)
+	commandTitleWidth := max(12, min(22, commandWidth/4))
+	commandSubtitleWidth := max(12, commandWidth-commandTitleWidth-4)
+	for index := start; index < end; index++ {
+		command := commands[index]
+		prefix := "  "
+		style := contentIdle
+		if index == m.commandSelect {
+			prefix = "> "
+			style = contentSelected
+		}
+		line := fmt.Sprintf(
+			"%s%-*s %s",
+			prefix,
+			commandTitleWidth,
+			truncate(command.Title, commandTitleWidth),
+			truncate(command.Subtitle, commandSubtitleWidth),
+		)
+		lines = append(lines, style.Width(commandWidth).Render(line))
+	}
+	if end < len(commands) {
+		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d more commands hidden", len(commands)-end)))
+	}
+	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
 func previewLines(value string, width int, maxLines int) []string {
