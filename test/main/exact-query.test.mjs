@@ -60,6 +60,25 @@ async function createFixtureRepo(rootDir) {
 }
 
 describe("exact-query", () => {
+  it("formats path candidates correctly", async () => {
+    const { formatPathCandidates } = await import("../../build/tools/exact-query.js");
+
+    assert.equal(
+      formatPathCandidates("test", []),
+      'Exact file path matches for "test" (0)\nNo exact file path matches.'
+    );
+
+    assert.equal(
+      formatPathCandidates("test", ["src/test.ts"]),
+      'Exact file path matches for "test" (1)\n- src/test.ts'
+    );
+
+    assert.equal(
+      formatPathCandidates("test", ["src/test.ts", "test/index.ts"]),
+      'Exact file path matches for "test" (2)\n- src/test.ts\n- test/index.ts'
+    );
+  });
+
   it("builds fast exact-query caches for symbols, words, outlines, dependencies, and git changes", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
     const {
