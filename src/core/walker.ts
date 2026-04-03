@@ -57,10 +57,13 @@ async function walkRecursive(
   depth: number,
   maxDepth: number,
   results: FileEntry[],
+  concurrencyLimit: <T>(fn: () => Promise<T>) => Promise<T>
 ): Promise<void> {
   if (maxDepth > 0 && depth > maxDepth) return;
 
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await concurrencyLimit(() => readdir(dir, { withFileTypes: true }).catch(() => []));
+  const subdirs: Promise<void>[] = [];
+
   for (const entry of entries) {
     if (ALWAYS_IGNORE.has(entry.name) || entry.name.startsWith(".")) continue;
 
@@ -71,8 +74,36 @@ async function walkRecursive(
     const isDir = entry.isDirectory();
     results.push({ path: fullPath, relativePath: relPath, isDirectory: isDir, depth });
 
-    if (isDir) await walkRecursive(fullPath, rootDir, ig, depth + 1, maxDepth, results);
+    if (isDir) {
+      subdirs.push(walkRecursive(fullPath, rootDir, ig, depth + 1, maxDepth, results, concurrencyLimit));
+    }
   }
+
+  await Promise.all(subdirs);
+}
+
+function pLimit(concurrency: number) {
+  const queue: (() => void)[] = [];
+  let activeCount = 0;
+
+  const next = () => {
+    activeCount--;
+    if (queue.length > 0) {
+      queue.shift()!();
+    }
+  };
+
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (activeCount >= concurrency) {
+      await new Promise<void>((resolve) => queue.push(resolve));
+    }
+    activeCount++;
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
 }
 
 export async function walkDirectory(options: WalkOptions): Promise<FileEntry[]> {
@@ -87,7 +118,8 @@ export async function walkDirectory(options: WalkOptions): Promise<FileEntry[]> 
     return results;
   }
 
-  await walkRecursive(startDir, rootDir, ig, 0, options.depthLimit ?? 0, results);
+  const limit = pLimit(10);
+  await walkRecursive(startDir, rootDir, ig, 0, options.depthLimit ?? 0, results, limit);
   return results;
 }
 
