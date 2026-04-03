@@ -31,17 +31,19 @@ export async function createRestorePoint(rootDir: string, files: string[], messa
   await ensureScplusLayout(rootDir);
   const id = `rp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  for (const file of files) {
-    const fullPath = join(rootDir, file);
-    try {
-      const content = await readFile(fullPath, "utf-8");
-      await saveRestorePointBackup(rootDir, id, file, content);
-    } catch (error) {
-      const readError = error as NodeJS.ErrnoException;
-      if (readError?.code === "ENOENT") continue;
-      throw error;
-    }
-  }
+  await Promise.all(
+    files.map(async (file) => {
+      const fullPath = join(rootDir, file);
+      try {
+        const content = await readFile(fullPath, "utf-8");
+        await saveRestorePointBackup(rootDir, id, file, content);
+      } catch (error) {
+        const readError = error as NodeJS.ErrnoException;
+        if (readError?.code === "ENOENT") return;
+        throw error;
+      }
+    }),
+  );
 
   const point: RestorePoint = { id, timestamp: Date.now(), files, message };
   const manifest = await loadManifest(rootDir);
