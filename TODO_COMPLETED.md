@@ -456,3 +456,8 @@
 - [x] Render `The magician is resting` when no active model-backed work is running.
 - [x] Render `The magician is using '<model>' for <activity>` when a model is running for the current active job.
 - [x] Verify the title-line status directly with focused Go UI tests and a rebuilt CLI snapshot render.
+
+## ascii block centering completed
+
+- [x] Fix the operator-console ASCII mascot centering by treating the magician as one fixed-width multiline block inside the activity-shell container instead of centering each line independently.
+- [x] Add a regression that proves the centered magician keeps one consistent container offset across all rendered frame rows.

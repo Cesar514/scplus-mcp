@@ -269,6 +269,32 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	}
 }
 
+func TestCenterBlockKeepsConsistentContainerOffsetAcrossAsciiRows(t *testing.T) {
+	centered := centerBlock(magicianFrames[0], 40)
+	renderedLines := strings.Split(centered, "\n")
+	frameLines := strings.Split(magicianFrames[0], "\n")
+	if len(renderedLines) != len(frameLines) {
+		t.Fatalf("expected %d rendered lines, got %d", len(frameLines), len(renderedLines))
+	}
+	blockOffset := -1
+	for index, frameLine := range frameLines {
+		if strings.TrimSpace(frameLine) == "" {
+			continue
+		}
+		offset := countLeadingSpaces(renderedLines[index]) - countLeadingSpaces(frameLine)
+		if blockOffset == -1 {
+			blockOffset = offset
+			continue
+		}
+		if offset != blockOffset {
+			t.Fatalf("expected consistent block offset, got %d on line %d after %d", offset, index, blockOffset)
+		}
+	}
+	if blockOffset <= 0 {
+		t.Fatalf("expected positive centering offset in wide container, got %d", blockOffset)
+	}
+}
+
 func TestManualIndexSelectionDoesNotLeaveOptimisticQueuedState(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.sidebarIndex = model.findSidebarAction("index")

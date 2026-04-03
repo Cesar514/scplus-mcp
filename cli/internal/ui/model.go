@@ -4134,12 +4134,29 @@ func renderPreviewSectionWithLimit(title string, value string, width int, maxLin
 	return rendered
 }
 
+func centerBlock(content string, width int) string {
+	containerWidth := max(1, width)
+	lines := strings.Split(content, "\n")
+	blockWidth := 0
+	for _, line := range lines {
+		blockWidth = max(blockWidth, lipgloss.Width(line))
+	}
+	leftPad := 0
+	if containerWidth > blockWidth {
+		leftPad = (containerWidth - blockWidth) / 2
+	}
+	prefix := strings.Repeat(" ", leftPad)
+	centered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		centered = append(centered, prefix+line)
+	}
+	return strings.Join(centered, "\n")
+}
+
 func renderMagician(frame string, width int) string {
 	return lipgloss.NewStyle().
-		Width(max(12, width)).
-		Align(lipgloss.Center).
 		Foreground(lipgloss.Color("212")).
-		Render(frame)
+		Render(centerBlock(frame, max(12, width)))
 }
 
 func (m Model) renderActivityCommandRows(width int, height int) []string {
