@@ -155,8 +155,6 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"SCPLUS-CLI",
-		"/_____\\",
-		"/|_|\\--*",
 		"Type command",
 		"watcher: on",
 		"stage: identifier-search",
@@ -181,11 +179,11 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 			t.Fatalf("expected %q to be absent from activity shell: %s", needle, rendered)
 		}
 	}
-	if !strings.Contains(rendered, "/|_|\\--*") {
-		t.Fatalf("expected visible magician in the activity shell: %s", rendered)
-	}
 	if strings.Contains(rendered, "history: 1/1") {
 		t.Fatalf("expected single-entry navigation jargon to stay hidden from the status line: %s", rendered)
+	}
+	if strings.Contains(rendered, "/|_|\\--*") {
+		t.Fatalf("expected legacy line-art magician to be absent: %s", rendered)
 	}
 }
 
@@ -269,10 +267,25 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	}
 }
 
+func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
+	rendered := renderMagicianASCII(magicianFrames[0])
+	for _, needle := range []string{"@@", "%%", "oo", "**", "[]"} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("expected %q in plain magician sprite: %s", needle, rendered)
+		}
+	}
+	for _, needle := range []string{".", "K", "W", "R", "S", "H", "E", "G"} {
+		if strings.Contains(rendered, needle) {
+			t.Fatalf("expected palette tokens to stay internal, found %q in %s", needle, rendered)
+		}
+	}
+}
+
 func TestCenterBlockKeepsConsistentContainerOffsetAcrossAsciiRows(t *testing.T) {
-	centered := centerBlock(magicianFrames[0], 40)
+	plain := renderMagicianASCII(magicianFrames[0])
+	centered := centerBlock(plain, 60)
 	renderedLines := strings.Split(centered, "\n")
-	frameLines := strings.Split(magicianFrames[0], "\n")
+	frameLines := strings.Split(plain, "\n")
 	if len(renderedLines) != len(frameLines) {
 		t.Fatalf("expected %d rendered lines, got %d", len(frameLines), len(renderedLines))
 	}

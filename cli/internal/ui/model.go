@@ -68,33 +68,6 @@ const (
 	stackedHeightCut = 30
 )
 
-var magicianFrames = []string{
-	`       /^\
-      /___\
-     /_____\
-       | |
-      (o o)
-      /|_|\--*
-       / \
-      /___\`,
-	`       /^\
-      /___\
-     /_____\
-       | |
-      (o -)
-      /|_|\--*
-       / \
-      /___\`,
-	`       /^\
-      /___\
-     /_____\
-       | |
-      (o o)
-      /|~|\--*
-       / \
-      /___\`,
-}
-
 var (
 	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	subtitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("111"))
@@ -4151,12 +4124,6 @@ func centerBlock(content string, width int) string {
 		centered = append(centered, prefix+line)
 	}
 	return strings.Join(centered, "\n")
-}
-
-func renderMagician(frame string, width int) string {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("212")).
-		Render(centerBlock(frame, max(12, width)))
 }
 
 func (m Model) renderActivityCommandRows(width int, height int) []string {

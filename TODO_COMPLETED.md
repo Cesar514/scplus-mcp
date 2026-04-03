@@ -461,3 +461,9 @@
 
 - [x] Fix the operator-console ASCII mascot centering by treating the magician as one fixed-width multiline block inside the activity-shell container instead of centering each line independently.
 - [x] Add a regression that proves the centered magician keeps one consistent container offset across all rendered frame rows.
+
+## girl magician sprite completed
+
+- [x] Replace the old line-art magician with an in-place animated ASCII sprite based on the three provided girl-magician reference poses.
+- [x] Keep the reference-image background transparent by encoding the mascot as palette-indexed frame masks and rendering only the character pixels into terminal ASCII.
+- [x] Update UI regression coverage so the new sprite renderer, transparent palette conversion, and centered activity-shell placement stay verified.
