@@ -3,7 +3,6 @@
 // inputs: Artifact version rules, generation metadata, and pipeline stage requirements.
 // outputs: Typed indexing contracts used across persistence, validation, and repair flows.
 
-import { join } from "path";
 import {
   SCPLUS_INDEX_DB_FILE,
 } from "../core/project-layout.js";
