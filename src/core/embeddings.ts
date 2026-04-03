@@ -266,6 +266,30 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function createConcurrencyLimit(concurrency: number) {
+  let activeCount = 0;
+  const queue: (() => void)[] = [];
+
+  const next = () => {
+    activeCount--;
+    if (queue.length > 0) {
+      queue.shift()!();
+    }
+  };
+
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (activeCount >= concurrency) {
+      await new Promise<void>((resolve) => queue.push(resolve));
+    }
+    activeCount++;
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
+}
+
 function isContextLengthError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return message.includes("input length exceeds context length")
@@ -907,16 +931,21 @@ export class SearchIndex {
           }
         } catch (error) {
           if (!isContextLengthError(error)) throw error;
-          for (const item of batch) {
-            try {
-              const [vector] = await fetchEmbedding(item.text);
-              this.vectors[item.idx] = vector;
-              cache[docs[item.idx].path] = { hash: item.hash, vector };
-            } catch (itemError) {
-              if (!isContextLengthError(itemError)) throw itemError;
-              delete cache[docs[item.idx].path];
-            }
-          }
+          const limit = createConcurrencyLimit(3);
+          await Promise.all(
+            batch.map((item) =>
+              limit(async () => {
+                try {
+                  const [vector] = await fetchEmbedding(item.text);
+                  this.vectors[item.idx] = vector;
+                  cache[docs[item.idx].path] = { hash: item.hash, vector };
+                } catch (itemError) {
+                  if (!isContextLengthError(itemError)) throw itemError;
+                  delete cache[docs[item.idx].path];
+                }
+              })
+            )
+          );
         }
       }
     }
