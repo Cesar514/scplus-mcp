@@ -644,9 +644,9 @@ export async function pruneRestorePointBackups(
 }
 
 export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
-  for (const path of paths) {
-    await rm(path, { recursive: true, force: true });
-  }
+  await Promise.all(
+    paths.map((path) => rm(path, { recursive: true, force: true })),
+  );
 }
 
 export async function inspectIndexDatabase(rootDir: string, options?: IndexArtifactOptions): Promise<IndexDatabaseInspection> {
