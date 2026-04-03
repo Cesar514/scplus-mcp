@@ -401,10 +401,12 @@ export async function refreshStructureIndexState(
   let processedFiles = 0;
   let changedFiles = 0;
 
-  for (const file of files) {
-    const relativePath = normalizeRelativePath(file.relativePath);
-    contentHashes[relativePath] = await computeFileContentHash(file.path);
-  }
+  await Promise.all(
+    files.map(async (file) => {
+      const relativePath = normalizeRelativePath(file.relativePath);
+      contentHashes[relativePath] = await computeFileContentHash(file.path);
+    }),
+  );
 
   for (const file of files) {
     const relativePath = normalizeRelativePath(file.relativePath);
