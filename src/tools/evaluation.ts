@@ -245,11 +245,11 @@ function buildFile(prefix: string, description: string, feature: string, body: s
 }
 
 async function writeRepoFiles(rootDir: string, files: Record<string, string>): Promise<void> {
-  for (const [relativePath, content] of Object.entries(files)) {
+  await Promise.all(Object.entries(files).map(async ([relativePath, content]) => {
     const targetPath = join(rootDir, relativePath);
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, content);
-  }
+  }));
 }
 
 async function writeSmallSmokeRepo(rootDir: string): Promise<void> {
