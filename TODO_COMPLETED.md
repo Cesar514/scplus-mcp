@@ -13,6 +13,9 @@
 - [x] migrate the public executable, package, init-template, docs, landing, Codex config, and external skill naming to `scplus-mcp` and `scplus-cli` while preserving the stable `.contextplus/` state contract
 - [x] verify the CLI and naming migration with `npm run build`, `npm test`, focused Go CLI package tests, Context+ lint, and stale-name grep checks
 - [x] commit the verified scplus CLI and MCP migration
+- [x] identify the lingering global `contextplus` and `contextplusplus` npm aliases that still exposed legacy commands after the scplus migration
+- [x] remove the old global aliases and broken legacy bin symlinks so only `scplus-mcp` and `scplus-cli` remain on the live PATH
+- [x] verify the old commands no longer resolve, confirm the remaining Codex skill/config surfaces no longer advertise the old names, and sync the package lockfile with the renamed package metadata
 
 ## v1.5
 
