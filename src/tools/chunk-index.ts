@@ -1,5 +1,7 @@
-// Chunk-level AST indexing for durable sqlite-backed retrieval artifacts
-// FEATURE: First-class chunk index contract for full-engine code retrieval
+// summary: Builds chunk-level indexing artifacts for durable sqlite-backed retrieval.
+// FEATURE: First-class chunk index contract for full-engine code retrieval.
+// inputs: Parsed files, symbol ranges, and full-index artifact write requests.
+// outputs: Chunk records, chunk embeddings metadata, and retrieval-ready chunk artifacts.
 
 import { readFile } from "fs/promises";
 import { resolve } from "path";

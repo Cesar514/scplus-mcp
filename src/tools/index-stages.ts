@@ -1,5 +1,7 @@
-// Durable stage runners for the Context+ indexing pipeline
-// FEATURE: Rerunnable sqlite-only indexing stages with legacy artifact cleanup
+// summary: Runs the durable stage graph for the sqlite-backed Context+ indexing pipeline.
+// FEATURE: Rerunnable sqlite-only indexing stages with legacy artifact cleanup.
+// inputs: Stage execution context, repo data, and generation-scoped artifact dependencies.
+// outputs: Completed stage records, persisted artifacts, and stage progress updates.
 
 import { readFile, readdir } from "fs/promises";
 import { basename, join, resolve } from "path";

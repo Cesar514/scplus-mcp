@@ -1,5 +1,7 @@
-// Shared runtime observability snapshots for backend scheduler state reporting
-// FEATURE: In-process metrics cache for doctor, logs, and operator status surfaces
+// summary: Captures shared runtime observability snapshots for backend scheduler reporting.
+// FEATURE: In-process metrics cache for doctor, logs, and operator status surfaces.
+// inputs: Scheduler events, job timing data, and backend runtime measurements.
+// outputs: Cached observability snapshots for doctor, logs, and operator status surfaces.
 
 import { resolve } from "path";
 

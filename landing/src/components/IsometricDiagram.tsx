@@ -1,5 +1,7 @@
-// Isometric diagram cycles through current context++ tools on landing surfaces
-// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
+// summary: Renders the animated isometric diagram that cycles through current Context+ tools.
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
+// inputs: Tool presentation data, animation timing, and landing layout constraints.
+// outputs: Interactive isometric diagram markup for landing surfaces.
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";

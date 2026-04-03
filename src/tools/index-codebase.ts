@@ -1,5 +1,7 @@
-// Project indexing pipeline that materializes durable Context+ repo state
-// FEATURE: Codebase indexing entrypoint for .contextplus project initialization
+// summary: Orchestrates the codebase indexing pipeline that materializes durable Context+ state.
+// FEATURE: Codebase indexing entrypoint for .contextplus project initialization.
+// inputs: Repository roots, indexing mode selection, and stage execution dependencies.
+// outputs: Fresh generations of durable Context+ index artifacts and status metadata.
 
 import { relative } from "path";
 import { activateIndexGeneration, clearPendingIndexGeneration, reservePendingIndexGeneration, runWithIndexGenerationContext } from "../core/index-database.js";

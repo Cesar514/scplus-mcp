@@ -1,5 +1,7 @@
-// Detailed function signature extractor without reading full file bodies
-// FEATURE: Signature-first structural inspection without loading whole files
+// summary: Extracts detailed function signatures and type surfaces without full file reads.
+// FEATURE: Signature-first structural inspection without loading whole files.
+// inputs: Target file paths, parsed symbols, and supported language inspection rules.
+// outputs: Signature-first skeleton views with line ranges and type information.
 
 import { analyzeFile, isSupportedFile, type FileAnalysis } from "../core/parser.js";
 import { readFile } from "fs/promises";

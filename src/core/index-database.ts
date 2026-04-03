@@ -1,5 +1,7 @@
-// SQLite-backed durable storage for all authoritative Context+ machine state
-// FEATURE: Full-engine sqlite-only state substrate, artifacts, vector collections, and backups
+// summary: Owns the sqlite-backed durable storage layer for authoritative Context+ machine state.
+// FEATURE: Full-engine sqlite-only state substrate, artifacts, vector collections, and backups.
+// inputs: Artifact records, vector entries, generation metadata, and transactional write requests.
+// outputs: Persisted sqlite state, durable query reads, and backup or maintenance operations.
 
 import { DatabaseSync } from "node:sqlite";
 import { AsyncLocalStorage } from "node:async_hooks";

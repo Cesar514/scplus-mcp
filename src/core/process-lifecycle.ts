@@ -1,5 +1,7 @@
-// Process lifecycle helpers for resilient MCP stdio shutdown behavior handling
-// FEATURE: Runtime process lifecycle and broken-pipe detection utilities
+// summary: Provides helpers for process shutdown, idle monitoring, and broken-pipe handling.
+// FEATURE: Runtime process lifecycle and broken-pipe detection utilities.
+// inputs: Process signals, stdio lifecycle events, and idle timeout configuration.
+// outputs: Lifecycle guards, idle monitor behavior, and shutdown control signals.
 
 interface ErrorWithCode {
   code?: string;

@@ -1,5 +1,7 @@
-// Theme toggle control for the Context+ landing header.
+// summary: Renders the landing header control that toggles the shared theme state.
 // FEATURE: Landing theme switching through the shared theme provider.
+// inputs: Theme provider state, current theme value, and user click events.
+// outputs: Interactive theme toggle UI that updates landing color mode.
 "use client";
 
 import { useTheme } from "./ThemeProvider";

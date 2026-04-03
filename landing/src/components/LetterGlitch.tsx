@@ -1,5 +1,7 @@
-// Canvas-based glitch effect used by the landing page background.
+// summary: Draws the canvas-based glitch animation used in the landing background.
 // FEATURE: Landing motion graphics for the atmospheric hero backdrop.
+// inputs: Canvas dimensions, animation timing, and glitch effect parameters.
+// outputs: Client-side canvas rendering for the landing background animation.
 "use client";
 
 import { useRef, useEffect } from "react";

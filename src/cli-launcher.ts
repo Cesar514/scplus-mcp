@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Launcher shim that executes the built human CLI binary reliably
-// FEATURE: Global npm-linked entrypoint for the Bubble Tea terminal app
+// summary: Executes the built human CLI binary from the npm-linked launcher entrypoint.
+// FEATURE: Global npm-linked entrypoint for the Bubble Tea terminal app.
+// inputs: Process arguments, packaged binary locations, and launcher environment state.
+// outputs: Spawned human CLI process execution and propagated exit status.
 
 import { access } from "node:fs/promises";
 import { spawn } from "node:child_process";

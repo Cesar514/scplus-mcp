@@ -1,5 +1,7 @@
-// Shadow git branch manager for safe AI change tracking
-// FEATURE: Restore point persistence for reversible AI-authored file changes
+// summary: Manages shadow restore points for reversible AI-authored repository changes.
+// FEATURE: Restore point persistence for reversible AI-authored file changes.
+// inputs: Repository paths, changed files, and restore-point lifecycle requests.
+// outputs: Persisted restore metadata and reversible restore operations.
 
 import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";

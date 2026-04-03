@@ -1,5 +1,7 @@
-// Unified research surface over persisted candidate and explanation artifacts.
+// summary: Produces the unified research surface over persisted candidates and explanations.
 // FEATURE: Explanation-backed repository research from the layered query engine.
+// inputs: Broad repository questions, ranked artifacts, cluster context, and hub evidence.
+// outputs: Aggregated research summaries with supporting repository context.
 
 import { assertValidPreparedIndex } from "./index-reliability.js";
 import {

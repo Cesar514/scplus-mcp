@@ -1,5 +1,7 @@
-// Structural tree generator with file headers, symbols, and depth control
-// FEATURE: Token-aware structural tree rendering for rapid repo navigation
+// summary: Renders the token-aware structural repository tree with headers and symbols.
+// FEATURE: Token-aware structural tree rendering for rapid repo navigation.
+// inputs: Repository files, file headers, symbol metadata, and tree depth limits.
+// outputs: Structured tree renderings for rapid repository navigation.
 
 import { walkDirectory, type FileEntry } from "../core/walker.js";
 import { analyzeFile, formatSymbol, isSupportedFile } from "../core/parser.js";

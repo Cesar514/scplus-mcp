@@ -1,5 +1,7 @@
-// Persisted hybrid retrieval indexes for chunk and identifier artifacts
-// FEATURE: SQLite-backed lexical plus dense retrieval state for full-engine search
+// summary: Builds hybrid lexical and dense retrieval indexes for chunk and identifier artifacts.
+// FEATURE: SQLite-backed lexical plus dense retrieval state for full-engine search.
+// inputs: Chunk artifacts, identifier artifacts, lexical terms, and embedding metadata.
+// outputs: Persisted hybrid retrieval state for full-engine search ranking.
 
 import {
   fetchEmbedding,

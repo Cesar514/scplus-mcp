@@ -1,5 +1,7 @@
-// Full-index artifact builder for chunk and structural repo intelligence
-// FEATURE: Persisted full indexing mode state under .contextplus/derived
+// summary: Builds the full-index artifact layers for chunk and structural repository intelligence.
+// FEATURE: Persisted full indexing mode state under .contextplus/derived.
+// inputs: Core index state, parsed repository data, and full-index stage dependencies.
+// outputs: Persisted chunk, retrieval, structure, cluster, and hub-suggestion artifacts.
 
 import { readFile } from "fs/promises";
 import { dirname, extname, resolve } from "path";

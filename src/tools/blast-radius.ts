@@ -1,5 +1,7 @@
-// Dependency graph analyzer to trace symbol usage across the codebase
-// FEATURE: Symbol usage tracing across indexed and on-disk repository files
+// summary: Traces direct and reverse symbol usage across indexed and on-disk repository files.
+// FEATURE: Symbol usage tracing across indexed and on-disk repository files.
+// inputs: Target symbol names, repository files, and prepared index dependency data.
+// outputs: Usage locations, dependency traces, and blast-radius summaries for a symbol.
 
 import { walkDirectory } from "../core/walker.js";
 import { isSupportedFile } from "../core/parser.js";

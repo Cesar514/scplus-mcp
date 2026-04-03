@@ -1,5 +1,7 @@
-// Fsnotify-backed local watcher service for batched filesystem updates.
+// summary: Batches fsnotify filesystem events into debounced watch updates for the Go CLI.
 // FEATURE: Debounced watcher batches with idempotent repeated shutdown.
+// inputs: Fsnotify events, watched paths, debounce timing, and shutdown signals.
+// outputs: Collapsed file-change batches, watcher lifecycle state, and close semantics.
 
 package watcher
 

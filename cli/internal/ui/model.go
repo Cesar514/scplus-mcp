@@ -1,5 +1,7 @@
-// Human CLI operator console state and rendering.
+// summary: Holds the Bubble Tea model, state transitions, and rendering for the operator console.
 // FEATURE: keeps pane layout, typed section state, and backend-driven actions.
+// inputs: Backend events, keyboard and mouse messages, and typed section data.
+// outputs: Updated UI state, rendered panes, and follow-up Bubble Tea commands.
 package ui
 
 import (

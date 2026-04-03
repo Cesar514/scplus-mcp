@@ -1,5 +1,7 @@
-// Transport-neutral backend core for persistent CLI and MCP index sessions
-// FEATURE: Long-lived backend state with watcher ownership, job streaming, and bridge command execution
+// summary: Implements the shared long-lived backend core used by MCP and the human CLI.
+// FEATURE: Long-lived backend state with watcher ownership, job streaming, and bridge command execution.
+// inputs: Bridge commands, repository events, backend configuration, and index job requests.
+// outputs: Shared backend state transitions, streamed events, and tool execution results.
 
 import { readdir, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";

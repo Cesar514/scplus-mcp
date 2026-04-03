@@ -1,5 +1,7 @@
-// Multi-language symbol extraction with strict tree-sitter parsing only
-// FEATURE: Explicit no-fallback source analysis over supported tree-sitter grammars
+// summary: Extracts symbols from supported source files using strict tree-sitter parsing.
+// FEATURE: Explicit no-fallback source analysis over supported tree-sitter grammars.
+// inputs: Source file contents, language detection, and pooled parser runtime access.
+// outputs: Structured symbols, ranges, and explicit parse failures for unsupported inputs.
 
 import { readFile } from "fs/promises";
 import { extname } from "path";

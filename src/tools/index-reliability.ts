@@ -1,5 +1,7 @@
-// Prepared-index validation and repair over durable sqlite-backed artifacts
-// FEATURE: Crash-only reliability checks and repair flows for prepared indexes
+// summary: Validates and repairs prepared index generations over durable sqlite-backed artifacts.
+// FEATURE: Crash-only reliability checks and repair flows for prepared indexes.
+// inputs: Active generations, artifact manifests, validation requests, and repair targets.
+// outputs: Validation reports, repair outcomes, and generation health metadata.
 
 import { INDEX_DATABASE_SCHEMA_VERSION, inspectIndexDatabase, loadIndexArtifact, loadIndexServingState, type IndexArtifactKey } from "../core/index-database.js";
 import { indexCodebase } from "./index-codebase.js";

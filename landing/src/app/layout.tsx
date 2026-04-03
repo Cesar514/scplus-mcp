@@ -1,5 +1,7 @@
-// Root layout for the Context+ landing application shell.
+// summary: Composes the root HTML shell, fonts, and providers for the landing app.
 // FEATURE: Landing app frame, fonts, and global theme providers.
+// inputs: Child React nodes, font definitions, and shared theme providers.
+// outputs: Root landing layout markup and provider-wrapped application state.
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";

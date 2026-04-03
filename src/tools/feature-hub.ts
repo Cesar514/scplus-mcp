@@ -1,5 +1,7 @@
-// Bundled skeleton view of all files linked from a hub map-of-content
-// FEATURE: Hierarchical context management via feature hub graph
+// summary: Expands feature hubs into bundled skeleton views for linked repository files.
+// FEATURE: Hierarchical context management via feature hub graph.
+// inputs: Hub markdown files, wikilink targets, and file skeleton extraction requests.
+// outputs: Hub summaries, linked-file skeleton bundles, and navigation metadata.
 
 import { resolve, extname } from "path";
 import { readFile, stat } from "fs/promises";

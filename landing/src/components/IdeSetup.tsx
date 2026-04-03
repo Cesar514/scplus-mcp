@@ -1,5 +1,7 @@
-// IDE setup instructions for connecting Context+ from the landing page.
+// summary: Shows editor setup guidance for connecting Context+ from the landing page.
 // FEATURE: Landing integration guidance for supported editor MCP configs.
+// inputs: Supported editor configuration snippets and setup copy.
+// outputs: Rendered IDE setup instructions for landing visitors.
 "use client";
 
 import { useState, type ReactNode } from "react";

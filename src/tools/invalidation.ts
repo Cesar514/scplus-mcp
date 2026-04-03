@@ -1,5 +1,7 @@
-// Shared invalidation helpers for durable full-engine refresh decisions
-// FEATURE: Content-hash and dependency-aware invalidation primitives
+// summary: Computes invalidation decisions for durable refresh and rebuild workflows.
+// FEATURE: Content-hash and dependency-aware invalidation primitives.
+// inputs: File hashes, dependency graphs, and generation refresh context.
+// outputs: Invalidation plans for files, structures, chunks, and retrieval artifacts.
 
 import { createHash } from "node:crypto";
 import { dirname, extname, posix } from "node:path";

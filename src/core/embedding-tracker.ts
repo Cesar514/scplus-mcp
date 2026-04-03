@@ -1,5 +1,7 @@
-// File-system embedding tracker for realtime cache refresh on source changes
-// FEATURE: Incremental embedding updates for changed files and identifiers
+// summary: Tracks source-file changes and schedules incremental embedding refresh work.
+// FEATURE: Incremental embedding updates for changed files and identifiers.
+// inputs: File watcher events, tracker configuration, and embedding refresh callbacks.
+// outputs: Debounced changed-file batches and controlled embedding refresh execution.
 
 import { watch, type FSWatcher } from "fs";
 import { refreshFileSearchEmbeddings } from "../tools/semantic-search.js";

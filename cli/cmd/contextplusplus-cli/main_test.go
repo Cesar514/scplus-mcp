@@ -1,5 +1,7 @@
-// CLI root parsing tests for the Go operator entrypoint.
+// summary: Verifies CLI root parsing and startup argument handling for the Go entrypoint.
 // FEATURE: Go launcher argument validation for operator startup behavior.
+// inputs: Synthetic CLI argument lists and test harness assertions.
+// outputs: Regression coverage for operator startup parsing behavior.
 package main
 
 import "testing"

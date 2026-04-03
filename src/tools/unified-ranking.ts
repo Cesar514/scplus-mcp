@@ -1,5 +1,7 @@
-// Unified ranking engine over persisted full-index artifacts and structure evidence
-// FEATURE: Canonical ranking layer for file and symbol search over sqlite state
+// summary: Combines retrieval and structure evidence into the canonical ranking layer.
+// FEATURE: Canonical ranking layer for file and symbol search over sqlite state.
+// inputs: File, chunk, identifier, and structure scoring evidence from prepared artifacts.
+// outputs: Ranked file and symbol candidates for canonical search surfaces.
 
 import { loadIndexArtifact } from "../core/index-database.js";
 import { fetchEmbedding } from "../core/embeddings.js";

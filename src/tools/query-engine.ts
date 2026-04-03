@@ -1,5 +1,7 @@
-// Persist agent-ready explanation cards over prepared query engine artifacts.
+// summary: Persists the layered explanation artifacts that back the prepared query engine.
 // FEATURE: Layered query engine contract and explanation substrate.
+// inputs: Ranked query candidates, structure evidence, and explanation generation settings.
+// outputs: Agent-ready explanation cards and supporting query engine artifacts.
 
 import { discoverHubs, parseHubFile } from "../core/hub.js";
 import { loadIndexArtifact, saveIndexArtifact } from "../core/index-database.js";

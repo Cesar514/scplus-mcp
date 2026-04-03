@@ -1,5 +1,7 @@
-// Hub creation helpers for the Go operator workflow surface.
+// summary: Provides Go-side helpers for creating feature hubs from the operator workflow.
 // FEATURE: Go hub authoring support for operator-driven feature maps.
+// inputs: Requested hub metadata, filesystem paths, and operator form values.
+// outputs: Materialized hub files and validation errors for authoring flows.
 package hubs
 
 import (

@@ -1,5 +1,7 @@
-// Regression coverage for watcher shutdown and batch behavior.
+// summary: Verifies watcher batching and repeated shutdown behavior for the Go CLI.
 // FEATURE: Verifies repeated watcher close calls stay safe after live activity.
+// inputs: Test watcher activity, synthetic filesystem writes, and shutdown sequences.
+// outputs: Regression coverage for safe close behavior and emitted watch batches.
 
 package watcher
 

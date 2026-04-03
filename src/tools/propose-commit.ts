@@ -1,5 +1,7 @@
-// Code commit gatekeeper enforcing practical file hygiene before writes
-// FEATURE: Write-time validation and restore point creation for file edits
+// summary: Validates prospective file writes and creates restore points before committing edits.
+// FEATURE: Write-time validation and restore point creation for file edits.
+// inputs: Proposed file contents, repository paths, and write-time validation rules.
+// outputs: Accepted writes, restore points, and explicit validation failures.
 
 import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";

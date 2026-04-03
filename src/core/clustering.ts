@@ -1,5 +1,7 @@
-// Deterministic scalable vector clustering without spectral decomposition
-// FEATURE: Farthest-seed cosine k-means for large-repo semantic clustering
+// summary: Clusters retrieval vectors deterministically without spectral decomposition.
+// FEATURE: Farthest-seed cosine k-means for large-repo semantic clustering.
+// inputs: Embedding vectors, repository metadata, and clustering configuration limits.
+// outputs: Deterministic cluster assignments, centroids, and path-pattern summaries.
 
 export interface ClusterResult {
   indices: number[];

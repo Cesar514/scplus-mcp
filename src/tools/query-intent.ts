@@ -1,5 +1,7 @@
-// Query-intent router for exact lookups, related discovery, and research
-// FEATURE: Step 19 routing between fast exact tools and richer search
+// summary: Routes user intent between exact lookup, related discovery, and research surfaces.
+// FEATURE: Step 19 routing between fast exact tools and richer search.
+// inputs: Query text, requested search mode, and prepared retrieval capabilities.
+// outputs: Routed tool selections and normalized query execution parameters.
 
 import {
   ExactSymbolHit,

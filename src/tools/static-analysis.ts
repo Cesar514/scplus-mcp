@@ -1,5 +1,7 @@
-// Static analysis runner combining native diagnostics with practical repo hygiene
-// FEATURE: Native diagnostics plus repository hygiene rule enforcement surface
+// summary: Runs native diagnostics together with repository hygiene rules for lint reporting.
+// FEATURE: Native diagnostics plus repository hygiene rule enforcement surface.
+// inputs: Repository files, native lint or typecheck tools, and hygiene rule definitions.
+// outputs: Repo score summaries, diagnostics, and practical lint findings.
 
 import { execFile } from "child_process";
 import { readFile, stat } from "fs/promises";

@@ -1,5 +1,7 @@
-// Animated background wrapper for the Context+ landing experience.
+// summary: Wraps landing content with the animated atmospheric background treatment.
 // FEATURE: Landing visual atmosphere with client-side glitch rendering.
+// inputs: Child React nodes and client-side background animation settings.
+// outputs: Layered landing background markup with animated visual effects.
 "use client";
 
 import dynamic from "next/dynamic";

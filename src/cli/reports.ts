@@ -1,5 +1,7 @@
-// Human CLI backend reports for dashboard, status, and health data
-// FEATURE: Human terminal interface bridge over Context+ backend commands surface
+// summary: Formats human CLI reports for dashboard, status, and backend health views.
+// FEATURE: Human terminal interface bridge over Context+ backend commands surface.
+// inputs: Backend doctor payloads, status data, and health report structures.
+// outputs: Human-readable report sections for the terminal operator interface.
 
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";

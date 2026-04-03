@@ -1,5 +1,14 @@
 # TODO Completed
 
+## Current Goal History
+
+- [x] run Context+ lint for the repository and capture the active warning set
+- [x] migrate every flagged source file to the structured `summary:` / `FEATURE:` / `inputs:` / `outputs:` header format
+- [x] rerun Context+ lint and native checks until the repository reports zero lint issues for this goal
+- [x] audit the Context+ skill, bundled manual, repo instructions, and landing instruction mirrors for drift against the current codebase
+- [x] update those instruction surfaces to the current Context+ runtime contract, tool names, storage model, freshness model, and edit rules
+- [x] verify the repo still passes Context+ lint and native checks after the instruction sync
+
 ## v1.5
 
 - [x] extend the lint and checkpoint header contract to require structured `summary:`, `inputs:`, and `outputs:` fields in addition to `FEATURE:`

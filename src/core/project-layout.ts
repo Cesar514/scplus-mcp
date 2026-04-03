@@ -1,5 +1,7 @@
-// Context+ project layout definitions for durable repo-local state
-// FEATURE: Project state paths for sqlite storage and generated hubs
+// summary: Defines repo-local filesystem paths for Context+ durable state and generated assets.
+// FEATURE: Project state paths for sqlite storage and generated hubs.
+// inputs: Project root paths, storage mode rules, and generated artifact naming conventions.
+// outputs: Canonical layout paths for sqlite state, exports, and suggested hubs.
 
 import { mkdir } from "fs/promises";
 import { join } from "path";

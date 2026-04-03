@@ -1,5 +1,7 @@
-// Persistent human-CLI bridge client for the Node backend session.
+// summary: Manages the persistent Go-side bridge client for the shared Node backend session.
 // FEATURE: typed doctor, status, changes, search, watch, and index payloads.
+// inputs: Bridge requests, backend event frames, and operator command parameters.
+// outputs: Typed backend responses, streamed events, and client lifecycle control.
 package backend
 
 import (

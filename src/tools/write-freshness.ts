@@ -1,5 +1,7 @@
-// Post-write index freshness management for checkpoint and restore flows
-// FEATURE: Synchronous crash-only refresh after repository mutations
+// summary: Manages post-write freshness and synchronous refresh flows after repository mutations.
+// FEATURE: Synchronous crash-only refresh after repository mutations.
+// inputs: Changed file sets, refresh contracts, and active generation state.
+// outputs: Freshness status updates, refresh executions, and blocked-state failures.
 
 import { resolve } from "path";
 import { DEFAULT_INDEX_MODE, type IndexMode, type ProjectIndexConfig } from "./index-contract.js";

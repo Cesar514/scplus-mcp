@@ -1,5 +1,7 @@
-// Identifier-level semantic retrieval with persisted incremental symbol indexing
-// FEATURE: Symbol intelligence via semantic search over definitions and usages
+// summary: Performs identifier-level semantic retrieval over persisted symbol search artifacts.
+// FEATURE: Symbol intelligence via semantic search over definitions and usages.
+// inputs: Symbol queries, definition and callsite vectors, and prepared identifier indexes.
+// outputs: Ranked identifier definitions, usages, and semantic callsite results.
 
 import { readFile } from "fs/promises";
 import { walkDirectory } from "../core/walker.js";

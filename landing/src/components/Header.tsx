@@ -1,5 +1,7 @@
-// Landing page header with repo status and theme controls.
+// summary: Renders the landing page header, navigation, and repository status surface.
 // FEATURE: Landing hero navigation and GitHub status presentation.
+// inputs: GitHub metadata, theme controls, and landing navigation content.
+// outputs: Header markup for the landing hero and repository status area.
 "use client";
 
 import DarkModeToggle from "./DarkModeToggle";

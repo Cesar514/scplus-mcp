@@ -1,5 +1,7 @@
-// Theme context provider for the Context+ landing application.
+// summary: Owns the landing application theme context and persisted theme selection.
 // FEATURE: Landing light and dark theme state with persistence.
+// inputs: Child React nodes, persisted theme storage, and system theme signals.
+// outputs: Theme context values and provider-wrapped landing UI state.
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";

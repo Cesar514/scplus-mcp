@@ -1,5 +1,7 @@
-// Semantic project navigator backed by persisted full-engine cluster artifacts
-// FEATURE: Render semantic clusters from sqlite instead of recomputing on demand
+// summary: Renders semantic project navigation views from persisted full-engine cluster artifacts.
+// FEATURE: Render semantic clusters from sqlite instead of recomputing on demand.
+// inputs: Cluster artifacts, subsystem summaries, and semantic navigation requests.
+// outputs: Structured semantic cluster views and related-file neighborhoods.
 
 import { loadSemanticClusterState, renderSemanticClusterState } from "./cluster-artifacts.js";
 import { assertValidPreparedIndex } from "./index-reliability.js";

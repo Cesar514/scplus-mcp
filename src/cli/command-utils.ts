@@ -1,5 +1,7 @@
-// Shared CLI argument parsing and config formatting helpers.
+// summary: Supplies shared parsing and formatting helpers for human CLI bridge commands.
 // FEATURE: Command-line parsing and output formatting for human bridge commands.
+// inputs: Raw CLI arguments, config objects, and backend output payloads.
+// outputs: Normalized command options and human-readable formatted output blocks.
 
 import { resolve } from "node:path";
 import { listRestorePoints } from "../git/shadow.js";

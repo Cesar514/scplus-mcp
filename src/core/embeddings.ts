@@ -1,5 +1,7 @@
-// Multi-provider vector embedding engine with cosine similarity search
-// FEATURE: Provider-backed embeddings with sqlite vector persistence for file, identifier, and chunk retrieval
+// summary: Runs provider-backed embedding generation and cosine retrieval over persisted vectors.
+// FEATURE: Provider-backed embeddings with sqlite vector persistence for file, identifier, and chunk retrieval.
+// inputs: Text documents, embedding provider settings, and sqlite vector storage state.
+// outputs: Embedded vectors, similarity search results, and persisted vector namespace updates.
 // Indexes file headers and symbols, persists vectors in sqlite collections
 
 import {

@@ -1,5 +1,7 @@
-// Web-tree-sitter based multi-language parser using pooled WASM grammars
-// FEATURE: Multi-language parser runtime with pooled grammars and AST access
+// summary: Loads pooled tree-sitter grammars and parses supported files into ASTs.
+// FEATURE: Multi-language parser runtime with pooled grammars and AST access.
+// inputs: Grammar assets, file contents, and parser runtime initialization requests.
+// outputs: Parsed ASTs, grammar availability checks, and explicit parser load failures.
 
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";

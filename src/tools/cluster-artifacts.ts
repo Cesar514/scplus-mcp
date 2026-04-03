@@ -1,5 +1,7 @@
-// Persist semantic clustering artifacts and related-file graph in full index mode
-// FEATURE: SQLite-backed semantic clusters, labels, related files, and subsystem summaries
+// summary: Persists semantic clusters, related-file graphs, and subsystem summaries in full mode.
+// FEATURE: SQLite-backed semantic clusters, labels, related files, and subsystem summaries.
+// inputs: Ranked retrieval artifacts, structure evidence, and cluster generation settings.
+// outputs: Durable cluster trees, related-file graphs, labels, and subsystem summaries.
 
 import { extname } from "path";
 import { fetchEmbedding } from "../core/embeddings.js";

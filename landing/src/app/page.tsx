@@ -1,5 +1,8 @@
-// Landing page showcases context++ tools and current public product surface
-// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
+// summary: Renders the main landing page for the current Context+ public product surface.
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
+// inputs: Static marketing content, composed landing components, and tool reference data.
+// outputs: The landing page React tree for the marketing homepage.
+import { readFile } from "fs/promises";
 import Background from "../components/Background";
 import Header from "../components/Header";
 import IdeSetup from "../components/IdeSetup";
@@ -177,8 +180,15 @@ async function getStars(): Promise<number> {
   return data.stargazers_count;
 }
 
+async function getInstructions(): Promise<string> {
+  return readFile(new URL("../../../INSTRUCTIONS.md", import.meta.url), "utf8");
+}
+
 export default async function Home() {
-  const stars = await getStars();
+  const [stars, instructions] = await Promise.all([
+    getStars(),
+    getInstructions(),
+  ]);
 
   return (
     <div className="relative w-full min-h-screen">
@@ -257,7 +267,7 @@ export default async function Home() {
 
       <IdeSetup />
 
-      <InstructionsSection />
+      <InstructionsSection instructions={instructions} />
 
       <section
         className="tools-ref"

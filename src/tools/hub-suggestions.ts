@@ -1,5 +1,7 @@
-// Persist automatic hub suggestions and feature-group candidates from full-index artifacts
-// FEATURE: Suggested feature hubs and higher-level maps generated from clusters and structure
+// summary: Generates automatic hub suggestions and feature-group candidates from full-index evidence.
+// FEATURE: Suggested feature hubs and higher-level maps generated from clusters and structure.
+// inputs: Cluster artifacts, structure graphs, feature tags, and repository paths.
+// outputs: Suggested hub markdown, feature-group candidates, and hub ranking metadata.
 
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";

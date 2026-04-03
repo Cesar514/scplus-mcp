@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// contextplusplus MCP entrypoint for semantic repository navigation and repair.
+// summary: Starts the Context+ MCP server and registers the public repository tools.
 // FEATURE: Registers public tools and starts the stdio server.
+// inputs: Process environment, repository root selection, and MCP transport startup state.
+// outputs: Running MCP stdio server with the registered Context+ tool surface.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

@@ -1,5 +1,7 @@
-// Shared indexing contract definitions for durable Context+ repo-local artifacts
-// FEATURE: Explicit schemas for core and full indexing pipeline state
+// summary: Defines shared schema contracts for durable Context+ indexing artifacts and stages.
+// FEATURE: Explicit schemas for core and full indexing pipeline state.
+// inputs: Artifact version rules, generation metadata, and pipeline stage requirements.
+// outputs: Typed indexing contracts used across persistence, validation, and repair flows.
 
 import { join } from "path";
 import {

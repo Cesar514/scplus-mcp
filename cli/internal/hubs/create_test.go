@@ -1,5 +1,7 @@
-// Hub creation tests for the Go operator workflow support.
+// summary: Covers hub creation behavior and validation for the Go operator workflow.
 // FEATURE: Go hub authoring validation for operator-driven feature maps.
+// inputs: Temporary hub fixtures, invalid authoring cases, and test assertions.
+// outputs: Regression coverage for generated hub content and validation failures.
 package hubs
 
 import (

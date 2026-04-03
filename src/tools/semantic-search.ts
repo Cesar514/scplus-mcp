@@ -1,5 +1,7 @@
-// Persisted file-level semantic search with eager indexing and refresh support
-// FEATURE: File-level semantic retrieval over persisted prepared-index artifacts
+// summary: Executes file-level semantic search over persisted prepared-index retrieval artifacts.
+// FEATURE: File-level semantic retrieval over persisted prepared-index artifacts.
+// inputs: Search queries, file embeddings, lexical signals, and prepared index state.
+// outputs: Ranked file retrieval results and semantic search refresh outcomes.
 
 import { readFile, stat } from "fs/promises";
 import { extname, resolve } from "path";

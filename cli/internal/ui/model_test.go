@@ -1,5 +1,7 @@
-// Regression coverage for the human CLI operator console.
+// summary: Exercises regression coverage for operator console navigation and interactions.
 // FEATURE: verifies palette, filters, history, exports, and operator layout behavior.
+// inputs: Simulated UI messages, backend payloads, and rendered snapshot expectations.
+// outputs: Regression coverage for palette, filters, history, exports, and layout behavior.
 package ui
 
 import (

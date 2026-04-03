@@ -1,5 +1,7 @@
-// Tool diagram presents current context++ tool groups on the landing
-// FEATURE: Landing marketing and docs mirrors for shipped MCP tools
+// summary: Presents the landing diagram for the current Context+ tool groups.
+// FEATURE: Landing marketing and docs mirrors for shipped MCP tools.
+// inputs: Tool group definitions, layout settings, and marketing presentation copy.
+// outputs: Diagram markup describing the public Context+ tool surface.
 "use client";
 
 import { useEffect, useState } from "react";

@@ -1,5 +1,7 @@
-// Human CLI command router for backend actions and bridge payloads
-// FEATURE: Human terminal interface subcommands for contextplusplus backend workflows
+// summary: Routes human CLI subcommands onto backend actions and bridge payload handling.
+// FEATURE: Human terminal interface subcommands for contextplusplus backend workflows.
+// inputs: Parsed CLI arguments, bridge parameters, and operator command requests.
+// outputs: Invoked backend workflows and terminal-facing command results.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";

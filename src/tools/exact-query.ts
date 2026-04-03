@@ -1,5 +1,7 @@
-// Fast exact-query substrate over prepared index artifacts and git state
-// FEATURE: Hot in-memory caches for exact symbol, word, outline, dependency, and change/status queries
+// summary: Serves fast exact queries over prepared artifacts and current git state.
+// FEATURE: Hot in-memory caches for exact symbol, word, outline, dependency, and change/status queries.
+// inputs: Exact query requests, prepared index artifacts, and git worktree metadata.
+// outputs: Cached exact lookup results for symbols, words, outlines, deps, and git state.
 
 import { simpleGit } from "simple-git";
 import { readFile } from "fs/promises";

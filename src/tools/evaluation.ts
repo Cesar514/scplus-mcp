@@ -1,5 +1,7 @@
-// Real benchmark harness over scenario-based prepared-index fixtures
-// FEATURE: Multi-scenario evaluation for retrieval, validation, freshness, and latency quality
+// summary: Runs the prepared-index benchmark harness across scenario-based repository fixtures.
+// FEATURE: Multi-scenario evaluation for retrieval, validation, freshness, and latency quality.
+// inputs: Benchmark scenarios, prepared-index fixtures, and evaluation configuration.
+// outputs: Retrieval quality, freshness, validation, and latency benchmark reports.
 
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";

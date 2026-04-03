@@ -1,5 +1,7 @@
-// Backend core helpers for watch planning and observability summaries.
+// summary: Provides shared helper functions for backend watch planning and observability summaries.
 // FEATURE: Shared CLI backend watch decisions and doctor formatting utilities.
+// inputs: Backend scheduler state, watch plans, and doctor report source data.
+// outputs: Derived watch decisions and formatted observability summary structures.
 
 import { DEFAULT_INDEX_MODE, type IndexMode } from "../tools/index-contract.js";
 import type { BridgeDoctorReport } from "./reports.js";

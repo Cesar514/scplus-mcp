@@ -1,5 +1,7 @@
-// Obsidian-style hub parser extracting wikilinks and cross-link tags
-// FEATURE: Hierarchical context management via feature hub graph
+// summary: Parses hub markdown files into wikilinks, feature tags, and cross-link metadata.
+// FEATURE: Hierarchical context management via feature hub graph.
+// inputs: Hub markdown text, repository-relative link targets, and tag patterns.
+// outputs: Parsed hub structures, wikilink lists, and feature metadata.
 
 import { readFile, readdir, stat } from "fs/promises";
 import { resolve, relative, join, extname, basename } from "path";
