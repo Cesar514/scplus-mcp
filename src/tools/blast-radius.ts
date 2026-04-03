@@ -57,27 +57,31 @@ export function formatBlastRadiusReport(report: BlastRadiusReport): string {
 export async function buildBlastRadiusReport(options: BlastRadiusOptions): Promise<BlastRadiusReport> {
   const entries = await walkDirectory({ rootDir: options.rootDir, depthLimit: 0 });
   const files = entries.filter((e) => !e.isDirectory && isSupportedFile(e.path));
-  const usages: BlastRadiusUsage[] = [];
-  const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
+  const usages: BlastRadiusUsage[] = (
+    await Promise.all(
+      files.map(async (file) => {
+        const fileUsages: BlastRadiusUsage[] = [];
+        const content = await readFile(file.path, "utf-8");
+        const lines = content.split("\n");
+        const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
 
-  for (const file of files) {
-    const content = await readFile(file.path, "utf-8");
-    const lines = content.split("\n");
-
-    for (let i = 0; i < lines.length; i++) {
-      if (symbolPattern.test(lines[i])) {
-        const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
-        if (!isDefinition) {
-          usages.push({
-            file: file.relativePath,
-            line: i + 1,
-            context: lines[i].trim().substring(0, 120),
-          });
+        for (let i = 0; i < lines.length; i++) {
+          if (symbolPattern.test(lines[i])) {
+            const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
+            if (!isDefinition) {
+              fileUsages.push({
+                file: file.relativePath,
+                line: i + 1,
+                context: lines[i].trim().substring(0, 120),
+              });
+            }
+            symbolPattern.lastIndex = 0;
+          }
         }
-        symbolPattern.lastIndex = 0;
-      }
-    }
-  }
+        return fileUsages;
+      })
+    )
+  ).flat();
 
   const byFile = new Map<string, BlastRadiusUsage[]>();
   for (const u of usages) {
