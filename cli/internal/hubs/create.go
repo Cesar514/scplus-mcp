@@ -98,7 +98,7 @@ func CreateHub(root, title, summary, rawFiles string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	targetDir := filepath.Join(root, ".contextplus", "hubs")
+	targetDir := filepath.Join(root, ".scplus", "hubs")
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "", fmt.Errorf("create hub directory: %w", err)
 	}

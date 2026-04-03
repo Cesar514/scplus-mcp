@@ -263,7 +263,7 @@ export async function refreshHubSuggestionState(rootDir: string): Promise<{ stat
       featureTags,
       linkedSuggestionIds: [],
       backingSubsystemId: subsystem.id,
-      markdownPath: normalizePath(join(".contextplus", "hubs", "suggested", `${slug}.md`)),
+      markdownPath: normalizePath(join(".scplus", "hubs", "suggested", `${slug}.md`)),
     };
     suggestions[suggestion.id] = suggestion;
     suggestionOrder.push(suggestion);

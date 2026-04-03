@@ -34,7 +34,7 @@ type Service struct {
 }
 
 var ignoredPrefixes = []string{
-	".contextplus",
+	".scplus",
 	".git",
 	".pixi",
 	"build",

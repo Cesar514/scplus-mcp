@@ -86,7 +86,7 @@ describe("semantic-identifiers", () => {
         query: "greet user",
         topK: 3,
       });
-      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
       const initialState = readArtifactFromDb(dbPath, "identifier-search-index");
 
       assert.match(firstResult, /function greetUser/);
@@ -116,7 +116,7 @@ describe("semantic-identifiers", () => {
       assert.match(secondResult, /function welcomeUser/);
       assert.equal(refreshedState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
       assert.equal(dbState.files["service.ts"].docs.some((doc) => doc.name === "welcomeUser"), true);
-      await assert.rejects(access(join(rootDir, ".contextplus", "embeddings", "identifier-search-index.json")));
+      await assert.rejects(access(join(rootDir, ".scplus", "embeddings", "identifier-search-index.json")));
     } finally {
       Ollama.prototype.embed = originalEmbed;
       await rm(rootDir, { recursive: true, force: true });

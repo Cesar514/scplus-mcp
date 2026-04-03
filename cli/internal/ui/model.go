@@ -69,21 +69,27 @@ const (
 )
 
 var magicianFrames = []string{
-	`    /^^\
-   /_==_\
-    (o o)
-   /|___|\--*
-    /   \`,
-	`    /^^\
-   /_==_\
-    (o -)
-   /|___|\--*
-    /   \`,
-	`    /^^\
-   /_==_\
-    (o o)
-   /|___|\--o
-    /   \`,
+	`      /^\
+     /___\
+    /_____\
+     (o o)
+     \_-_/
+    /|___|\--*
+      / \`,
+	`      /^\
+     /___\
+    /_____\
+     (o -)
+     \_-_/
+    /|___|\--*
+      / \`,
+	`      /^\
+     /___\
+    /_____\
+     (o o)
+     \_~_/
+    /|___|\--*
+      / \`,
 }
 
 var (
@@ -91,7 +97,7 @@ var (
 	subtitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("111"))
 	cardStyle        = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(0, 1)
 	footerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	statusLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("238")).Padding(0, 1)
+	statusLineStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
 	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
 	sidebarActive    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229")).Background(lipgloss.Color("62")).Padding(0, 1)
 	sidebarIdle      = lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Padding(0, 1)
@@ -316,8 +322,6 @@ type Model struct {
 	history        []navigationSnapshot
 	historyIndex   int
 	historyPaused  bool
-	lastView       navigationSnapshot
-	hasLastView    bool
 	commandBar     textinput.Model
 	commandSelect  int
 }
@@ -353,7 +357,7 @@ func NewModel(root string, client *backend.Client) Model {
 		focus:         focusContent,
 		jobTable:      jobTable,
 		sections: map[string]*sectionState{
-			viewActivity:   newListSection(viewActivity, "Activity", "Slash-command console for jumping between windows and actions", "Type / to open a command."),
+			viewActivity:   newListSection(viewActivity, "Activity", "Command console for jumping between windows and actions", "Type command letters to open a window."),
 			viewOverview:   newListSection(viewOverview, "Overview", "Operator health and observability summary", "Loading doctor report..."),
 			viewTree:       newListSection(viewTree, "Tree", "Prepared structural tree context", "Loading tree view..."),
 			viewHubs:       newListSection(viewHubs, "Hubs", "Feature hubs and suggestions", "Loading hub view..."),
@@ -463,44 +467,44 @@ func newOverlayState() overlayState {
 
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
-		{ID: "exit", Title: "/exit", Subtitle: "Quit the human CLI", Action: "exit"},
-		{ID: "activity", Title: "/activity", Subtitle: "Return to the main command surface", Action: "open-activity"},
-		{ID: "back", Title: "/back", Subtitle: "Move backward through navigation history", Action: "history-back"},
-		{ID: "forward", Title: "/forward", Subtitle: "Move forward through navigation history", Action: "history-forward"},
-		{ID: "open-overview", Title: "/overview", Subtitle: "Open the operator health and observability window", Action: "open-overview"},
-		{ID: "open-tree", Title: "/tree", Subtitle: "Open the prepared tree window", Action: "open-tree"},
-		{ID: "open-hubs", Title: "/hubs", Subtitle: "Open manual and suggested hubs", Action: "open-hubs"},
-		{ID: "open-issue", Title: "/issue", Subtitle: "Open the full current issue detail", Action: "open-issue"},
-		{ID: "open-log", Title: "/log", Subtitle: "Open the full operator log history", Action: "open-log"},
-		{ID: "open-restore", Title: "/restore", Subtitle: "Open restore points and recovery", Action: "open-restore"},
-		{ID: "open-cluster", Title: "/cluster", Subtitle: "Open persisted semantic clusters", Action: "open-cluster"},
-		{ID: "open-status", Title: "/status", Subtitle: "Open the git worktree status table", Action: "open-status"},
-		{ID: "open-changes", Title: "/changes", Subtitle: "Open changed-file stats and ranges", Action: "open-changes"},
-		{ID: "open-search", Title: "/search", Subtitle: "Open the ranked search results window", Action: "open-search"},
-		{ID: "open-symbol", Title: "/symbol", Subtitle: "Open the exact symbol results window", Action: "open-symbol"},
-		{ID: "index", Title: "/index", Subtitle: "Bootstrap once, then refresh only changed files", Action: "index"},
-		{ID: "retry-index", Title: "/retry-index", Subtitle: "Retry the last prepared-index sync strategy", Action: "retry-index"},
-		{ID: "refresh", Title: "/refresh", Subtitle: "Reload the visible CLI data from backend snapshots", Action: "refresh"},
-		{ID: "cancel-pending", Title: "/cancel-pending", Subtitle: "Drop queued watch work before it starts", Action: "cancel-pending"},
-		{ID: "supersede-pending", Title: "/supersede-pending", Subtitle: "Replace stale queued work with the latest changes", Action: "supersede-pending"},
-		{ID: "watch", Title: "/watch", Subtitle: "Toggle watcher-driven refresh jobs", Action: "watch"},
-		{ID: "new-hub", Title: "/new-hub", Subtitle: "Create a manual feature hub", Action: "hub-create"},
-		{ID: "export", Title: "/export", Subtitle: "Export the current view content to .contextplus/exports", Action: "export"},
-		{ID: "help", Title: "/help", Subtitle: "Show keybindings and command help", Action: "help"},
-		{ID: "find-hub", Title: "/find-hub", Subtitle: "Rank hubs by keyword and semantic relevance", Action: "find-hub", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
-		{ID: "exact-lookup", Title: "/exact", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
-		{ID: "search-related", Title: "/search-related", Subtitle: "Run related discovery over prepared ranked results", Action: "search-related", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
-		{ID: "research", Title: "/research", Subtitle: "Build the broad explanation-backed research report", Action: "research", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "operator console architecture"},
-		{ID: "go-file", Title: "/file", Subtitle: "Find an exact file/path hit and open it in Search", Action: "go-file", JobID: "query", RequiresInput: true, InputLabel: "File query: ", InputPlaceholder: "cli/internal/ui/model.go"},
-		{ID: "go-symbol", Title: "/go-symbol", Subtitle: "Find an exact symbol hit and open it in Search", Action: "go-symbol", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
-		{ID: "symbol-lookup", Title: "/symbol-lookup", Subtitle: "Run the exact symbol tool over the prepared substrate", Action: "symbol-lookup", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
-		{ID: "word-lookup", Title: "/word", Subtitle: "Scan exact word hits in the prepared fast cache", Action: "word-lookup", JobID: "query", RequiresInput: true, InputLabel: "Word: ", InputPlaceholder: "watcher"},
-		{ID: "outline-file", Title: "/outline", Subtitle: "Load the prepared file outline for one file", Action: "outline-file", JobID: "query", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "src/tools/query-intent.ts"},
-		{ID: "deps-file", Title: "/deps", Subtitle: "Load direct and reverse deps for one file", Action: "deps-file", JobID: "query", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "src/tools/query-intent.ts"},
-		{ID: "lint", Title: "/lint", Subtitle: "Run the native linter for the repo or one target path", Action: "lint", JobID: "lint", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "leave blank for full repo"},
-		{ID: "blast-radius", Title: "/blast-radius", Subtitle: "Trace where one symbol is used across the repo", Action: "blast-radius", JobID: "query", RequiresInput: true, RequiresSecondary: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent", SecondaryLabel: "File context: ", SecondaryPlaceholder: "optional defining file"},
-		{ID: "checkpoint-detail", Title: "/checkpoint-detail", Subtitle: "Save the selected detail content to a repo file", Action: "checkpoint-detail", JobID: "restore", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "notes/operator-snapshot.txt"},
-		{ID: "restore-point", Title: "/restore-point", Subtitle: "Restore one recorded checkpoint by id", Action: "restore-point", JobID: "restore", RequiresInput: true, InputLabel: "Restore id: ", InputPlaceholder: "rp-..."},
+		{ID: "exit", Title: "exit", Subtitle: "Quit the human CLI", Action: "exit"},
+		{ID: "activity", Title: "activity", Subtitle: "Return to the main command surface", Action: "open-activity"},
+		{ID: "back", Title: "back", Subtitle: "Move backward through navigation history", Action: "history-back"},
+		{ID: "forward", Title: "forward", Subtitle: "Move forward through navigation history", Action: "history-forward"},
+		{ID: "open-overview", Title: "overview", Subtitle: "Open the operator health and observability window", Action: "open-overview"},
+		{ID: "open-tree", Title: "tree", Subtitle: "Open the prepared tree window", Action: "open-tree"},
+		{ID: "open-hubs", Title: "hubs", Subtitle: "Open manual and suggested hubs", Action: "open-hubs"},
+		{ID: "open-issue", Title: "issue", Subtitle: "Open the full current issue detail", Action: "open-issue"},
+		{ID: "open-log", Title: "log", Subtitle: "Open the full operator log history", Action: "open-log"},
+		{ID: "open-restore", Title: "restore", Subtitle: "Open restore points and recovery", Action: "open-restore"},
+		{ID: "open-cluster", Title: "cluster", Subtitle: "Open persisted semantic clusters", Action: "open-cluster"},
+		{ID: "open-status", Title: "status", Subtitle: "Open the git worktree status table", Action: "open-status"},
+		{ID: "open-changes", Title: "changes", Subtitle: "Open changed-file stats and ranges", Action: "open-changes"},
+		{ID: "open-search", Title: "search", Subtitle: "Open the ranked search results window", Action: "open-search"},
+		{ID: "open-symbol", Title: "symbol", Subtitle: "Open the exact symbol results window", Action: "open-symbol"},
+		{ID: "index", Title: "index", Subtitle: "Bootstrap once, then refresh only changed files", Action: "index"},
+		{ID: "retry-index", Title: "retry-index", Subtitle: "Retry the last prepared-index sync strategy", Action: "retry-index"},
+		{ID: "refresh", Title: "refresh", Subtitle: "Reload the visible CLI data from backend snapshots", Action: "refresh"},
+		{ID: "cancel-pending", Title: "cancel-pending", Subtitle: "Drop queued watch work before it starts", Action: "cancel-pending"},
+		{ID: "supersede-pending", Title: "supersede-pending", Subtitle: "Replace stale queued work with the latest changes", Action: "supersede-pending"},
+		{ID: "watch", Title: "watch", Subtitle: "Toggle watcher-driven refresh jobs", Action: "watch"},
+		{ID: "new-hub", Title: "new-hub", Subtitle: "Create a manual feature hub", Action: "hub-create"},
+		{ID: "export", Title: "export", Subtitle: "Export the current view content to .scplus/exports", Action: "export"},
+		{ID: "help", Title: "help", Subtitle: "Show keybindings and command help", Action: "help"},
+		{ID: "find-hub", Title: "find-hub", Subtitle: "Rank hubs by keyword and semantic relevance", Action: "find-hub", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
+		{ID: "exact-lookup", Title: "exact", Subtitle: "Run exact mixed search against the fast substrate", Action: "exact-lookup", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "search-related", Title: "search-related", Subtitle: "Run related discovery over prepared ranked results", Action: "search-related", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "scheduler observability"},
+		{ID: "research", Title: "research", Subtitle: "Build the broad explanation-backed research report", Action: "research", JobID: "query", RequiresInput: true, InputLabel: "Query: ", InputPlaceholder: "operator console architecture"},
+		{ID: "go-file", Title: "file", Subtitle: "Find an exact file/path hit and open it in Search", Action: "go-file", JobID: "query", RequiresInput: true, InputLabel: "File query: ", InputPlaceholder: "cli/internal/ui/model.go"},
+		{ID: "go-symbol", Title: "go-symbol", Subtitle: "Find an exact symbol hit and open it in Search", Action: "go-symbol", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "symbol-lookup", Title: "symbol-lookup", Subtitle: "Run the exact symbol tool over the prepared substrate", Action: "symbol-lookup", JobID: "query", RequiresInput: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent"},
+		{ID: "word-lookup", Title: "word", Subtitle: "Scan exact word hits in the prepared fast cache", Action: "word-lookup", JobID: "query", RequiresInput: true, InputLabel: "Word: ", InputPlaceholder: "watcher"},
+		{ID: "outline-file", Title: "outline", Subtitle: "Load the prepared file outline for one file", Action: "outline-file", JobID: "query", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "src/tools/query-intent.ts"},
+		{ID: "deps-file", Title: "deps", Subtitle: "Load direct and reverse deps for one file", Action: "deps-file", JobID: "query", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "src/tools/query-intent.ts"},
+		{ID: "lint", Title: "lint", Subtitle: "Run the native linter for the repo or one target path", Action: "lint", JobID: "lint", RequiresInput: true, InputLabel: "Target path: ", InputPlaceholder: "leave blank for full repo"},
+		{ID: "blast-radius", Title: "blast-radius", Subtitle: "Trace where one symbol is used across the repo", Action: "blast-radius", JobID: "query", RequiresInput: true, RequiresSecondary: true, InputLabel: "Symbol: ", InputPlaceholder: "runSearchByIntent", SecondaryLabel: "File context: ", SecondaryPlaceholder: "optional defining file"},
+		{ID: "checkpoint-detail", Title: "checkpoint-detail", Subtitle: "Save the selected detail content to a repo file", Action: "checkpoint-detail", JobID: "restore", RequiresInput: true, InputLabel: "File path: ", InputPlaceholder: "notes/operator-snapshot.txt"},
+		{ID: "restore-point", Title: "restore-point", Subtitle: "Restore one recorded checkpoint by id", Action: "restore-point", JobID: "restore", RequiresInput: true, InputLabel: "Restore id: ", InputPlaceholder: "rp-..."},
 	}
 }
 
@@ -1110,16 +1114,14 @@ func filterPaletteCommands(commands []paletteCommand, rawQuery string) []palette
 	if query == "" {
 		return commands
 	}
-	trimmedQuery := strings.TrimLeft(query, "/")
 	filtered := make([]paletteCommand, 0, len(commands))
 	for _, command := range commands {
 		haystack := strings.ToLower(strings.Join([]string{
 			command.Title,
 			command.Subtitle,
 			command.Action,
-			strings.TrimLeft(command.Title, "/"),
 		}, "\n"))
-		if strings.Contains(haystack, query) || (trimmedQuery != "" && strings.Contains(haystack, trimmedQuery)) {
+		if strings.Contains(haystack, query) {
 			filtered = append(filtered, command)
 		}
 	}
@@ -1258,7 +1260,7 @@ func exportContentCmd(root string, name string, content string) tea.Cmd {
 		if strings.TrimSpace(content) == "" {
 			return exportFinishedMsg{err: errors.New("no exportable content is selected")}
 		}
-		exportDir := filepath.Join(root, ".contextplus", "exports")
+		exportDir := filepath.Join(root, ".scplus", "exports")
 		if err := os.MkdirAll(exportDir, 0o755); err != nil {
 			return exportFinishedMsg{err: err}
 		}
@@ -1352,10 +1354,6 @@ func (m *Model) setActiveView(viewID string) {
 	if _, ok := m.sections[viewID]; !ok {
 		return
 	}
-	if viewID != m.activeView {
-		m.lastView = m.captureNavigationSnapshot()
-		m.hasLastView = true
-	}
 	m.activeView = viewID
 	m.ensureSectionSelection(m.activeSection())
 	m.syncDetailViewport()
@@ -1438,19 +1436,7 @@ func singleWindowCardHeight(totalHeight int) int {
 		return 1
 	}
 	target := int(float64(totalHeight) * 0.95)
-	return min(max(12, target), totalHeight)
-}
-
-func (m *Model) restoreLastView() bool {
-	if !m.hasLastView {
-		return false
-	}
-	current := m.captureNavigationSnapshot()
-	target := m.lastView
-	m.restoreNavigationSnapshot(target)
-	m.lastView = current
-	m.hasLastView = true
-	return true
+	return min(max(12, target), max(1, totalHeight-2))
 }
 
 func (m *Model) refreshOverviewSection() {
@@ -1945,7 +1931,7 @@ func (m *Model) executePromptCommand(command paletteCommand, primary string, sec
 func (m *Model) submitPaletteSelection() tea.Cmd {
 	command, ok := m.activePaletteCommand()
 	query := strings.TrimSpace(m.overlay.Input.Value())
-	if strings.EqualFold(strings.TrimLeft(query, "/"), "exit") {
+	if strings.EqualFold(query, "exit") {
 		m.closeOverlay()
 		return tea.Quit
 	}
@@ -2391,6 +2377,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshOverviewSection()
 		m.syncDetailViewport()
 		return m, waitForBackendEventCmd(m.client.Events())
+	case tea.MouseMsg:
+		switch message.Button {
+		case tea.MouseButtonWheelUp:
+			switch {
+			case m.activeView == viewActivity && m.focus == focusContent && len(m.activityCommandSuggestions()) > 0:
+				m.commandSelect = max(0, m.commandSelect-1)
+			case m.focus == focusDetail || (m.focus == focusContent && m.detailUsesDirectScroll()):
+				m.detail.LineUp(1)
+			case m.focus == focusLogs:
+				m.logViewport.LineUp(1)
+			case m.focus == focusSidebar:
+				m.moveSidebar(-1)
+			case m.focus == focusContent:
+				m.moveContent(-1)
+			case m.focus == focusJobs:
+				m.jobTable.SetCursor(max(0, m.jobTable.Cursor()-1))
+			}
+			return m, nil
+		case tea.MouseButtonWheelDown:
+			switch {
+			case m.activeView == viewActivity && m.focus == focusContent && len(m.activityCommandSuggestions()) > 0:
+				m.commandSelect = min(len(m.activityCommandSuggestions())-1, m.commandSelect+1)
+			case m.focus == focusDetail || (m.focus == focusContent && m.detailUsesDirectScroll()):
+				m.detail.LineDown(1)
+			case m.focus == focusLogs:
+				m.logViewport.LineDown(1)
+			case m.focus == focusSidebar:
+				m.moveSidebar(1)
+			case m.focus == focusContent:
+				m.moveContent(1)
+			case m.focus == focusJobs:
+				maxCursor := max(0, len(m.jobOrder)-1)
+				m.jobTable.SetCursor(min(maxCursor, m.jobTable.Cursor()+1))
+			}
+			return m, nil
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if m.overlay.Mode != overlayNone {
 			return m.updateOverlay(message)
@@ -2401,7 +2424,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch message.String() {
 		case "ctrl+c":
 			return m, tea.Quit
-		case "ctrl+p", ":", "/":
+		case "ctrl+p", ":":
 			if m.activeView == viewActivity && m.focus == focusContent {
 				break
 			}
@@ -2452,6 +2475,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.LineUp(1)
+				return m, nil
+			}
 			if m.focus == focusDetail {
 				m.detail.LineUp(1)
 				return m, nil
@@ -2483,6 +2510,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
+			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.LineDown(1)
+				return m, nil
 			}
 			if m.focus == focusDetail {
 				m.detail.LineDown(1)
@@ -2518,6 +2549,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.HalfViewUp()
+				return m, nil
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.moveSidebarPage(-1)
@@ -2543,6 +2578,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.HalfViewDown()
+				return m, nil
+			}
 			switch m.focus {
 			case focusSidebar:
 				m.moveSidebarPage(1)
@@ -2562,6 +2601,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.commandSelect = 0
 					return m, nil
 				}
+			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.GotoTop()
+				return m, nil
 			}
 			switch m.focus {
 			case focusSidebar:
@@ -2588,6 +2631,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.commandSelect = len(commands) - 1
 					return m, nil
 				}
+			}
+			if m.focus == focusContent && m.detailUsesDirectScroll() {
+				m.detail.GotoBottom()
+				return m, nil
 			}
 			switch m.focus {
 			case focusSidebar:
@@ -2625,7 +2672,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.recordNavigation()
 				return m, nil
 			}
-			if m.restoreLastView() {
+			if m.activeView != viewActivity {
+				m.setActiveView(viewActivity)
+				m.focus = focusContent
+				m.commandBar.Focus()
+				m.commandBar.SetValue("")
 				return m, nil
 			}
 			return m, nil
@@ -2745,10 +2796,6 @@ func (m Model) renderWizardDetail() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderHeader() string {
-	return ""
-}
-
 func visibleSidebarCount(height int) int {
 	return max(3, (max(8, height-4)-3)/2)
 }
@@ -2855,16 +2902,16 @@ func (m Model) renderActivityShell(width int, height int) string {
 	wrapWidth := max(24, innerWidth-2)
 	metaLines := m.renderWindowMeta(innerWidth)
 	lines := []string{
-		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent),
-		subtitleStyle.Width(innerWidth).Render(m.magicianRuntimeStatus(activeJob)),
+		renderWindowHeader("Activity | scplus-cli", m.magicianRuntimeStatus(activeJob), innerWidth, m.focus == focusContent),
 		magician,
 		"",
 		bar.View(),
 	}
 	if query != "" {
-		lines = append(lines, "", subtitleStyle.Render("Commands"))
-		remainingHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
-		lines = append(lines, m.renderActivityCommandRows(innerWidth, remainingHeight)...)
+		lines = append(lines, "", subtitleStyle.Width(innerWidth).Render("Commands"))
+		bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
+		bodyLines := m.renderActivityCommandRows(innerWidth, bodyHeight)
+		lines = append(lines, padWindowBodyLines(bodyLines, bodyHeight)...)
 		lines = append(lines, metaLines...)
 		return renderCard(width, height, strings.Join(lines, "\n"))
 	}
@@ -2899,7 +2946,7 @@ func (m Model) renderActivityShell(width int, height int) string {
 	if len(bodyLines) > bodyHeight {
 		bodyLines = bodyLines[:bodyHeight]
 	}
-	lines = append(lines, bodyLines...)
+	lines = append(lines, padWindowBodyLines(bodyLines, bodyHeight)...)
 	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
@@ -2918,7 +2965,6 @@ func (m Model) renderSingleContentWindow(width int, height int) string {
 	lines := []string{
 		renderPaneTitle(title, m.focus == focusContent || m.focus == focusDetail || m.focus == focusWizard),
 		subtitleStyle.Width(innerWidth).Render(subtitle),
-		"",
 		renderMagician(magicianFrames[m.magicianFrame], innerWidth),
 		"",
 	}
@@ -2931,12 +2977,11 @@ func (m Model) renderSingleContentWindow(width int, height int) string {
 		)))
 		lines = append(lines, "")
 	}
-	bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
-	viewportCopy := m.detail
-	viewportCopy.Width = innerWidth
-	viewportCopy.Height = bodyHeight
-	viewportCopy.SetContent(m.buildDetailContent())
-	lines = append(lines, viewportCopy.View())
+	bodyHeight := max(2, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
+	viewportHeight := max(1, bodyHeight-1)
+	viewportCopy, indicator := m.renderDetailViewport(innerWidth, viewportHeight)
+	bodyLines := append(strings.Split(viewportCopy.View(), "\n"), indicator)
+	lines = append(lines, padWindowBodyLines(bodyLines, bodyHeight)...)
 	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
@@ -2984,16 +3029,6 @@ func (m Model) renderDetailPanel(width int, height int) string {
 		m.detail.View(),
 	}
 	return cardStyle.Width(width).Height(height).Render(strings.Join(body, "\n"))
-}
-
-func (m Model) renderMainPanel(width int, height int) string {
-	if m.wizard.active || m.focus == focusDetail {
-		return m.renderDetailPanel(width, height)
-	}
-	if m.activeView == viewActivity {
-		return m.renderActivityShell(width, height)
-	}
-	return m.renderContentPanel(width, height)
 }
 
 func (m Model) renderJobsPanel(width int, height int) string {
@@ -3103,19 +3138,66 @@ func (m Model) windowHelpText() string {
 	if m.activeView == viewRestore && m.focus == focusContent {
 		return "Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | restore-point | export | Ctrl+C quit"
 	}
-	return "Type command letters in Activity | Ctrl+P palette | Ctrl+F search | Esc back | Ctrl+C quit"
+	return "Type command letters in Activity | Ctrl+P palette | Ctrl+F search | Esc activity | Ctrl+C quit"
 }
 
 func (m Model) renderWindowMeta(width int) []string {
 	return []string{
-		"",
-		statusLineStyle.Width(width).Render(m.statusLineText()),
-		footerStyle.Width(width).Render(m.windowHelpText()),
+		renderMetaLine(statusLineStyle, width, m.statusLineText()),
+		renderMetaLine(footerStyle, width, m.windowHelpText()),
 	}
 }
 
+func renderMetaLine(style lipgloss.Style, width int, value string) string {
+	if width <= 0 {
+		return ""
+	}
+	safeWidth := max(1, width-4)
+	return style.Render(truncate(value, safeWidth))
+}
+
 func displayCommandTitle(raw string) string {
-	return strings.TrimLeft(strings.TrimSpace(raw), "/")
+	return strings.TrimSpace(raw)
+}
+
+func (m Model) detailUsesDirectScroll() bool {
+	section := m.activeSection()
+	if section == nil || m.activeView == viewActivity {
+		return false
+	}
+	return strings.TrimSpace(section.RawText) != ""
+}
+
+func (m Model) renderDetailViewport(width int, height int) (viewport.Model, string) {
+	content := m.buildDetailContent()
+	totalLines := lipgloss.Height(lipgloss.NewStyle().Width(width).Render(content))
+	viewportCopy := m.detail
+	viewportCopy.Width = width
+	viewportCopy.Height = max(1, height)
+	viewportCopy.SetContent(content)
+	maxOffset := max(0, totalLines-viewportCopy.Height)
+	viewportCopy.SetYOffset(min(m.detail.YOffset, maxOffset))
+	startLine := min(totalLines, viewportCopy.YOffset+1)
+	endLine := min(totalLines, viewportCopy.YOffset+viewportCopy.Height)
+	if totalLines == 0 {
+		startLine = 0
+	}
+	controls := "Enter detail, then Up/Down/Page or wheel scroll"
+	if m.focus == focusDetail || m.detailUsesDirectScroll() {
+		controls = "Up/Down/Page or wheel scroll"
+	}
+	status := fmt.Sprintf("Scroll %d-%d/%d", startLine, endLine, max(1, totalLines))
+	switch {
+	case viewportCopy.YOffset > 0 && endLine < totalLines:
+		status += " | more above and below"
+	case viewportCopy.YOffset > 0:
+		status += " | more above"
+	case endLine < totalLines:
+		status += " | more below"
+	default:
+		status += " | full text visible"
+	}
+	return viewportCopy, subtitleStyle.Width(width).Render(truncate(status+" | "+controls, width))
 }
 
 func (m Model) renderOverlayCard(width int) string {
@@ -3123,7 +3205,7 @@ func (m Model) renderOverlayCard(width int) string {
 }
 
 func (m Model) renderOverlayCardWithHeight(width int, height int) string {
-	frameWidth, _ := cardStyle.GetFrameSize()
+	frameWidth, frameHeight := cardStyle.GetFrameSize()
 	innerWidth := max(12, width-frameWidth)
 	metaLines := m.renderWindowMeta(innerWidth)
 	lines := []string{
@@ -3140,17 +3222,17 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 			"  Tab / Shift+Tab toggle between the current list and detail view",
 			"  Up/Down move the selected row",
 			"  Enter opens detail for the current item",
-			"  Use /back and /forward to walk navigation history",
+			"  Use back and forward to walk navigation history",
 			"",
 			"Commands",
-			"  Type command letters in Activity, or use : / Ctrl+P to open the command palette",
+			"  Type command letters in Activity, or use : or Ctrl+P to open the command palette",
 			"  Commands are the primary action surface: overview, index, refresh, status, search, help, exit",
-			"  Esc returns from detail or jumps back to the previous view",
+			"  Esc returns from detail or jumps back to Activity",
 			"",
 			"Search and export",
 			"  Ctrl+F searches the current section in place",
-			"  PageUp/PageDown/Home/End move quickly through the current content",
-			"  Use /export to write the current view into .contextplus/exports/",
+			"  PageUp/PageDown/Home/End or the mouse wheel move through long detail content",
+			"  Use export to write the current view into .scplus/exports/",
 		)
 	case overlayPalette:
 		lines = append(lines, m.overlay.Input.View(), "")
@@ -3195,6 +3277,10 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 	}
 	if strings.TrimSpace(m.overlay.Message) != "" {
 		lines = append(lines, "", m.overlay.Message)
+	}
+	if height > 0 {
+		bodyHeight := max(0, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n"))-lipgloss.Height(strings.Join(metaLines, "\n")))
+		lines = append(lines, padWindowBodyLines(nil, bodyHeight)...)
 	}
 	lines = append(lines, metaLines...)
 	return renderCard(width, height, strings.Join(lines, "\n"))
@@ -3783,6 +3869,31 @@ func renderPaneTitle(title string, active bool) string {
 		return paneHeaderActive.Render(title)
 	}
 	return paneHeaderIdle.Render(title)
+}
+
+func renderWindowHeader(title string, status string, width int, active bool) string {
+	line := title
+	if strings.TrimSpace(status) != "" {
+		line += " | " + status
+	}
+	if lipgloss.Width(line) > width {
+		line = truncate(line, width)
+	}
+	return renderPaneTitle(line, active)
+}
+
+func padWindowBodyLines(lines []string, target int) []string {
+	if target <= 0 {
+		return nil
+	}
+	if len(lines) > target {
+		return lines[:target]
+	}
+	padded := append([]string{}, lines...)
+	for len(padded) < target {
+		padded = append(padded, "")
+	}
+	return padded
 }
 
 func formatStageMetricsDetail(stages map[string]struct {

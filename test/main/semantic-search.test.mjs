@@ -164,7 +164,7 @@ describe("semantic-search", () => {
           query: "greet alpha",
           topK: 3,
         });
-        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
         const initialState = readArtifactFromDb(dbPath, "file-search-index");
 
         assert.match(firstResult, /alpha\.ts/);
@@ -197,7 +197,7 @@ describe("semantic-search", () => {
         assert.match(secondResult, /alpha\.ts/);
         assert.match(refreshedState.files["alpha.ts"].doc.content, /saluteAlpha/);
         assert.match(dbState.files["alpha.ts"].doc.content, /saluteAlpha/);
-        await assert.rejects(access(join(rootDir, ".contextplus", "embeddings", "file-search-index.json")));
+        await assert.rejects(access(join(rootDir, ".scplus", "embeddings", "file-search-index.json")));
       } finally {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
@@ -284,7 +284,7 @@ describe("semantic-search", () => {
 
         invalidateSearchCache();
         await ensureFileSearchIndex(rootDir);
-        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
         const beforeState = readArtifactFromDb(dbPath, "file-search-index");
         assert.equal(Boolean(beforeState.files["notes.md"]), true);
 
@@ -338,7 +338,7 @@ describe("semantic-search", () => {
 
         invalidateSearchCache();
         await ensureFileSearchIndex(rootDir);
-        const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+        const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
         const beforeState = readArtifactFromDb(dbPath, "file-search-index");
         assert.equal(Boolean(beforeState.files["alpha.ts"]), true);
 

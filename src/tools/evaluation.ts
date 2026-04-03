@@ -1241,7 +1241,7 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
         name: "large monorepo suggested analytics hub resolves by feature name",
         rootDir: largeRoot,
         featureName: "Analytics",
-        expectedIncludes: ".contextplus/hubs/suggested/analytics.md",
+        expectedIncludes: ".scplus/hubs/suggested/analytics.md",
       },
       {
         name: "polyglot crypto hub ranks correctly for query mode",

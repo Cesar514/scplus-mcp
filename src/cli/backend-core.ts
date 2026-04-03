@@ -30,7 +30,7 @@ import { buildDoctorReport } from "./reports.js";
 import { validatePreparedIndex } from "../tools/index-reliability.js";
 
 const WATCH_IGNORE_PREFIXES = [
-  ".contextplus/",
+  ".scplus/",
   ".git/",
   ".pixi/",
   "build/",

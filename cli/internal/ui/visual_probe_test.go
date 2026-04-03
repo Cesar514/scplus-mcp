@@ -1,3 +1,7 @@
+// summary: Declares the visual-probe build-tagged UI snapshot test file.
+// FEATURE: enables manual screenshot verification builds for the operator console.
+// inputs: Build tags, environment-configured probe dimensions, and target view selectors.
+// outputs: A Go test file that renders live terminal snapshots for manual inspection.
 //go:build visualprobe
 
 // summary: Renders real terminal snapshots for manual UI inspection during visual debugging.

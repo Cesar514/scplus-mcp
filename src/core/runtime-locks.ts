@@ -47,7 +47,7 @@ export class RepoRuntimeLockBusyError extends Error {
 const DEFAULT_POLL_MS = 100;
 
 function runtimeLockPath(rootDir: string, kind: RepoRuntimeLockKind): string {
-  return join(resolve(rootDir), ".contextplus", "locks", `${kind}.lock`);
+  return join(resolve(rootDir), ".scplus", "locks", `${kind}.lock`);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -90,7 +90,7 @@ export async function acquireRepoRuntimeLock(
 ): Promise<RepoRuntimeLockHandle> {
   const normalizedRootDir = resolve(rootDir);
   await ensureContextplusLayout(normalizedRootDir);
-  const lockDir = join(normalizedRootDir, ".contextplus", "locks");
+  const lockDir = join(normalizedRootDir, ".scplus", "locks");
   await mkdir(lockDir, { recursive: true });
   const lockPath = runtimeLockPath(normalizedRootDir, kind);
   const owner: RepoRuntimeLockOwner = {

@@ -1,5 +1,5 @@
 // Project indexing command creates durable Context+ repo-local search state
-// FEATURE: CLI coverage for .contextplus layout and persisted search manifests
+// FEATURE: CLI coverage for .scplus layout and persisted search manifests
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -62,7 +62,7 @@ function qualifyArtifactKey(artifactKey, generation) {
 }
 
 describe("index", () => {
-  it("creates the populated .contextplus project layout and snapshots", async () => {
+  it("creates the populated .scplus project layout and snapshots", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
     try {
       await mkdir(join(cwd, "src"), { recursive: true });
@@ -86,14 +86,14 @@ describe("index", () => {
         },
       );
 
-      await expectExists(join(cwd, ".contextplus"));
-      await expectExists(join(cwd, ".contextplus", "state"));
-      await expectExists(join(cwd, ".contextplus", "state", "index.sqlite"));
-      await expectExists(join(cwd, ".contextplus", "hubs"));
-      await expectExists(join(cwd, ".contextplus", "hubs", "suggested"));
-      assert.deepEqual((await readdir(join(cwd, ".contextplus"))).sort(), ["hubs", "state"]);
+      await expectExists(join(cwd, ".scplus"));
+      await expectExists(join(cwd, ".scplus", "state"));
+      await expectExists(join(cwd, ".scplus", "state", "index.sqlite"));
+      await expectExists(join(cwd, ".scplus", "hubs"));
+      await expectExists(join(cwd, ".scplus", "hubs", "suggested"));
+      assert.deepEqual((await readdir(join(cwd, ".scplus"))).sort(), ["hubs", "locks", "state"]);
 
-      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(cwd, ".scplus", "state", "index.sqlite");
       const config = readArtifactFromDb(dbPath, "project-config");
       const manifest = readArtifactFromDb(dbPath, "file-manifest");
       const indexStatus = readArtifactFromDb(dbPath, "index-status");
@@ -119,7 +119,7 @@ describe("index", () => {
       assert.equal(config.contract.contractVersion, 13);
       assert.equal(config.contract.defaultMode, "full");
       assert.equal(config.contract.storage.substrate, "sqlite");
-      assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
+      assert.equal(config.contract.storage.databasePath, ".scplus/state/index.sqlite");
       assert.equal(config.contract.storage.mirrorPolicy, "sqlite-only");
       assert.equal(config.contract.invalidation.fileArtifacts, "content-hash");
       assert.equal(config.contract.failureSemantics.policy, "crash-only");
@@ -250,7 +250,7 @@ describe("index", () => {
       assert.equal(fullManifest.stats.semanticClusterIndex.clusterCount >= 0, true);
       assert.equal(fullManifest.stats.hubSuggestionIndex.suggestionCount >= 1, true);
       assert.equal(fullManifest.stats.queryExplanationIndex.fileCardCount >= 1, true);
-      assert.equal(dbFullManifest?.contract.storage.databasePath, ".contextplus/state/index.sqlite");
+      assert.equal(dbFullManifest?.contract.storage.databasePath, ".scplus/state/index.sqlite");
       assert.equal(dbFullManifest?.hybridChunkIndexPath, "sqlite:index_artifacts/hybrid-chunk-index");
       assert.equal(dbFullManifest?.hybridIdentifierIndexPath, "sqlite:index_artifacts/hybrid-identifier-index");
       assert.equal(dbFullManifest?.semanticClusterIndexPath, "sqlite:index_artifacts/semantic-cluster-index");
@@ -267,13 +267,13 @@ describe("index", () => {
       assert.ok(stdout.includes("hybrid chunk docs"));
       assert.ok(stdout.includes("hybrid identifier docs"));
       assert.ok(stdout.includes("sqlite:index_artifacts/project-config"));
-      await assert.rejects(access(join(cwd, ".contextplus", "config", "project.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "config", "context-tree.txt")));
-      await assert.rejects(access(join(cwd, ".contextplus", "embeddings", "file-search-index.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "derived", "full-index-manifest.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "memories")));
-      await assert.rejects(access(join(cwd, ".contextplus", "memories", "memory-graph.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "checkpoints", "restore-points.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "config", "project.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "config", "context-tree.txt")));
+      await assert.rejects(access(join(cwd, ".scplus", "embeddings", "file-search-index.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "derived", "full-index-manifest.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "memories")));
+      await assert.rejects(access(join(cwd, ".scplus", "memories", "memory-graph.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "checkpoints", "restore-points.json")));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -282,10 +282,10 @@ describe("index", () => {
   it("migrates legacy checkpoint manifests into sqlite and deletes legacy memory files on reindex", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "contextplus-index-"));
     try {
-      await mkdir(join(cwd, ".contextplus", "memories"), { recursive: true });
-      await mkdir(join(cwd, ".contextplus", "checkpoints"), { recursive: true });
-      await writeFile(join(cwd, ".contextplus", "memories", "memory-graph.json"), JSON.stringify({ nodes: { a: 1 }, edges: {} }));
-      await writeFile(join(cwd, ".contextplus", "checkpoints", "restore-points.json"), JSON.stringify([{ id: "rp-1" }]));
+      await mkdir(join(cwd, ".scplus", "memories"), { recursive: true });
+      await mkdir(join(cwd, ".scplus", "checkpoints"), { recursive: true });
+      await writeFile(join(cwd, ".scplus", "memories", "memory-graph.json"), JSON.stringify({ nodes: { a: 1 }, edges: {} }));
+      await writeFile(join(cwd, ".scplus", "checkpoints", "restore-points.json"), JSON.stringify([{ id: "rp-1" }]));
 
       await execFileAsync(
         process.execPath,
@@ -302,7 +302,7 @@ describe("index", () => {
         },
       );
 
-      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(cwd, ".scplus", "state", "index.sqlite");
       const restorePoints = readArtifactFromDb(dbPath, "restore-points");
       const indexStatus = readArtifactFromDb(dbPath, "index-status");
       const fullManifest = readArtifactFromDb(dbPath, "full-index-manifest");
@@ -314,9 +314,9 @@ describe("index", () => {
       assert.equal(fullManifest.mode, "full");
       assert.equal(fullManifest.contract.failureSemantics.recovery, "rerun-from-persisted-artifacts");
       assert.equal(fullManifest.contract.storage.substrate, "sqlite");
-      await assert.rejects(access(join(cwd, ".contextplus", "memories", "memory-graph.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "checkpoints", "restore-points.json")));
-      await assert.rejects(access(join(cwd, ".contextplus", "checkpoints")));
+      await assert.rejects(access(join(cwd, ".scplus", "memories", "memory-graph.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "checkpoints", "restore-points.json")));
+      await assert.rejects(access(join(cwd, ".scplus", "checkpoints")));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -347,19 +347,19 @@ describe("index", () => {
         },
       );
 
-      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(cwd, ".scplus", "state", "index.sqlite");
       const config = readArtifactFromDb(dbPath, "project-config");
       const indexStatus = readArtifactFromDb(dbPath, "index-status");
 
       assert.equal(config.indexMode, "core");
       assert.equal(config.generation, 1);
       assert.equal(config.contract.supportedModes.includes("core"), true);
-      assert.equal(config.contract.storage.databasePath, ".contextplus/state/index.sqlite");
+      assert.equal(config.contract.storage.databasePath, ".scplus/state/index.sqlite");
       assert.equal(indexStatus.indexMode, "core");
       assert.equal(indexStatus.activeGeneration, 1);
       assert.equal(indexStatus.contractVersion, 13);
-      await expectExists(join(cwd, ".contextplus", "state", "index.sqlite"));
-      assert.deepEqual(await readdir(join(cwd, ".contextplus")), ["state"]);
+      await expectExists(join(cwd, ".scplus", "state", "index.sqlite"));
+      assert.deepEqual((await readdir(join(cwd, ".scplus"))).sort(), ["locks", "state"]);
       assert.equal(readArtifactFromDb(dbPath, "full-index-manifest"), null);
       assert.ok(stdout.includes("Mode: core"));
     } finally {
@@ -387,7 +387,7 @@ describe("index", () => {
       await rerunIndexStage({ rootDir: cwd, stage: "file-search", mode: "full" });
       await rerunIndexStage({ rootDir: cwd, stage: "identifier-search", mode: "full" });
       const result = await rerunIndexStage({ rootDir: cwd, stage: "full-artifacts", mode: "full" });
-      const dbPath = join(cwd, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(cwd, ".scplus", "state", "index.sqlite");
       const stageState = readArtifactFromDb(dbPath, "index-stage-state");
       const dbStageState = readArtifactFromDb(dbPath, "index-stage-state");
 

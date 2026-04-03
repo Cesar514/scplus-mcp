@@ -1,4 +1,4 @@
-// summary: Defines repo-local filesystem paths for Context+ durable state and generated assets.
+// summary: Defines repo-local filesystem paths for scplus durable state and generated assets.
 // FEATURE: Project state paths for sqlite storage and generated hubs.
 // inputs: Project root paths, storage mode rules, and generated artifact naming conventions.
 // outputs: Canonical layout paths for sqlite state, exports, and suggested hubs.
@@ -6,7 +6,7 @@
 import { mkdir } from "fs/promises";
 import { join } from "path";
 
-export const CONTEXTPLUS_DIR = ".contextplus";
+export const CONTEXTPLUS_DIR = ".scplus";
 export const CONTEXTPLUS_HUBS_DIR = join(CONTEXTPLUS_DIR, "hubs");
 export const CONTEXTPLUS_EMBEDDINGS_DIR = join(CONTEXTPLUS_DIR, "embeddings");
 export const CONTEXTPLUS_CONFIG_DIR = join(CONTEXTPLUS_DIR, "config");

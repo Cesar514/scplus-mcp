@@ -155,8 +155,8 @@ func TestViewRendersOperatorConsolePanes(t *testing.T) {
 	rendered := model.View()
 	for _, needle := range []string{
 		"Activity | scplus-cli",
-		"/^^\\",
-		"/_==_\\",
+		"/_____\\",
+		"\\_-_/",
 		"Type command",
 		"watcher: on",
 		"stage: identifier-search",
@@ -263,17 +263,17 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 	}
 }
 
-func TestActivityShellHidesCommandsUntilSlashTyped(t *testing.T) {
+func TestActivityShellHidesCommandsUntilLettersTyped(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 120
 	model.height = 24
 
 	rendered := model.View()
 	if strings.Contains(rendered, "Commands") {
-		t.Fatalf("expected activity shell to stay minimal until slash is typed: %s", rendered)
+		t.Fatalf("expected activity shell to stay minimal until command letters are typed: %s", rendered)
 	}
-	if strings.Contains(rendered, "/overview\n") {
-		t.Fatalf("expected command suggestions to stay hidden until slash is typed: %s", rendered)
+	if strings.Contains(rendered, "overview\n") {
+		t.Fatalf("expected command suggestions to stay hidden until command letters are typed: %s", rendered)
 	}
 }
 
@@ -642,42 +642,42 @@ func TestFilterOverlayAppliesCurrentSectionFilter(t *testing.T) {
 	}
 }
 
-func TestSlashTypesIntoActivityCommandBar(t *testing.T) {
+func TestLettersTypeIntoActivityCommandBar(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	next := updated.(Model)
 	if next.overlay.Mode != overlayNone {
 		t.Fatalf("expected activity view to stay in-place, got overlay %#v", next.overlay.Mode)
 	}
-	if next.commandBar.Value() != "/" {
-		t.Fatalf("expected slash to be editable command-bar input, got %q", next.commandBar.Value())
+	if next.commandBar.Value() != "l" {
+		t.Fatalf("expected typed letters to stay in the command bar, got %q", next.commandBar.Value())
 	}
 }
 
-func TestPaletteLeadingSlashStillShowsCommands(t *testing.T) {
+func TestPaletteLetterQueryShowsCommands(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.openPalette()
-	model.overlay.Input.SetValue("/tr")
+	model.overlay.Input.SetValue("tr")
 
 	commands := model.filteredPaletteCommands()
 	if len(commands) == 0 {
-		t.Fatal("expected commands to stay visible when the palette query starts with slash")
+		t.Fatal("expected commands to stay visible when the palette query uses letters")
 	}
 	if commands[0].Action != "open-tree" {
-		t.Fatalf("expected /tr to match open-tree first, got %s", commands[0].Action)
+		t.Fatalf("expected tr to match open-tree first, got %s", commands[0].Action)
 	}
 }
 
 func TestActivityCommandBarRunsOverviewCommand(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
-	model.commandBar.SetValue("/overview")
+	model.commandBar.SetValue("overview")
 
 	cmd := model.submitCommandBar()
 	if cmd != nil {
-		t.Fatalf("expected /overview to switch views without async command")
+		t.Fatalf("expected overview to switch views without async command")
 	}
 	if model.activeView != viewOverview {
-		t.Fatalf("expected /overview to activate overview, got %s", model.activeView)
+		t.Fatalf("expected overview to activate overview, got %s", model.activeView)
 	}
 }
 
@@ -694,14 +694,14 @@ func TestActivityCommandBarRunsOverviewCommandWithoutSlash(t *testing.T) {
 	}
 }
 
-func TestActivityCommandBarAllowsRemovingSlash(t *testing.T) {
+func TestActivityCommandBarAllowsRemovingTypedLetters(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	model = updated.(Model)
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	next := updated.(Model)
 	if next.commandBar.Value() != "" {
-		t.Fatalf("expected backspace to remove the slash, got %q", next.commandBar.Value())
+		t.Fatalf("expected backspace to remove the typed letters, got %q", next.commandBar.Value())
 	}
 }
 
@@ -724,7 +724,7 @@ func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 100
 	model.height = 22
-	model.commandBar.SetValue("/")
+	model.commandBar.SetValue("e")
 	model.commandSelect = 10
 
 	rendered := model.View()
@@ -736,11 +736,11 @@ func TestActivityCommandSuggestionsScrollWhenSelectionMoves(t *testing.T) {
 	}
 }
 
-func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
+func TestActivityCommandSuggestionsStayBoundedWhileTypingLetters(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 120
 	model.height = 40
-	model.commandBar.SetValue("/")
+	model.commandBar.SetValue("e")
 
 	rendered := model.renderActivityShell(90, 40)
 	for _, needle := range []string{
@@ -748,18 +748,18 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
 		"The magician is resting",
 		"Commands",
 		"exit",
-		"activity",
 		"overview",
+		"refresh",
 	} {
 		if !strings.Contains(rendered, needle) {
-			t.Fatalf("expected %q in slash-command browser: %s", needle, rendered)
+			t.Fatalf("expected %q in command browser: %s", needle, rendered)
 		}
 	}
 	if !strings.Contains(rendered, "more commands hidden") {
 		t.Fatalf("expected bounded command list to keep hidden commands even in a tall window: %s", rendered)
 	}
 	if strings.Contains(rendered, "Current task:") || strings.Contains(rendered, "Current issue:") || strings.Contains(rendered, "Latest log:") {
-		t.Fatalf("expected slash-command browser to suppress activity previews: %s", rendered)
+		t.Fatalf("expected command browser to suppress activity previews: %s", rendered)
 	}
 }
 
@@ -775,7 +775,7 @@ func TestActivityShellKeepsSameRenderedHeightWhenSlashCommandsAppear(t *testing.
 	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
 
 	withoutCommands := model.View()
-	model.commandBar.SetValue("/")
+	model.commandBar.SetValue("lo")
 	withCommands := model.View()
 
 	withoutLines := renderedLineCount(withoutCommands)
@@ -784,10 +784,10 @@ func TestActivityShellKeepsSameRenderedHeightWhenSlashCommandsAppear(t *testing.
 		t.Fatalf("expected non-command activity shell to stay within terminal height %d, got %d lines: %s", model.height, withoutLines, withoutCommands)
 	}
 	if withLines > model.height {
-		t.Fatalf("expected slash-command activity shell to stay within terminal height %d, got %d lines: %s", model.height, withLines, withCommands)
+		t.Fatalf("expected command activity shell to stay within terminal height %d, got %d lines: %s", model.height, withLines, withCommands)
 	}
 	if withLines != withoutLines {
-		t.Fatalf("expected slash-command activity shell to keep the same rendered height, got %d lines before and %d after: before=%s after=%s", withoutLines, withLines, withoutCommands, withCommands)
+		t.Fatalf("expected command activity shell to keep the same rendered height, got %d lines before and %d after: before=%s after=%s", withoutLines, withLines, withoutCommands, withCommands)
 	}
 }
 
@@ -801,19 +801,19 @@ func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
 	indexJob.Message = "blocked refresh message"
 	model.lastError = "backend command failed"
 	model.logs = append(model.logs, "doctor report refreshed")
-	model.commandBar.SetValue("/")
+	model.commandBar.SetValue("lo")
 
 	rendered := model.View()
 	for _, unwanted := range []string{"Current task:", "Current issue:", "Latest log:"} {
 		if strings.Contains(rendered, unwanted) {
-			t.Fatalf("expected slash-command activity shell to hide %q: %s", unwanted, rendered)
+			t.Fatalf("expected command activity shell to hide %q: %s", unwanted, rendered)
 		}
 	}
 	if strings.Contains(rendered, "Current status:") {
-		t.Fatalf("expected slash-command browser to replace the activity status block: %s", rendered)
+		t.Fatalf("expected command browser to replace the activity status block: %s", rendered)
 	}
 	if !strings.Contains(rendered, "Commands") {
-		t.Fatalf("expected slash-command section in slash mode: %s", rendered)
+		t.Fatalf("expected command section in letter mode: %s", rendered)
 	}
 }
 
@@ -851,12 +851,12 @@ func TestActivityShellClampsIssueAndLogPreviewsToThreeLines(t *testing.T) {
 	model.logs = append(model.logs, "log line one\nlog line two\nlog line three\nlog line four")
 
 	rendered := model.renderActivityShell(70, 24)
-	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one... (+3)"} {
+	for _, snippet := range []string{"[issue] Current issue:", "issue line one", "issue line two", "issue line three... (+1)", "[log] Latest log:", "log line one", "log line two... (+2)"} {
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("expected activity shell to include %q: %s", snippet, rendered)
 		}
 	}
-	for _, snippet := range []string{"issue line four", "log line two", "log line three", "log line four"} {
+	for _, snippet := range []string{"issue line four", "log line three", "log line four"} {
 		if strings.Contains(rendered, snippet) {
 			t.Fatalf("expected hidden preview content to stay out of the activity shell: %s", rendered)
 		}
@@ -964,22 +964,22 @@ func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 113
 	model.height = 27
-	model.commandBar.SetValue("/lo")
+	model.commandBar.SetValue("lo")
 	model.lastError = "backend command failed"
 	model.logs = append(model.logs, "doctor report refreshed")
 
 	rendered := model.View()
 	if renderedLineCount(rendered) > model.height {
-		t.Fatalf("expected slash-command view to stay within terminal height %d, got %d lines: %s", model.height, renderedLineCount(rendered), rendered)
+		t.Fatalf("expected command view to stay within terminal height %d, got %d lines: %s", model.height, renderedLineCount(rendered), rendered)
 	}
 	if maxRenderedLineWidth(rendered) > model.width {
-		t.Fatalf("expected slash-command view to stay within terminal width %d, got max width %d: %s", model.width, maxRenderedLineWidth(rendered), rendered)
+		t.Fatalf("expected command view to stay within terminal width %d, got max width %d: %s", model.width, maxRenderedLineWidth(rendered), rendered)
 	}
 	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
-		t.Fatalf("expected exactly one bordered window while browsing slash commands: %s", rendered)
+		t.Fatalf("expected exactly one bordered window while browsing commands: %s", rendered)
 	}
 	if count := strings.Count(rendered, "/|___|\\--"); count != 1 {
-		t.Fatalf("expected the centered magician to remain visible once in slash mode, got %d: %s", count, rendered)
+		t.Fatalf("expected the centered magician to remain visible once in command mode, got %d: %s", count, rendered)
 	}
 }
 
@@ -1018,21 +1018,21 @@ func TestRightArrowDoesNothingInActivityShell(t *testing.T) {
 	}
 }
 
-func TestSlashOpensCommandPaletteFromNonActivityView(t *testing.T) {
+func TestColonOpensCommandPaletteFromNonActivityView(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.setActiveView(viewOverview)
 
-	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")})
 	if cmd != nil {
 		t.Fatalf("expected command palette open without extra command")
 	}
 	next := updated.(Model)
 	if next.overlay.Mode != overlayPalette {
-		t.Fatalf("expected / to open the command palette outside the activity view, got %#v", next.overlay.Mode)
+		t.Fatalf("expected : to open the command palette outside the activity view, got %#v", next.overlay.Mode)
 	}
 }
 
-func TestEscReturnsToPreviousView(t *testing.T) {
+func TestEscReturnsToActivityFromSecondaryView(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.setActiveView(viewTree)
 	model.focus = focusContent
@@ -1044,8 +1044,26 @@ func TestEscReturnsToPreviousView(t *testing.T) {
 		t.Fatalf("expected esc back navigation without extra command")
 	}
 	next := updated.(Model)
-	if next.activeView != viewTree {
-		t.Fatalf("expected esc to restore previous view, got %s", next.activeView)
+	if next.activeView != viewActivity {
+		t.Fatalf("expected esc to restore activity, got %s", next.activeView)
+	}
+}
+
+func TestEscDoesNothingInRootActivityView(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.focus = focusContent
+	model.commandBar.SetValue("log")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected esc in the root activity view to stay inert")
+	}
+	next := updated.(Model)
+	if next.activeView != viewActivity {
+		t.Fatalf("expected esc in activity to keep the activity view, got %s", next.activeView)
+	}
+	if next.commandBar.Value() != "log" {
+		t.Fatalf("expected esc in activity to keep the typed command, got %q", next.commandBar.Value())
 	}
 }
 
@@ -1106,14 +1124,14 @@ func TestQNoLongerQuitsWhileWatcherActive(t *testing.T) {
 func TestPaletteExitCommandQuits(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.openPalette()
-	model.overlay.Input.SetValue("/exit")
+	model.overlay.Input.SetValue("exit")
 
 	cmd := model.submitPaletteSelection()
 	if cmd == nil {
-		t.Fatal("expected /exit to return a quit command")
+		t.Fatal("expected exit to return a quit command")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
-		t.Fatalf("expected tea.QuitMsg from /exit")
+		t.Fatalf("expected tea.QuitMsg from exit")
 	}
 }
 
@@ -1142,8 +1160,8 @@ func TestExportActionWritesResultsToExportsDirectory(t *testing.T) {
 	if !strings.Contains(string(content), "Exact file matches for cli/internal/ui/model.go") {
 		t.Fatalf("expected exported file to contain result text: %s", string(content))
 	}
-	if filepath.Dir(exported.path) != filepath.Join(root, ".contextplus", "exports") {
-		t.Fatalf("expected export path under .contextplus/exports, got %s", exported.path)
+	if filepath.Dir(exported.path) != filepath.Join(root, ".scplus", "exports") {
+		t.Fatalf("expected export path under .scplus/exports, got %s", exported.path)
 	}
 }
 
@@ -1153,11 +1171,11 @@ func TestFindHubItemsPreserveSuggestedBadge(t *testing.T) {
 		`Ranking mode: both`,
 		`Candidates: 2`,
 		``,
-		`1. .contextplus/hubs/observability.md [manual] score=0.931`,
+		`1. .scplus/hubs/observability.md [manual] score=0.931`,
 		`   Title: Observability`,
 		`   Keyword: 0.800 | Semantic: 0.990`,
 		``,
-		`2. .contextplus/hubs/scheduler-ops.md [suggested] score=0.812`,
+		`2. .scplus/hubs/scheduler-ops.md [suggested] score=0.812`,
 		`   Title: Scheduler Ops`,
 		`   Keyword: 0.700 | Semantic: 0.872`,
 	}, "\n"))
@@ -1201,5 +1219,25 @@ func TestMouseEventsAreIgnored(t *testing.T) {
 	next := updated.(Model)
 	if next.focus != focusContent {
 		t.Fatalf("expected mouse input to leave focus unchanged, got %d", next.focus)
+	}
+}
+
+func TestMouseWheelScrollsIssueWindow(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 100
+	model.height = 24
+	model.lastError = strings.Repeat("issue line that should scroll\n", 20)
+	if cmd := model.executePaletteAction("open-issue"); cmd != nil {
+		t.Fatalf("expected issue window open without async command")
+	}
+	before := model.detail.YOffset
+
+	updated, cmd := model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	if cmd != nil {
+		t.Fatalf("expected wheel scrolling to stay synchronous")
+	}
+	next := updated.(Model)
+	if next.detail.YOffset <= before {
+		t.Fatalf("expected wheel down to scroll the issue window, before=%d after=%d", before, next.detail.YOffset)
 	}
 }

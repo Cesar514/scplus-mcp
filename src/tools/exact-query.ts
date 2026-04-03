@@ -346,7 +346,7 @@ function summarizeStatus(branch: string, ahead: number, behind: number, files: R
 
 function shouldIgnoreRepoStatusPath(filePath: string): boolean {
   const normalized = normalizePath(filePath);
-  return normalized === ".contextplus" || normalized.startsWith(".contextplus/");
+  return normalized === ".scplus" || normalized.startsWith(".scplus/");
 }
 
 function parseDiffRanges(diffText: string): ChangeRange[] {

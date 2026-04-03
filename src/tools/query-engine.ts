@@ -441,7 +441,7 @@ async function buildManualHubCards(rootDir: string, structureState: PersistedStr
   const cards: Record<string, HubExplanationCard> = {};
   const hubs = await discoverHubs(rootDir);
   for (const hubPath of hubs) {
-    if (hubPath.startsWith(".contextplus/hubs/suggested/")) continue;
+    if (hubPath.startsWith(".scplus/hubs/suggested/")) continue;
     const hub = await parseHubFile(`${rootDir}/${hubPath}`);
     const linkedPaths = hub.links.map((link) => link.target);
     const modulePaths = Array.from(new Set(

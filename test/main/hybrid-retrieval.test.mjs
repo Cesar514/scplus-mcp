@@ -66,7 +66,7 @@ describe("hybrid-retrieval", () => {
       await ensureIdentifierSearchIndex(rootDir);
       const hybridChunk = await refreshHybridChunkIndex(rootDir, chunkRefresh.state);
       const hybridIdentifier = await refreshHybridIdentifierIndex(rootDir);
-      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
       const dbHybridChunk = readArtifactFromDb(dbPath, "hybrid-chunk-index");
       const dbHybridIdentifier = readArtifactFromDb(dbPath, "hybrid-identifier-index");
 

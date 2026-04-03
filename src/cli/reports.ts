@@ -110,7 +110,7 @@ async function getOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
 }
 
 const OBSERVABILITY_IGNORE_PREFIXES = [
-  ".contextplus/",
+  ".scplus/",
   ".git/",
   ".pixi/",
   "build/",

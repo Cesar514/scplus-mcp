@@ -74,7 +74,7 @@ describe("hub suggestions", () => {
 
       await indexCodebase({ rootDir, mode: "full" });
 
-      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
       const state = readArtifact(dbPath, "hub-suggestion-index");
       assert.ok(state);
       assert.equal(state.artifactVersion, 17);
@@ -105,7 +105,7 @@ describe("hub suggestions", () => {
       });
       assert.match(rankedOutput, /Ranked hubs for: "authentication session login"/);
       assert.match(rankedOutput, /Ranking mode: both/);
-      assert.match(rankedOutput, /\.contextplus\/hubs\/suggested\/authentication\.md \[suggested\]/);
+      assert.match(rankedOutput, /\.scplus\/hubs\/suggested\/authentication\.md \[suggested\]/);
     } finally {
       if (previousProvider === undefined) delete process.env.CONTEXTPLUS_EMBED_PROVIDER;
       else process.env.CONTEXTPLUS_EMBED_PROVIDER = previousProvider;

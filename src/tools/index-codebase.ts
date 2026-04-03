@@ -1,5 +1,5 @@
 // summary: Orchestrates the codebase indexing pipeline that materializes durable Context+ state.
-// FEATURE: Codebase indexing entrypoint for .contextplus project initialization.
+// FEATURE: Codebase indexing entrypoint for .scplus project initialization.
 // inputs: Repository roots, indexing mode selection, and stage execution dependencies.
 // outputs: Fresh generations of durable Context+ index artifacts and status metadata.
 
@@ -478,7 +478,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     return [
       `Indexed ${config.projectName}`,
       `Root: ${runtime.rootDir}`,
-      `scplus root: ${relative(rootDir, layout.root) || ".contextplus"}`,
+      `scplus root: ${relative(rootDir, layout.root) || ".scplus"}`,
       `Mode: ${mode}`,
       `Files: ${status.bootstrap?.files ?? 0}`,
       `Directories: ${status.bootstrap?.directories ?? 0}`,

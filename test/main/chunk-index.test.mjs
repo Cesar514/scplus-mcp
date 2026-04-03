@@ -119,7 +119,7 @@ describe("chunk-index", () => {
       const chunks = await buildChunkArtifactsForFile(rootDir, "src/app.ts");
       const firstWarm = await warmChunkEmbeddings(rootDir, chunks);
       const secondWarm = await warmChunkEmbeddings(rootDir, chunks);
-      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
       const chunkState = readArtifactFromDb(dbPath, "chunk-search-index");
       const chunkVectors = readVectorEntriesFromDb(dbPath, "chunk-search");
 

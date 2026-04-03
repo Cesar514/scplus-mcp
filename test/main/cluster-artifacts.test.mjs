@@ -87,7 +87,7 @@ describe("cluster-artifacts", () => {
       );
 
       await indexCodebase({ rootDir, mode: "full" });
-      const dbPath = join(rootDir, ".contextplus", "state", "index.sqlite");
+      const dbPath = join(rootDir, ".scplus", "state", "index.sqlite");
       const clusterState = readArtifactFromDb(dbPath, "semantic-cluster-index");
       const manifest = readArtifactFromDb(dbPath, "full-index-manifest");
       const rendered = await semanticNavigate({ rootDir, maxDepth: 3, maxClusters: 10 });

@@ -24,7 +24,7 @@ func TestCreateHubWritesMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create hub: %v", err)
 	}
-	if relativePath != ".contextplus/hubs/main-flow.md" {
+	if relativePath != ".scplus/hubs/main-flow.md" {
 		t.Fatalf("unexpected hub path %q", relativePath)
 	}
 	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relativePath)))
