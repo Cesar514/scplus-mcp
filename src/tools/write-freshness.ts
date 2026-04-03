@@ -123,15 +123,16 @@ export async function refreshPreparedIndexAfterWrite(
 }
 
 export function getWriteFreshnessRuntimeStats(): WriteFreshnessRuntimeStats {
-  return {
+  const stats: WriteFreshnessRuntimeStats = {
     refreshFailures: writeFreshnessRuntimeStats.refreshFailures,
-    lastRefreshFailure: writeFreshnessRuntimeStats.lastRefreshFailure
-      ? {
-        ...writeFreshnessRuntimeStats.lastRefreshFailure,
-        paths: [...writeFreshnessRuntimeStats.lastRefreshFailure.paths],
-      }
-      : undefined,
   };
+  if (writeFreshnessRuntimeStats.lastRefreshFailure) {
+    stats.lastRefreshFailure = {
+      ...writeFreshnessRuntimeStats.lastRefreshFailure,
+      paths: [...writeFreshnessRuntimeStats.lastRefreshFailure.paths],
+    };
+  }
+  return stats;
 }
 
 export function resetWriteFreshnessRuntimeStats(): void {
