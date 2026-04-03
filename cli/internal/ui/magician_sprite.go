@@ -9,71 +9,64 @@ import (
 )
 
 var magicianFrames = []string{
-	`....KKKK....
-...KWWWWK...
-..KWWWWWWK..
-.KWWRRRRWWK.
-KWRRRRRRRRWK
-KWRSHHHHSRWK
-WWRSSSSSSRWW
-WWRSEEEESRWW
-WWRSSSSSSRWW
-.KWWSSSSWWK.
-..KWWWWWWK..
-..KWGGGGWK..
-.KWRWGGWRWK.
-.KWRWWWWRWK.
-KWWRWWWWRWWK
-KRRKKKKKKRRK`,
-	`....KKKK....
-...KWWWWK...
-..KWWWWWWK..
-.KWWRRRRWWK.
-KWRRRRRRRRWK
-KWRSHHHHSRWK
-WWRSSSSSSRWW
-WWRSGGGGSRWW
-WWRSSSSSSRWW
-..KWWSSSWWK.
-.KWWWWWWWK..
-.KWGGGGGGWK.
-KWRWGGSGWRWK
-.KWRWWWWRWK.
-KWWRWWWWRWWK
-.RRKKKKKKRR.`,
-	`....KKKK....
-...KWWWWK...
-..KWWWWWWK..
-.KWWRRRRWWK.
-KWRRRRRRRRWK
-KWRSHHHHSRWK
-WWRSSSSSSRWW
-WWRSEEEESRWW
-WWRSSSSSRRWK
-.KWWSSSWRRWK
-..KWWWWSRRK.
-..KWGGGSRWK.
-.KWRWGSRRWK.
-.KWRWWRRRWK.
-KWWRWWWWRWWK
-KRRKKKKKKRRK`,
+	`......KK......
+....KKWWKK....
+...KWWWWWWK...
+..KWWRRRRWWK..
+.KWWRRRRRRWWK.
+.KWRRHHHHRRWK.
+KWWRSSSSSSRWWK
+KWRSSEEEESSRWK
+KWRSSEEEESSRWK
+.KWWSSSSSSWWK.
+..KWWWWWWWWK..
+..KWGGGGGGWK..
+.KWRWGGGGWRWK.
+.KWRWWWWWWRWK.
+KWWRWWWWWWRWWK
+KRRRWWWWWWRRRK`,
+	`......KK......
+....KKWWKK....
+...KWWWWWWK...
+..KWWRRRRWWK..
+.KWWRRRRRRWWK.
+.KWRRHHHHRRWK.
+KWWRSSSSSSRWWK
+KWRSSEEEESSRWK
+KWRSSEEEESSRWK
+.KWWSSSSSSWWK.
+..KWWWWWWWWK..
+.KWGGGGGGGGWK.
+KWRWGGGGGGWRWK
+.KWRWWWWWWRWK.
+KWWRWWWWWWRWWK
+.RRRWWWWWWRRR.`,
+	`......KK......
+....KKWWKK....
+...KWWWWWWK...
+..KWWRRRRWWK..
+.KWWRRRRRRWWK.
+.KWRRHHHHRRWK.
+KWWRSSSSSSRWWK
+KWRSSEEEESSRWK
+KWRSSEEEESRRWK
+.KWWSSSSWRRWK.
+..KWWWWWSRRK..
+..KWGGGSRRWK..
+.KWRWGSRRRWK..
+.KWRWWRRRRWK..
+KWWRWWWWWWRWWK
+KRRRWWWWWWRRRK`,
 }
 
-var magicianSpritePalette = map[rune]lipgloss.Style{
-	'K': lipgloss.NewStyle().Foreground(lipgloss.Color("236")),
-	'W': lipgloss.NewStyle().Foreground(lipgloss.Color("255")),
-	'R': lipgloss.NewStyle().Foreground(lipgloss.Color("197")),
-	'S': lipgloss.NewStyle().Foreground(lipgloss.Color("223")),
-	'H': lipgloss.NewStyle().Foreground(lipgloss.Color("221")),
-	'E': lipgloss.NewStyle().Foreground(lipgloss.Color("250")),
-	'G': lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
-}
-
-var brailleDotBits = [4][2]int{
-	{0x01, 0x08},
-	{0x02, 0x10},
-	{0x04, 0x20},
-	{0x40, 0x80},
+var magicianSpritePalette = map[rune]lipgloss.Color{
+	'K': lipgloss.Color("#2b3139"),
+	'W': lipgloss.Color("#ffffff"),
+	'R': lipgloss.Color("#ed145b"),
+	'S': lipgloss.Color("#ffd8bf"),
+	'H': lipgloss.Color("#e6bf6f"),
+	'E': lipgloss.Color("#d0d3d8"),
+	'G': lipgloss.Color("#e2e2e4"),
 }
 
 func frameTokenRows(frame string) []string {
@@ -100,56 +93,66 @@ func expandFrameTokens(frame string, xScale int, yScale int) [][]rune {
 	return expanded
 }
 
-func dominantToken(counts map[rune]int) rune {
-	dominant := '.'
-	maxCount := 0
-	for _, token := range []rune{'K', 'W', 'R', 'S', 'H', 'E', 'G'} {
-		if counts[token] > maxCount {
-			dominant = token
-			maxCount = counts[token]
-		}
-	}
-	return dominant
+func opaqueToken(token rune) bool {
+	return token != '.'
 }
 
-func renderBrailleSprite(frame string, styled bool) string {
-	pixels := expandFrameTokens(frame, 2, 2)
+func renderHalfBlockSprite(frame string, styled bool) string {
+	pixels := expandFrameTokens(frame, 2, 1)
 	if len(pixels) == 0 {
 		return ""
 	}
+	if len(pixels)%2 != 0 {
+		padding := make([]rune, len(pixels[0]))
+		for index := range padding {
+			padding[index] = '.'
+		}
+		pixels = append(pixels, padding)
+	}
 	height := len(pixels)
 	width := len(pixels[0])
-	rendered := make([]string, 0, height/4)
-	for y := 0; y < height; y += 4 {
+	rendered := make([]string, 0, height/2)
+	for y := 0; y < height; y += 2 {
 		var builder strings.Builder
-		for x := 0; x < width; x += 2 {
-			mask := 0
-			counts := make(map[rune]int)
-			for dy := 0; dy < 4; dy++ {
-				for dx := 0; dx < 2; dx++ {
-					token := pixels[y+dy][x+dx]
-					if token == '.' {
-						continue
-					}
-					mask |= brailleDotBits[dy][dx]
-					counts[token]++
-				}
-			}
-			if mask == 0 {
+		for x := 0; x < width; x++ {
+			topToken := pixels[y][x]
+			bottomToken := pixels[y+1][x]
+			topOpaque := opaqueToken(topToken)
+			bottomOpaque := opaqueToken(bottomToken)
+			if !topOpaque && !bottomOpaque {
 				builder.WriteRune(' ')
 				continue
 			}
-			glyph := string(rune(0x2800 + mask))
 			if !styled {
-				builder.WriteString(glyph)
+				switch {
+				case topOpaque && bottomOpaque && topToken == bottomToken:
+					builder.WriteRune('█')
+				case topOpaque && !bottomOpaque:
+					builder.WriteRune('▀')
+				case !topOpaque && bottomOpaque:
+					builder.WriteRune('▄')
+				default:
+					builder.WriteRune('▀')
+				}
 				continue
 			}
-			style, ok := magicianSpritePalette[dominantToken(counts)]
-			if !ok {
-				builder.WriteString(glyph)
+			switch {
+			case topOpaque && bottomOpaque && topToken == bottomToken:
+				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[topToken]).Render("█"))
+			case topOpaque && !bottomOpaque:
+				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[topToken]).Render("▀"))
+			case !topOpaque && bottomOpaque:
+				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[bottomToken]).Render("▄"))
+			default:
+				topColor, topOK := magicianSpritePalette[topToken]
+				bottomColor, bottomOK := magicianSpritePalette[bottomToken]
+				if !topOK || !bottomOK {
+					builder.WriteRune('▀')
+					continue
+				}
+				builder.WriteString(lipgloss.NewStyle().Foreground(topColor).Background(bottomColor).Render("▀"))
 				continue
 			}
-			builder.WriteString(style.Render(glyph))
 		}
 		rendered = append(rendered, builder.String())
 	}
@@ -157,9 +160,9 @@ func renderBrailleSprite(frame string, styled bool) string {
 }
 
 func renderMagicianASCII(frame string) string {
-	return renderBrailleSprite(frame, false)
+	return renderHalfBlockSprite(frame, false)
 }
 
 func renderMagician(frame string, width int) string {
-	return centerBlock(renderBrailleSprite(frame, true), max(12, width))
+	return centerBlock(renderHalfBlockSprite(frame, true), max(12, width))
 }

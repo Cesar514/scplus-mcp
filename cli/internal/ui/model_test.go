@@ -275,13 +275,13 @@ func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
 		}
 	}
 	if renderedLineCount(rendered) != 8 {
-		t.Fatalf("expected compact braille sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
+		t.Fatalf("expected compact sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
 	}
-	if maxRenderedLineWidth(rendered) > 16 {
-		t.Fatalf("expected compact braille sprite width <= 16, got %d in %s", maxRenderedLineWidth(rendered), rendered)
+	if maxRenderedLineWidth(rendered) > 32 {
+		t.Fatalf("expected compact sprite width <= 32, got %d in %s", maxRenderedLineWidth(rendered), rendered)
 	}
-	if !strings.ContainsRune(rendered, '⣿') && !strings.ContainsRune(rendered, '⣾') && !strings.ContainsRune(rendered, '⣷') {
-		t.Fatalf("expected dense braille glyphs in compact sprite: %s", rendered)
+	if !strings.ContainsRune(rendered, '█') && !strings.ContainsRune(rendered, '▀') && !strings.ContainsRune(rendered, '▄') {
+		t.Fatalf("expected dense half-block glyphs in compact sprite: %s", rendered)
 	}
 }
 

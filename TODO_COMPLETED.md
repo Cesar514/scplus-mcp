@@ -473,3 +473,9 @@
 - [x] Compress the girl-magician terminal sprite into roughly 8 real CLI rows by replacing the coarse double-glyph block renderer with a masked braille renderer.
 - [x] Keep the sprite visually dense in a much smaller footprint by upsampling the source mask into braille subpixels before terminal rendering.
 - [x] Update regressions so the compact output is verified for 8-line height, narrow width, dense braille glyph usage, and stable centering.
+
+## high fidelity half-block magician completed
+
+- [x] Replace the lossy braille renderer with a truecolor half-block sprite renderer so the eyes, hair, hood trim, and arm poses keep exact source pixels inside the same 8-line CLI height.
+- [x] Widen the source frame masks so the final terminal outline more closely matches the provided reference images instead of collapsing facial and costume detail.
+- [x] Verify the updated likeness with focused UI tests, a rebuilt `scplus-cli` snapshot render, and a generated visual sprite preview image for manual inspection.
