@@ -675,71 +675,75 @@ async function runBridgeServeCommand(): Promise<void> {
   }
 }
 
-async function runBridgeCommand(args: string[]): Promise<void> {
-  const [subcommand, ...rest] = args;
-  if (!subcommand) throw new Error("bridge requires a subcommand.");
-  const normalizedSubcommand = normalizeBridgeCommand(subcommand);
-  const parsed = parseArgs(rest);
-  const rootDir = resolve(getFlag(parsed.flags, "root") ?? process.cwd());
-  const positionals = parsed.positionals;
+async function handleDirectBridgeCommand(subcommand: string, rest: string[]): Promise<boolean> {
   if (subcommand === "doctor") {
     await runDoctorCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "status") {
     await runStatusCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "changes") {
     await runChangesCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "restore-points" || subcommand === "restore_points") {
     await runRestorePointsCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "validate-index" || subcommand === "validate_index") {
     await runValidateIndexCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "cluster") {
     await runClusterCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "view-clusters") {
     await runViewClustersCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "hubs" || subcommand === "find-hub") {
     await runHubsCommand(rest, true);
-    return;
+    return true;
   }
   if (subcommand === "tree") {
     await runTreeCommand(rest.concat("--json"));
-    return;
+    return true;
   }
+  return false;
+}
+
+async function handleSharedBridgeCommand(
+  normalizedSubcommand: string,
+  rootDir: string,
+  parsed: ReturnType<typeof parseArgs>
+): Promise<void> {
+  const { flags, positionals } = parsed;
+
   if (normalizedSubcommand === "symbol") {
-    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    const query = getFlag(flags, "query") ?? positionals[0];
     if (!query) throw new Error("bridge symbol requires a query argument.");
     writeJson(await executeSharedBridgeCommand("symbol", {
       root: rootDir,
       query,
-      topK: parseInteger(getFlag(parsed.flags, "top-k"), 10),
+      topK: parseInteger(getFlag(flags, "top-k"), 10),
     }));
     return;
   }
   if (normalizedSubcommand === "word") {
-    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    const query = getFlag(flags, "query") ?? positionals[0];
     if (!query) throw new Error("bridge word requires a query argument.");
     writeJson(await executeSharedBridgeCommand("word", {
       root: rootDir,
       query,
-      topK: parseInteger(getFlag(parsed.flags, "top-k"), 10),
+      topK: parseInteger(getFlag(flags, "top-k"), 10),
     }));
     return;
   }
   if (normalizedSubcommand === "outline") {
-    const filePath = getFlag(parsed.flags, "file-path") ?? positionals[0];
+    const filePath = getFlag(flags, "file-path") ?? positionals[0];
     if (!filePath) throw new Error("bridge outline requires a file path argument.");
     writeJson(await executeSharedBridgeCommand("outline", {
       root: rootDir,
@@ -748,7 +752,7 @@ async function runBridgeCommand(args: string[]): Promise<void> {
     return;
   }
   if (normalizedSubcommand === "deps") {
-    const target = getFlag(parsed.flags, "target") ?? positionals[0];
+    const target = getFlag(flags, "target") ?? positionals[0];
     if (!target) throw new Error("bridge deps requires a target path argument.");
     writeJson(await executeSharedBridgeCommand("deps", {
       root: rootDir,
@@ -757,53 +761,53 @@ async function runBridgeCommand(args: string[]): Promise<void> {
     return;
   }
   if (normalizedSubcommand === "search") {
-    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    const query = getFlag(flags, "query") ?? positionals[0];
     if (!query) throw new Error("bridge search requires a query argument.");
     writeJson(await executeSharedBridgeCommand("search", {
       root: rootDir,
-      intent: parseBridgeSearchIntent(getFlag(parsed.flags, "intent")),
-      searchType: parseBridgeSearchType(getFlag(parsed.flags, "search-type")),
+      intent: parseBridgeSearchIntent(getFlag(flags, "intent")),
+      searchType: parseBridgeSearchType(getFlag(flags, "search-type")),
       query,
-      retrievalMode: parseBridgeRetrievalMode(getFlag(parsed.flags, "retrieval-mode")),
-      topK: parseInteger(getFlag(parsed.flags, "top-k"), 5),
-      includeKinds: parseStringList(getFlag(parsed.flags, "include-kinds")),
+      retrievalMode: parseBridgeRetrievalMode(getFlag(flags, "retrieval-mode")),
+      topK: parseInteger(getFlag(flags, "top-k"), 5),
+      includeKinds: parseStringList(getFlag(flags, "include-kinds")),
     }));
     return;
   }
   if (normalizedSubcommand === "research") {
-    const query = getFlag(parsed.flags, "query") ?? positionals[0];
+    const query = getFlag(flags, "query") ?? positionals[0];
     if (!query) throw new Error("bridge research requires a query argument.");
     writeJson(await executeSharedBridgeCommand("research", {
       root: rootDir,
       query,
-      topK: parseInteger(getFlag(parsed.flags, "top-k"), 5),
-      includeKinds: parseStringList(getFlag(parsed.flags, "include-kinds")),
-      maxRelated: getFlag(parsed.flags, "max-related") ? parseInteger(getFlag(parsed.flags, "max-related"), 6) : undefined,
-      maxSubsystems: getFlag(parsed.flags, "max-subsystems") ? parseInteger(getFlag(parsed.flags, "max-subsystems"), 3) : undefined,
-      maxHubs: getFlag(parsed.flags, "max-hubs") ? parseInteger(getFlag(parsed.flags, "max-hubs"), 4) : undefined,
+      topK: parseInteger(getFlag(flags, "top-k"), 5),
+      includeKinds: parseStringList(getFlag(flags, "include-kinds")),
+      maxRelated: getFlag(flags, "max-related") ? parseInteger(getFlag(flags, "max-related"), 6) : undefined,
+      maxSubsystems: getFlag(flags, "max-subsystems") ? parseInteger(getFlag(flags, "max-subsystems"), 3) : undefined,
+      maxHubs: getFlag(flags, "max-hubs") ? parseInteger(getFlag(flags, "max-hubs"), 4) : undefined,
     }));
     return;
   }
   if (normalizedSubcommand === "lint") {
     writeJson(await executeSharedBridgeCommand("lint", {
       root: rootDir,
-      targetPath: getFlag(parsed.flags, "target-path") ?? positionals[0],
+      targetPath: getFlag(flags, "target-path") ?? positionals[0],
     }));
     return;
   }
   if (normalizedSubcommand === "blast-radius") {
-    const symbolName = getFlag(parsed.flags, "symbol-name") ?? positionals[0];
+    const symbolName = getFlag(flags, "symbol-name") ?? positionals[0];
     if (!symbolName) throw new Error("bridge blast-radius requires a symbol name argument.");
     writeJson(await executeSharedBridgeCommand("blast-radius", {
       root: rootDir,
       symbolName,
-      fileContext: getFlag(parsed.flags, "file-context"),
+      fileContext: getFlag(flags, "file-context"),
     }));
     return;
   }
   if (normalizedSubcommand === "checkpoint") {
-    const filePath = getFlag(parsed.flags, "file-path") ?? positionals[0];
-    const newContent = getFlag(parsed.flags, "new-content");
+    const filePath = getFlag(flags, "file-path") ?? positionals[0];
+    const newContent = getFlag(flags, "new-content");
     if (!filePath) throw new Error("bridge checkpoint requires a file path argument.");
     if (!newContent) throw new Error("bridge checkpoint requires --new-content.");
     writeJson(await executeSharedBridgeCommand("checkpoint", {
@@ -814,7 +818,7 @@ async function runBridgeCommand(args: string[]): Promise<void> {
     return;
   }
   if (normalizedSubcommand === "restore") {
-    const pointId = getFlag(parsed.flags, "point-id") ?? positionals[0];
+    const pointId = getFlag(flags, "point-id") ?? positionals[0];
     if (!pointId) throw new Error("bridge restore requires a restore point id.");
     writeJson(await executeSharedBridgeCommand("restore", {
       root: rootDir,
@@ -825,12 +829,12 @@ async function runBridgeCommand(args: string[]): Promise<void> {
   if (normalizedSubcommand === "validate-index") {
     writeJson(await executeSharedBridgeCommand("validate-index", {
       root: rootDir,
-      mode: normalizeIndexMode(getFlag(parsed.flags, "mode")),
+      mode: normalizeIndexMode(getFlag(flags, "mode")),
     }));
     return;
   }
   if (normalizedSubcommand === "repair-index") {
-    const target = getFlag(parsed.flags, "target");
+    const target = getFlag(flags, "target");
     if (!target) throw new Error("bridge repair-index requires --target.");
     writeJson(await executeSharedBridgeCommand("repair-index", {
       root: rootDir,
@@ -838,7 +842,23 @@ async function runBridgeCommand(args: string[]): Promise<void> {
     }));
     return;
   }
-  throw new Error(`Unsupported bridge subcommand "${subcommand}".`);
+
+  throw new Error(`Unsupported bridge subcommand "${normalizedSubcommand}".`);
+}
+
+async function runBridgeCommand(args: string[]): Promise<void> {
+  const [subcommand, ...rest] = args;
+  if (!subcommand) throw new Error("bridge requires a subcommand.");
+
+  if (await handleDirectBridgeCommand(subcommand, rest)) {
+    return;
+  }
+
+  const normalizedSubcommand = normalizeBridgeCommand(subcommand);
+  const parsed = parseArgs(rest);
+  const rootDir = resolve(getFlag(parsed.flags, "root") ?? process.cwd());
+
+  await handleSharedBridgeCommand(normalizedSubcommand, rootDir, parsed);
 }
 
 export async function handleCliCommand(args: string[]): Promise<boolean> {
