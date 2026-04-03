@@ -318,12 +318,14 @@ export async function refreshHubSuggestionState(rootDir: string): Promise<{ stat
 
   if (suggestionOrder.length > 0) {
     await mkdir(suggestionsDir, { recursive: true });
-    for (const suggestion of suggestionOrder) {
-      const linkedSuggestions = suggestion.linkedSuggestionIds
-        .map((suggestionId) => suggestions[suggestionId])
-        .filter((value): value is HubSuggestion => Boolean(value));
-      await writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
-    }
+    await Promise.all(
+      suggestionOrder.map((suggestion) => {
+        const linkedSuggestions = suggestion.linkedSuggestionIds
+          .map((suggestionId) => suggestions[suggestionId])
+          .filter((value): value is HubSuggestion => Boolean(value));
+        return writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
+      }),
+    );
   }
 
   const state: PersistedHubSuggestionState = {
