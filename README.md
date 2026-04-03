@@ -17,7 +17,7 @@ The current committed benchmark artifact reports `22` golden operator questions,
 - Public human CLI command: `scplus-cli`
 - Stable repo-local state directory: `.contextplus/`
 - Stable runtime env prefix: `CONTEXTPLUS_`
-- Existing repo and infrastructure identifiers may still use `contextplus` where external URLs or provisioned services must stay stable.
+- Published repository, package, and deployable service identifiers should use `scplus-mcp` wherever the target system is configurable.
 
 ## Local Install
 

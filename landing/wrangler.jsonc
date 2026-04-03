@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "contextplus",
+  "name": "scplus-mcp",
   "compatibility_date": "2026-02-28",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
@@ -11,11 +11,10 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "contextplus",
+      "service": "scplus-mcp",
     },
   ],
   "images": {
     "binding": "IMAGES",
   },
 }
-

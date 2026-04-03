@@ -6,6 +6,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createRequire } from "module";
 import { resolve } from "path";
 import { z } from "zod";
 import { createBackendCore } from "./cli/backend-core.js";
@@ -42,6 +43,8 @@ import {
 import { runSearchByIntent } from "./tools/query-intent.js";
 import { formatPreparedIndexFreshnessHeader } from "./tools/write-freshness.js";
 const passthroughArgs = process.argv.slice(2);
+const require = createRequire(import.meta.url);
+const { version: PACKAGE_VERSION } = require("../package.json") as { version: string };
 const ROOT_DIR = passthroughArgs[0] && !CLI_SUBCOMMANDS.has(passthroughArgs[0])
   ? resolve(passthroughArgs[0])
   : process.cwd();
@@ -69,7 +72,7 @@ function withRequestActivity<TArgs, TResult>(
 
 const server = new McpServer({
   name: "scplus-mcp",
-  version: "1.0.0",
+  version: PACKAGE_VERSION,
 }, {
   capabilities: { logging: {} },
 });
