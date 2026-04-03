@@ -661,17 +661,14 @@ function resolveEmbeddingNamespaces(fileName: string): { primary: string; second
 
 export async function loadEmbeddingCache(rootDir: string, fileName: string): Promise<EmbeddingCache> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
-  const cache: EmbeddingCache = {};
   const primaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.primary);
-  for (const [entryId, entry] of primaryEntries) {
-    cache[entryId] = entry;
-  }
+  const cache: EmbeddingCache = Object.fromEntries(primaryEntries);
+
   if (namespaces.secondary) {
     const secondaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.secondary);
-    for (const [entryId, entry] of secondaryEntries) {
-      cache[entryId] = entry;
-    }
+    Object.assign(cache, Object.fromEntries(secondaryEntries));
   }
+
   return cache;
 }
 
@@ -681,17 +678,16 @@ export async function loadEmbeddingCacheEntries(
   entryIds: string[],
 ): Promise<EmbeddingCache> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
-  const cache: EmbeddingCache = {};
   const primaryEntryIds = namespaces.secondary
     ? entryIds.filter((entryId) => !entryId.startsWith("callsite:"))
     : entryIds;
   const primaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.primary, primaryEntryIds);
-  for (const [entryId, entry] of primaryEntries) cache[entryId] = entry;
+  const cache: EmbeddingCache = Object.fromEntries(primaryEntries);
 
   if (namespaces.secondary) {
     const secondaryEntryIds = entryIds.filter((entryId) => entryId.startsWith("callsite:"));
     const secondaryEntries = await loadEmbeddingNamespaceEntries(rootDir, namespaces.secondary, secondaryEntryIds);
-    for (const [entryId, entry] of secondaryEntries) cache[entryId] = entry;
+    Object.assign(cache, Object.fromEntries(secondaryEntries));
   }
 
   return cache;
