@@ -13,6 +13,10 @@ dist/
 # Generated files
 *.js.map
 *.d.ts
+.scplus/
+.contextplus/
+test/fixtures/**/.scplus/
+test/fixtures/**/.contextplus/
 
 # Environment
 .env
