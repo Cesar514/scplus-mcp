@@ -19,7 +19,7 @@ import (
 
 func runInteractive(root string, client *backend.Client) error {
 	model := ui.NewModel(root, client)
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	program := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := program.Run()
 	return err
 }

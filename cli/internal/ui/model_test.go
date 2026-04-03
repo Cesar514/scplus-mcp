@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"scplus-cli/cli/internal/backend"
 )
 
@@ -19,6 +20,18 @@ func renderedLineCount(value string) int {
 		return 0
 	}
 	return strings.Count(value, "\n") + 1
+}
+
+func maxRenderedLineWidth(value string) int {
+	lines := strings.Split(value, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
 }
 
 func TestRenderDoctorPlainIncludesCoreSections(t *testing.T) {
@@ -537,7 +550,7 @@ func TestCommandPaletteOverlayRendersPhase26Commands(t *testing.T) {
 		"/overview",
 		"/tree",
 		"/issue",
-		"/search",
+		"/changes",
 		"Palette: type a command | Up/Down select | Enter run | /exit quits | Esc close",
 	} {
 		if !strings.Contains(rendered, needle) {
@@ -719,8 +732,9 @@ func TestActivityCommandSuggestionsStayBoundedWhileTypingSlash(t *testing.T) {
 
 	rendered := model.renderActivityShell(90, 40)
 	for _, needle := range []string{
-		"Commands | scplus-cli",
-		"Search slash commands and press Enter to run",
+		"Activity | scplus-cli",
+		"The magician is resting",
+		"Commands",
 		"/exit",
 		"/activity",
 		"/overview",
@@ -786,8 +800,8 @@ func TestActivityShellHidesPreviewsWhileSlashCommandsAreActive(t *testing.T) {
 	if strings.Contains(rendered, "Current status:") {
 		t.Fatalf("expected slash-command browser to replace the activity status block: %s", rendered)
 	}
-	if !strings.Contains(rendered, "Commands | scplus-cli") {
-		t.Fatalf("expected slash-command browser heading in slash mode: %s", rendered)
+	if !strings.Contains(rendered, "Commands") {
+		t.Fatalf("expected slash-command section in slash mode: %s", rendered)
 	}
 }
 
@@ -889,6 +903,31 @@ func TestIssueViewStaysWithinTerminalHeight(t *testing.T) {
 	}
 }
 
+func TestIssueViewReplacesActivityWindow(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	model.lastError = "blocker line one\nblocker line two"
+
+	if cmd := model.executePaletteAction("open-issue"); cmd != nil {
+		t.Fatalf("expected issue command to switch views synchronously")
+	}
+
+	rendered := model.View()
+	if strings.Contains(rendered, "Activity | scplus-cli") {
+		t.Fatalf("expected issue view to replace the activity window content: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Issue | scplus-cli") {
+		t.Fatalf("expected issue title in the single window: %s", rendered)
+	}
+	if !strings.Contains(rendered, "blocker line one") {
+		t.Fatalf("expected full issue text in the replacement window: %s", rendered)
+	}
+	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
+		t.Fatalf("expected exactly one bordered window in the rendered view: %s", rendered)
+	}
+}
+
 func TestActivityViewStaysWithinTerminalHeight(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 113
@@ -906,6 +945,29 @@ func TestActivityViewStaysWithinTerminalHeight(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Current issue:") {
 		t.Fatalf("expected activity issue preview to remain visible: %s", rendered)
+	}
+}
+
+func TestSlashCommandViewKeepsSingleWindowWithinTerminalBounds(t *testing.T) {
+	model := NewModel("/tmp/contextplus", nil)
+	model.width = 113
+	model.height = 27
+	model.commandBar.SetValue("/lo")
+	model.lastError = "backend command failed"
+	model.logs = append(model.logs, "doctor report refreshed")
+
+	rendered := model.View()
+	if renderedLineCount(rendered) > model.height {
+		t.Fatalf("expected slash-command view to stay within terminal height %d, got %d lines: %s", model.height, renderedLineCount(rendered), rendered)
+	}
+	if maxRenderedLineWidth(rendered) > model.width {
+		t.Fatalf("expected slash-command view to stay within terminal width %d, got max width %d: %s", model.width, maxRenderedLineWidth(rendered), rendered)
+	}
+	if strings.Count(rendered, "╭") != 1 || strings.Count(rendered, "╰") != 1 {
+		t.Fatalf("expected exactly one bordered window while browsing slash commands: %s", rendered)
+	}
+	if count := strings.Count(rendered, "(=^.^=)"); count != 1 {
+		t.Fatalf("expected the centered magician to remain visible once in slash mode, got %d: %s", count, rendered)
 	}
 }
 
@@ -1114,14 +1176,18 @@ func TestRestoreLetterShortcutIsDisabled(t *testing.T) {
 	}
 }
 
-func TestMousePressFocusesJobsPane(t *testing.T) {
+func TestMouseEventsAreIgnored(t *testing.T) {
 	model := NewModel("/tmp/contextplus", nil)
 	model.width = 160
 	model.height = 40
-	if cmd := model.handleMouse(tea.MouseMsg{X: 10, Y: 34, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}); cmd != nil {
-		t.Fatalf("expected mouse focus change without extra command")
+	model.focus = focusContent
+
+	updated, cmd := model.Update(tea.MouseMsg{X: 10, Y: 34, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if cmd != nil {
+		t.Fatalf("expected mouse events to be ignored without extra command")
 	}
-	if model.focus != focusJobs {
-		t.Fatalf("expected mouse click in the bottom-left pane to focus jobs, got %d", model.focus)
+	next := updated.(Model)
+	if next.focus != focusContent {
+		t.Fatalf("expected mouse input to leave focus unchanged, got %d", next.focus)
 	}
 }

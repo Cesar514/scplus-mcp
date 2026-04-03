@@ -1,6 +1,6 @@
 // summary: Holds the Bubble Tea model, state transitions, and rendering for the operator console.
 // FEATURE: keeps pane layout, typed section state, and backend-driven actions.
-// inputs: Backend events, keyboard and mouse messages, and typed section data.
+// inputs: Backend events, keyboard messages, and typed section data.
 // outputs: Updated UI state, rendered panes, and follow-up Bubble Tea commands.
 package ui
 
@@ -929,7 +929,7 @@ func (m *Model) openHelpOverlay() {
 	m.overlay = newOverlayState()
 	m.overlay.Mode = overlayHelp
 	m.overlay.Title = "Help"
-	m.overlay.Subtitle = "Navigation, command, filter, export, and mouse bindings"
+	m.overlay.Subtitle = "Navigation, command, filter, and export bindings"
 	m.overlay.PreviousFocus = m.focus
 	m.focus = focusOverlay
 }
@@ -1049,9 +1049,17 @@ func allocateWindowHeights(available int, includeActivity bool, includeOverlay b
 }
 
 func renderCard(width int, height int, content string) string {
-	rendered := cardStyle.Width(width).Render(content)
+	if width <= 0 {
+		width = 1
+	}
+	frameWidth, frameHeight := cardStyle.GetFrameSize()
+	contentWidth := max(1, width-frameWidth)
+	rendered := cardStyle.Width(contentWidth).Render(content)
 	if height <= 0 {
 		return rendered
+	}
+	if height < frameHeight {
+		height = frameHeight
 	}
 	lines := strings.Split(rendered, "\n")
 	if len(lines) < height {
@@ -1319,7 +1327,7 @@ func (m *Model) refreshSidebar() {
 		{ID: "watch", Title: watchLabel, Subtitle: watchSubtitle, IsAction: true, Action: "watch"},
 		{ID: "hub-create", Title: "New hub", Subtitle: "Create a manual feature hub", IsAction: true, Action: "hub-create"},
 		{ID: "palette", Title: "Command palette", Subtitle: "Search backend actions, exact lookups, and exports", IsAction: true, Action: "palette"},
-		{ID: "help", Title: "Help", Subtitle: "Show keybindings, filters, exports, and mouse usage", IsAction: true, Action: "help"},
+		{ID: "help", Title: "Help", Subtitle: "Show keybindings, filters, and exports", IsAction: true, Action: "help"},
 	}
 	if m.sidebarIndex >= len(m.sidebar) {
 		m.sidebarIndex = max(0, len(m.sidebar)-1)
@@ -1409,6 +1417,22 @@ func (m *Model) setTableSectionRows(kind string, items []contentItem, rows []tab
 
 func (m Model) useStackedLayout() bool {
 	return m.width < narrowLayoutCut || m.height < stackedHeightCut
+}
+
+func singleWindowCardWidth(totalWidth int) int {
+	if totalWidth <= 0 {
+		return 1
+	}
+	target := int(float64(totalWidth) * 0.75)
+	return min(max(36, target), max(1, totalWidth-2))
+}
+
+func singleWindowCardHeight(totalHeight int) int {
+	if totalHeight <= 0 {
+		return 1
+	}
+	target := int(float64(totalHeight) * 0.75)
+	return min(max(12, target), totalHeight)
 }
 
 func (m *Model) restoreLastView() bool {
@@ -2167,117 +2191,6 @@ func (m *Model) updateOverlay(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *Model) handleMouse(message tea.MouseMsg) tea.Cmd {
-	switch message.Action {
-	case tea.MouseActionRelease:
-		return nil
-	case tea.MouseActionPress:
-		if message.Button == tea.MouseButtonWheelUp {
-			if m.focus == focusSidebar {
-				m.moveSidebar(-1)
-				return nil
-			}
-			if m.focus == focusLogs {
-				m.logViewport.LineUp(3)
-				return nil
-			}
-			if m.focus == focusDetail {
-				m.detail.LineUp(3)
-				return nil
-			}
-			if m.focus == focusJobs {
-				m.jobTable.SetCursor(max(0, m.jobTable.Cursor()-1))
-				return nil
-			}
-			if m.focus == focusContent {
-				m.moveContent(-1)
-				return nil
-			}
-		}
-		if message.Button == tea.MouseButtonWheelDown {
-			if m.focus == focusSidebar {
-				m.moveSidebar(1)
-				return nil
-			}
-			if m.focus == focusLogs {
-				m.logViewport.LineDown(3)
-				return nil
-			}
-			if m.focus == focusDetail {
-				m.detail.LineDown(3)
-				return nil
-			}
-			if m.focus == focusJobs {
-				m.jobTable.SetCursor(min(max(0, len(m.jobOrder)-1), m.jobTable.Cursor()+1))
-				return nil
-			}
-			if m.focus == focusContent {
-				m.moveContent(1)
-				return nil
-			}
-		}
-		if message.Button != tea.MouseButtonLeft {
-			return nil
-		}
-		headerHeight := 8
-		y := message.Y
-		x := message.X
-		if y < headerHeight {
-			return nil
-		}
-		relativeY := y - headerHeight
-		if m.useStackedLayout() {
-			sidebarHeight, contentHeight, detailHeight, jobsHeight, logsHeight := m.stackedPaneHeights()
-			sectionHeights := []struct {
-				focus  int
-				height int
-			}{
-				{focusSidebar, sidebarHeight},
-				{focusContent, contentHeight},
-				{focusDetail, detailHeight},
-				{focusJobs, jobsHeight},
-				{focusLogs, logsHeight},
-			}
-			accumulated := 0
-			for _, pane := range sectionHeights {
-				accumulated += pane.height + 1
-				if relativeY <= accumulated {
-					m.focus = pane.focus
-					m.recordNavigation()
-					return nil
-				}
-			}
-			return nil
-		}
-		jobsHeight := max(minJobsHeight, m.height/4)
-		mainHeight := max(16, m.height-jobsHeight-8)
-		sidebarWidth := max(minSidebarWidth, m.width/5)
-		contentWidth := max(minContentWidth, m.width/3)
-		if relativeY > mainHeight {
-			if x <= max(minJobsWidth, m.width/2) {
-				m.focus = focusJobs
-			} else {
-				m.focus = focusLogs
-			}
-			m.recordNavigation()
-			return nil
-		}
-		if x <= sidebarWidth {
-			m.focus = focusSidebar
-			entryIndex := max(0, (relativeY-2)/2)
-			if entryIndex < len(m.sidebar) {
-				m.sidebarIndex = entryIndex
-			}
-		} else if x <= sidebarWidth+contentWidth {
-			m.focus = focusContent
-		} else {
-			m.focus = focusDetail
-		}
-		m.recordNavigation()
-	}
-	return nil
-}
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch message := msg.(type) {
@@ -2476,8 +2389,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshOverviewSection()
 		m.syncDetailViewport()
 		return m, waitForBackendEventCmd(m.client.Events())
-	case tea.MouseMsg:
-		return m, m.handleMouse(message)
 	case tea.KeyMsg:
 		if m.overlay.Mode != overlayNone {
 			return m.updateOverlay(message)
@@ -2789,6 +2700,15 @@ func (m Model) buildDetailContent() string {
 		return m.renderWizardDetail()
 	}
 	section := m.activeSection()
+	if section == nil {
+		return "No section state."
+	}
+	switch section.ID {
+	case viewIssue, viewLog:
+		if strings.TrimSpace(section.RawText) != "" {
+			return section.RawText
+		}
+	}
 	if len(section.Items) == 0 {
 		return section.EmptyMessage
 	}
@@ -2923,27 +2843,36 @@ func (m *Model) renderSectionTable(section *sectionState, width int, height int)
 }
 
 func (m Model) renderActivityShell(width int, height int) string {
+	frameWidth, frameHeight := cardStyle.GetFrameSize()
+	innerWidth := max(12, width-frameWidth)
 	bar := m.commandBar
-	bar.Width = max(24, width-8)
+	bar.Width = max(24, innerWidth-2)
 	query := strings.TrimSpace(bar.Value())
-	if strings.HasPrefix(query, "/") {
-		return m.renderActivityCommandBrowser(width, height, bar)
-	}
-	magician := renderMagician(magicianFrames[m.magicianFrame], width-4)
 	activeJob := m.activeStatusJob()
-	wrapWidth := max(24, int(float64(width)*0.7))
+	magician := renderMagician(magicianFrames[m.magicianFrame], innerWidth)
+	wrapWidth := max(24, innerWidth-2)
 	lines := []string{
-		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent) + subtitleStyle.Render(" | "+m.magicianRuntimeStatus(activeJob)),
+		renderPaneTitle("Activity | scplus-cli", m.focus == focusContent),
+		subtitleStyle.Width(innerWidth).Render(m.magicianRuntimeStatus(activeJob)),
+		"",
 		magician,
+		"",
 		bar.View(),
-		subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
-			"Current status: %s | state=%s | phase=%s | pending=%d",
-			activeJob.Title,
-			jobStateLabel(activeJob),
-			formatBlankAsNone(activeJob.Phase),
-			m.pendingChangeCount(),
-		)),
 	}
+	if strings.HasPrefix(query, "/") {
+		lines = append(lines, "", subtitleStyle.Render("Commands"))
+		remainingHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n")))
+		lines = append(lines, m.renderActivityCommandRows(innerWidth, remainingHeight)...)
+		return renderCard(width, height, strings.Join(lines, "\n"))
+	}
+	lines = append(lines, "")
+	lines = append(lines, subtitleStyle.Width(wrapWidth).Render(fmt.Sprintf(
+		"Current status: %s | state=%s | phase=%s | pending=%d",
+		activeJob.Title,
+		jobStateLabel(activeJob),
+		formatBlankAsNone(activeJob.Phase),
+		m.pendingChangeCount(),
+	)))
 	if strings.TrimSpace(activeJob.Message) != "" {
 		lines = append(lines, renderPreviewSectionWithLimit("Current task", activeJob.Message, wrapWidth, 2, subtitleStyle)...)
 	}
@@ -2953,6 +2882,41 @@ func (m Model) renderActivityShell(width int, height int) string {
 	if len(m.logs) > 0 {
 		lines = append(lines, renderPreviewSection("Latest log", m.logs[len(m.logs)-1], wrapWidth, subtitleStyle)...)
 	}
+	return renderCard(width, height, strings.Join(lines, "\n"))
+}
+
+func (m Model) renderSingleContentWindow(width int, height int) string {
+	frameWidth, frameHeight := cardStyle.GetFrameSize()
+	innerWidth := max(12, width-frameWidth)
+	section := m.activeSection()
+	title := "Window"
+	subtitle := "No active section."
+	if section != nil {
+		title = section.Title + " | scplus-cli"
+		subtitle = section.Subtitle
+	}
+	lines := []string{
+		renderPaneTitle(title, m.focus == focusContent || m.focus == focusDetail || m.focus == focusWizard),
+		subtitleStyle.Width(innerWidth).Render(subtitle),
+		"",
+		renderMagician(magicianFrames[m.magicianFrame], innerWidth),
+		"",
+	}
+	if section != nil && section.ID != viewIssue && section.ID != viewLog {
+		lines = append(lines, subtitleStyle.Width(innerWidth).Render(fmt.Sprintf(
+			"Selected %d/%d | search=%s",
+			selectedCountLabel(section.Selected, len(section.Items)),
+			max(1, len(section.Items)),
+			formatBlankAsNone(section.FilterQuery),
+		)))
+		lines = append(lines, "")
+	}
+	bodyHeight := max(1, height-frameHeight-lipgloss.Height(strings.Join(lines, "\n")))
+	viewportCopy := m.detail
+	viewportCopy.Width = innerWidth
+	viewportCopy.Height = bodyHeight
+	viewportCopy.SetContent(m.buildDetailContent())
+	lines = append(lines, viewportCopy.View())
 	return renderCard(width, height, strings.Join(lines, "\n"))
 }
 
@@ -3100,9 +3064,13 @@ func (m Model) renderOverlayCard(width int) string {
 }
 
 func (m Model) renderOverlayCardWithHeight(width int, height int) string {
+	frameWidth, _ := cardStyle.GetFrameSize()
+	innerWidth := max(12, width-frameWidth)
 	lines := []string{
-		renderPaneTitle(m.overlay.Title, true),
-		subtitleStyle.Render(m.overlay.Subtitle),
+		renderPaneTitle(m.overlay.Title+" | scplus-cli", true),
+		subtitleStyle.Width(innerWidth).Render(m.overlay.Subtitle),
+		"",
+		renderMagician(magicianFrames[m.magicianFrame], innerWidth),
 		"",
 	}
 	switch m.overlay.Mode {
@@ -3174,7 +3142,7 @@ func (m Model) renderOverlayCardWithHeight(width int, height int) string {
 func (m Model) View() string {
 	header := m.renderHeader()
 	status := m.renderStatusLine()
-	footer := footerStyle.Render("Type /command | Enter run/detail | / commands | Ctrl+F search | Esc back | Ctrl+C quit")
+	footer := footerStyle.Render("Type /command | Enter run/open | Ctrl+F search | Esc back | Ctrl+C quit")
 	if m.wizard.active {
 		footer = footerStyle.Render("Wizard: Tab move fields | Enter continue/create | Esc cancel")
 	} else if m.overlay.Mode == overlayPalette {
@@ -3190,34 +3158,27 @@ func (m Model) View() string {
 	} else if m.activeView == viewRestore && m.focus == focusContent {
 		footer = footerStyle.Render("Restore: Up/Down select point | Enter detail | Ctrl+F search | Esc back | /restore-point | /export | Ctrl+C quit")
 	}
-	showActivity := m.activeView != viewActivity &&
-		m.activeView != viewIssue &&
-		m.activeView != viewLog &&
-		(strings.TrimSpace(m.lastError) != "" || len(m.logs) > 0 || isActiveJobState(m.activeStatusJob().State))
-	showOverlay := m.overlay.Mode != overlayNone
-	if showOverlay {
-		showActivity = false
-	}
-	bodyWidth := max(36, m.width-4)
 	availableHeight := max(1, m.height-lipgloss.Height(status)-lipgloss.Height(footer))
 	if strings.TrimSpace(header) != "" {
 		availableHeight -= lipgloss.Height(header)
 	}
 	availableHeight = max(1, availableHeight)
-	mainHeight, activityHeight, overlayHeight := allocateWindowHeights(availableHeight, showActivity, showOverlay)
 	parts := make([]string, 0, 5)
 	if strings.TrimSpace(header) != "" {
 		parts = append(parts, header)
 	}
-	if mainHeight > 0 {
-		parts = append(parts, m.renderMainPanel(bodyWidth, mainHeight))
+	windowWidth := singleWindowCardWidth(m.width)
+	windowHeight := singleWindowCardHeight(availableHeight)
+	window := ""
+	switch {
+	case m.overlay.Mode != overlayNone:
+		window = m.renderOverlayCardWithHeight(windowWidth, windowHeight)
+	case m.activeView == viewActivity:
+		window = m.renderActivityShell(windowWidth, windowHeight)
+	default:
+		window = m.renderSingleContentWindow(windowWidth, windowHeight)
 	}
-	if showActivity && activityHeight > 0 {
-		parts = append(parts, m.renderActivityPanelWithHeight(bodyWidth, activityHeight))
-	}
-	if showOverlay && overlayHeight > 0 {
-		parts = append(parts, m.renderOverlayCardWithHeight(max(48, m.width-4), overlayHeight))
-	}
+	parts = append(parts, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, window))
 	parts = append(parts, status, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
@@ -4028,16 +3989,10 @@ func renderMagician(frame string, width int) string {
 		Render(frame)
 }
 
-func (m Model) renderActivityCommandBrowser(width int, height int, bar textinput.Model) string {
-	lines := []string{
-		renderPaneTitle("Commands | scplus-cli", m.focus == focusContent),
-		subtitleStyle.Render("Search slash commands and press Enter to run"),
-		bar.View(),
-	}
+func (m Model) renderActivityCommandRows(width int, height int) []string {
 	commands := m.activityCommandSuggestions()
 	if len(commands) == 0 {
-		lines = append(lines, "", errorStyle.Render("No commands match the current input."))
-		return renderCard(width, height, strings.Join(lines, "\n"))
+		return []string{errorStyle.Render("No commands match the current input.")}
 	}
 	if m.commandSelect >= len(commands) {
 		m.commandSelect = len(commands) - 1
@@ -4045,12 +4000,13 @@ func (m Model) renderActivityCommandBrowser(width int, height int, bar textinput
 	if m.commandSelect < 0 {
 		m.commandSelect = 0
 	}
-	commandRows := max(6, height-8)
+	commandRows := max(1, height-2)
 	start, end := visibleRange(len(commands), m.commandSelect, commandRows)
+	lines := make([]string, 0, end-start+2)
 	if start > 0 {
 		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d earlier commands hidden", start)))
 	}
-	commandWidth := max(24, width-8)
+	commandWidth := max(24, width-2)
 	commandTitleWidth := max(12, min(22, commandWidth/4))
 	commandSubtitleWidth := max(12, commandWidth-commandTitleWidth-4)
 	for index := start; index < end; index++ {
@@ -4073,7 +4029,7 @@ func (m Model) renderActivityCommandBrowser(width int, height int, bar textinput
 	if end < len(commands) {
 		lines = append(lines, subtitleStyle.Render(fmt.Sprintf("... %d more commands hidden", len(commands)-end)))
 	}
-	return renderCard(width, height, strings.Join(lines, "\n"))
+	return lines
 }
 
 func previewLines(value string, width int, maxLines int) []string {

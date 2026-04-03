@@ -43,6 +43,17 @@ func TestVisualProbe(t *testing.T) {
 	model.lastError = "backend command \"cluster\" failed: cluster requires a valid prepared full index.\nIndex validation: failed."
 	model.logs = append(model.logs, "[13:28:38] doctor report refreshed")
 
+	switch os.Getenv("VISUAL_PROBE_VIEW") {
+	case viewIssue:
+		if cmd := model.executePaletteAction("open-issue"); cmd != nil {
+			t.Fatalf("open issue view: unexpected async command %v", cmd)
+		}
+	case viewLog:
+		if cmd := model.executePaletteAction("open-log"); cmd != nil {
+			t.Fatalf("open log view: unexpected async command %v", cmd)
+		}
+	}
+
 	if os.Getenv("VISUAL_PROBE_NO_MARKERS") == "1" {
 		fmt.Print(model.View())
 		if holdMs := envInt("VISUAL_PROBE_HOLD_MS", 0); holdMs > 0 {

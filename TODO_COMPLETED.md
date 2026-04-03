@@ -2,6 +2,7 @@
 
 ## Current Goal History
 
+- [x] Redesign the human CLI so it uses no mouse controls, renders exactly one bounded in-terminal window whose content swaps for `/log`, `/issue`, and related commands, keeps the magician centered and always visible, and never allows any border or content path to exceed the current terminal bounds during resize or command-entry states.
 - [x] Prevent MCP and the human CLI from corrupting shared repo state when both run at the same time by enforcing one cross-process watcher owner per repo and one cross-process mutating index/refresh lane per repo, then verify that concurrent MCP-plus-CLI sessions fail loudly instead of racing.
 - [x] fix the remaining confusing CLI operator surfaces by replacing unclear status jargon such as `history` and `generation` with user-facing wording, and make manual `index` bootstrap a full prepared index only when none exists while using incremental refresh on subsequent runs
 - [x] diagnose the CLI with real screenshots and remove the remaining visual defects in the activity slash-command view, including border overflow and irrelevant activity previews while `/` is active
