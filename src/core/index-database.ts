@@ -226,6 +226,9 @@ function hasTable(db: DatabaseSync, tableName: string): boolean {
 }
 
 function getTableColumns(db: DatabaseSync, tableName: string): string[] {
+  if (!/^[a-z0-9_]+$/i.test(tableName)) {
+    throw new Error(`Invalid table name: ${tableName}`);
+  }
   if (!hasTable(db, tableName)) return [];
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return rows.map((row) => row.name);
