@@ -18,7 +18,7 @@ import { validatePreparedIndex, type IndexValidationReport } from "./index-relia
 import { buildCheckpointReport } from "./propose-commit.js";
 import { buildSearchByIntentReport, type SearchEntityType } from "./query-intent.js";
 import { buildResearchReport } from "./research.js";
-import { rankUnifiedSearch, type UnifiedRankedHit } from "./unified-ranking.js";
+import { type UnifiedRankedHit } from "./unified-ranking.js";
 
 interface EvaluationCheck {
   name: string;
