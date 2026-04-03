@@ -16,6 +16,9 @@
 - [x] identify the lingering global `contextplus` and `contextplusplus` npm aliases that still exposed legacy commands after the scplus migration
 - [x] remove the old global aliases and broken legacy bin symlinks so only `scplus-mcp` and `scplus-cli` remain on the live PATH
 - [x] verify the old commands no longer resolve, confirm the remaining Codex skill/config surfaces no longer advertise the old names, and sync the package lockfile with the renamed package metadata
+- [x] inspect the live GitHub repo metadata, tracked landing links, and fresh-shell command state to identify the remaining stale Context+ public surface
+- [x] update the tracked repo links to `Cesar514/scplus-cli`, update the live GitHub About description to the scplus product contract, and sync the local `origin` remote to the renamed repository URL
+- [x] verify the updated metadata and command cleanup, document the current GitHub fork-network constraint, and move this goal out of `TODO.md`
 
 ## v1.5
 

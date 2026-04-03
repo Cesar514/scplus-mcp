@@ -43,7 +43,7 @@ export default function Header({ stars }: HeaderProps) {
                     </svg>
                 </a>
                 <a
-                    href="https://github.com/Cesar514/contextplus"
+                    href="https://github.com/Cesar514/scplus-cli"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center"
