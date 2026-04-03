@@ -466,3 +466,8 @@ npm test
 npm run test:demo
 npm run test:all
 ```
+
+## References
+
+- [ForLoopCodes/contextplus](https://github.com/ForLoopCodes/contextplus) - original upstream codebase this project started from before the standalone `scplus-mcp` evolution.
+- [zilliztech/claude-context](https://github.com/zilliztech/claude-context) - influential prior art for codebase-context workflows and related repository navigation ideas.

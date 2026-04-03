@@ -22,6 +22,9 @@
 - [x] capture a safe local mirror backup plus the current GitHub metadata and ref state before publishing the standalone `Cesar514/scplus-mcp` repository
 - [x] replace the dead hosted-app instruction source and tracked repo links with the standalone `scplus-mcp` repository metadata and clear the obsolete homepage field
 - [x] publish `Cesar514/scplus-mcp` with the current local commit history intact, repoint `origin` to the new standalone repository, preserve `fork-origin` and `upstream` for reference and syncing, and verify the new standalone state
+- [x] remove `upstream` and `fork-origin` so this checkout is connected only to the standalone `scplus-mcp` repository
+- [x] add explicit bottom-of-README references for the original `contextplus` and `claude-context` projects that informed this codebase
+- [x] verify the final remote state and README footer, then move this goal out of `TODO.md`
 
 ## v1.5
 
