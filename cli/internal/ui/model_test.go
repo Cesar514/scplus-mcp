@@ -269,7 +269,7 @@ func TestActivityShellShowsRunningModelStatusForActiveJob(t *testing.T) {
 
 func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
 	rendered := renderMagicianASCII(magicianFrames[0])
-	for _, needle := range []string{".", "K", "W", "R", "S", "H", "E", "G"} {
+	for _, needle := range []string{"K", "W", "R", "S", "H", "E", "I", "G"} {
 		if strings.Contains(rendered, needle) {
 			t.Fatalf("expected palette tokens to stay internal, found %q in %s", needle, rendered)
 		}
@@ -277,11 +277,27 @@ func TestRenderMagicianASCIIUsesTransparentGirlSpritePalette(t *testing.T) {
 	if renderedLineCount(rendered) != 8 {
 		t.Fatalf("expected compact sprite to occupy 8 lines, got %d in %s", renderedLineCount(rendered), rendered)
 	}
-	if maxRenderedLineWidth(rendered) > 32 {
-		t.Fatalf("expected compact sprite width <= 32, got %d in %s", maxRenderedLineWidth(rendered), rendered)
+	if maxRenderedLineWidth(rendered) > 8 {
+		t.Fatalf("expected compact square sprite width <= 8, got %d in %s", maxRenderedLineWidth(rendered), rendered)
 	}
-	if !strings.ContainsRune(rendered, '█') && !strings.ContainsRune(rendered, '▀') && !strings.ContainsRune(rendered, '▄') {
-		t.Fatalf("expected dense half-block glyphs in compact sprite: %s", rendered)
+	if strings.ContainsAny(rendered, "█▀▄⣿⣾⣷") {
+		t.Fatalf("expected ASCII sprite glyphs instead of block pixels: %s", rendered)
+	}
+	if !strings.ContainsAny(rendered, "@#%o=*+-/|_") {
+		t.Fatalf("expected dense ASCII sprite glyphs in compact sprite: %s", rendered)
+	}
+	lines := strings.Split(rendered, "\n")
+	eyeSeparated := false
+	for _, line := range lines {
+		first := strings.Index(line, "=")
+		last := strings.LastIndex(line, "=")
+		if first >= 0 && last-first >= 2 {
+			eyeSeparated = true
+			break
+		}
+	}
+	if !eyeSeparated {
+		t.Fatalf("expected two visibly separated eyes in compact sprite: %s", rendered)
 	}
 }
 

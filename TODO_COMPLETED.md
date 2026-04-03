@@ -479,3 +479,21 @@
 - [x] Replace the lossy braille renderer with a truecolor half-block sprite renderer so the eyes, hair, hood trim, and arm poses keep exact source pixels inside the same 8-line CLI height.
 - [x] Widen the source frame masks so the final terminal outline more closely matches the provided reference images instead of collapsing facial and costume detail.
 - [x] Verify the updated likeness with focused UI tests, a rebuilt `scplus-cli` snapshot render, and a generated visual sprite preview image for manual inspection.
+
+## readme-generator skill completed
+
+- [x] Create a reusable `readme-generator` Codex skill under the default skills directory that instructs agents to deeply inspect a codebase before writing an exhaustive `README.md`.
+- [x] Tailor the `readme-generator` skill so it covers local development, architecture understanding, and environment/setup documentation while intentionally omitting troubleshooting, deployment, and testing sections.
+- [x] Validate the new `readme-generator` skill with the skill-creator validator and record the completed goal in `TODO_COMPLETED.md`.
+
+## repository readme rewrite completed
+
+- [x] Rewrite the repository root `README.md` with the `readme-generator` structure so it accurately documents scplus for local development, architecture understanding, environment configuration, and operational commands.
+- [x] Use Context+ discovery plus direct file inspection to replace stale README claims with the current branding, storage contract, setup flow, and command surface reflected by the codebase and architecture docs.
+- [x] Verify the rewritten `README.md` against the repository manifests and docs, then move this goal from `TODO.md` to `TODO_COMPLETED.md`.
+
+## ascii magician likeness refinement completed
+
+- [x] Rebuild the girl-magician animation on a consistent `16x16` source grid so the compressed CLI sprite keeps two distinct eyes, a visible center face split, and a silhouette closer to the provided PNG references.
+- [x] Replace the half-block pixel look with a compact square ASCII renderer that uses colored ASCII glyphs, mirrored movement frames, and blinking or winking eye variants.
+- [x] Verify the final likeness with focused UI tests, a rebuilt live `scplus-cli snapshot` render, and generated ASCII preview images inspected against the reference character.

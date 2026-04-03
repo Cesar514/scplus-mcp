@@ -9,54 +9,102 @@ import (
 )
 
 var magicianFrames = []string{
-	`......KK......
-....KKWWKK....
-...KWWWWWWK...
-..KWWRRRRWWK..
-.KWWRRRRRRWWK.
-.KWRRHHHHRRWK.
-KWWRSSSSSSRWWK
-KWRSSEEEESSRWK
-KWRSSEEEESSRWK
-.KWWSSSSSSWWK.
-..KWWWWWWWWK..
-..KWGGGGGGWK..
-.KWRWGGGGWRWK.
-.KWRWWWWWWRWK.
-KWWRWWWWWWRWWK
-KRRRWWWWWWRRRK`,
-	`......KK......
-....KKWWKK....
-...KWWWWWWK...
-..KWWRRRRWWK..
-.KWWRRRRRRWWK.
-.KWRRHHHHRRWK.
-KWWRSSSSSSRWWK
-KWRSSEEEESSRWK
-KWRSSEEEESSRWK
-.KWWSSSSSSWWK.
-..KWWWWWWWWK..
-.KWGGGGGGGGWK.
-KWRWGGGGGGWRWK
-.KWRWWWWWWRWK.
-KWWRWWWWWWRWWK
-.RRRWWWWWWRRR.`,
-	`......KK......
-....KKWWKK....
-...KWWWWWWK...
-..KWWRRRRWWK..
-.KWWRRRRRRWWK.
-.KWRRHHHHRRWK.
-KWWRSSSSSSRWWK
-KWRSSEEEESSRWK
-KWRSSEEEESRRWK
-.KWWSSSSWRRWK.
-..KWWWWWSRRK..
-..KWGGGSRRWK..
-.KWRWGSRRRWK..
-.KWRWWRRRRWK..
-KWWRWWWWWWRWWK
-KRRRWWWWWWRRRK`,
+	`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSEESSSSEESRWK
+KWRSEESSSSEESRWK
+..KWWSSSSSSWWK..
+...KWWWWWWWWK...
+...KWGGGGGGWK...
+..KWRWGGGGWRWK..
+..KWRWWWWWWRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`,
+	`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSIISSSSSIISRWK
+KWRSIISSSSSIISRWK
+..KWWSSSSSSWWK..
+...KWWWWWWWWK...
+...KWGGGGGGWK...
+..KWRWGGGGWRWK..
+..KWRWWWWWWRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`,
+	`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSEESSSSEESRWK
+KWRSEESSSSEESRWK
+..KWWSSSSSRRWK..
+...KWWWWWRRWK...
+...KWGGGRRRWK...
+..KWRWGSRRRRWK..
+..KWRWWRRRRRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`,
+	mirrorMaskedFrame(`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSEESSSSEESRWK
+KWRSEESSSSEESRWK
+..KWWSSSSSRRWK..
+...KWWWWWRRWK...
+...KWGGGRRRWK...
+..KWRWGSRRRRWK..
+..KWRWWRRRRRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`),
+	`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSEESSSSIISRWK
+KWRSEESSSSEESRWK
+..KWWSSSSSSWWK..
+...KWWWWWWWWK...
+...KWGGGGGGWK...
+..KWRWGGGGWRWK..
+..KWRWWWWWWRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`,
+	mirrorMaskedFrame(`.......KK.......
+.....KKWWKK.....
+....KWWWWWWK....
+...KWWRRRRWWK...
+..KWWRHHHHRWWK..
+..KWRRSSSSRRWK..
+KWRSEESSSSIISRWK
+KWRSEESSSSEESRWK
+..KWWSSSSSSWWK..
+...KWWWWWWWWK...
+...KWGGGGGGWK...
+..KWRWGGGGWRWK..
+..KWRWWWWWWRWK..
+.KWWRWWWWWWRWWK.
+.KRRRWWWWWWRRRK.
+..KKRRRRRRRRKK..`),
 }
 
 var magicianSpritePalette = map[rune]lipgloss.Color{
@@ -66,6 +114,7 @@ var magicianSpritePalette = map[rune]lipgloss.Color{
 	'S': lipgloss.Color("#ffd8bf"),
 	'H': lipgloss.Color("#e6bf6f"),
 	'E': lipgloss.Color("#d0d3d8"),
+	'I': lipgloss.Color("#d0d3d8"),
 	'G': lipgloss.Color("#e2e2e4"),
 }
 
@@ -97,8 +146,101 @@ func opaqueToken(token rune) bool {
 	return token != '.'
 }
 
-func renderHalfBlockSprite(frame string, styled bool) string {
-	pixels := expandFrameTokens(frame, 2, 1)
+func mirrorMaskedFrame(frame string) string {
+	rows := frameTokenRows(frame)
+	mirrored := make([]string, 0, len(rows))
+	for _, row := range rows {
+		tokens := []rune(row)
+		for left, right := 0, len(tokens)-1; left < right; left, right = left+1, right-1 {
+			tokens[left], tokens[right] = tokens[right], tokens[left]
+		}
+		mirrored = append(mirrored, string(tokens))
+	}
+	return strings.Join(mirrored, "\n")
+}
+
+func dominantToken(counts map[rune]int) rune {
+	dominant := '.'
+	maxCount := 0
+	for _, token := range []rune{'K', 'W', 'R', 'S', 'H', 'E', 'I', 'G'} {
+		if counts[token] > maxCount {
+			dominant = token
+			maxCount = counts[token]
+		}
+	}
+	return dominant
+}
+
+func denseGlyphForToken(token rune) rune {
+	switch token {
+	case 'K':
+		return '#'
+	case 'W':
+		return '@'
+	case 'R':
+		return '%'
+	case 'S':
+		return 'o'
+	case 'H':
+		return '*'
+	case 'E':
+		return '='
+	case 'I':
+		return '-'
+	case 'G':
+		return '+'
+	default:
+		return '#'
+	}
+}
+
+func asciiGlyphForBlock(mask int, token rune, count int) rune {
+	if token == 'I' {
+		return '-'
+	}
+	switch mask {
+	case 0:
+		return ' '
+	case 1:
+		return '`'
+	case 2:
+		return '\''
+	case 3:
+		return '-'
+	case 4:
+		return '.'
+	case 5:
+		return '|'
+	case 6:
+		return '/'
+	case 7:
+		return denseGlyphForToken(token)
+	case 8:
+		return ','
+	case 9:
+		return '\\'
+	case 10:
+		return '|'
+	case 11:
+		return denseGlyphForToken(token)
+	case 12:
+		return '_'
+	case 13:
+		return denseGlyphForToken(token)
+	case 14:
+		return denseGlyphForToken(token)
+	case 15:
+		return denseGlyphForToken(token)
+	default:
+		if count >= 3 {
+			return denseGlyphForToken(token)
+		}
+		return ':'
+	}
+}
+
+func renderASCIISprite(frame string, styled bool) string {
+	pixels := expandFrameTokens(frame, 1, 1)
 	if len(pixels) == 0 {
 		return ""
 	}
@@ -114,45 +256,38 @@ func renderHalfBlockSprite(frame string, styled bool) string {
 	rendered := make([]string, 0, height/2)
 	for y := 0; y < height; y += 2 {
 		var builder strings.Builder
-		for x := 0; x < width; x++ {
-			topToken := pixels[y][x]
-			bottomToken := pixels[y+1][x]
-			topOpaque := opaqueToken(topToken)
-			bottomOpaque := opaqueToken(bottomToken)
-			if !topOpaque && !bottomOpaque {
+		for x := 0; x < width; x += 2 {
+			mask := 0
+			counts := make(map[rune]int)
+			samples := [4]rune{
+				pixels[y][x],
+				pixels[y][min(x+1, width-1)],
+				pixels[y+1][x],
+				pixels[y+1][min(x+1, width-1)],
+			}
+			for index, token := range samples {
+				if !opaqueToken(token) {
+					continue
+				}
+				mask |= 1 << index
+				counts[token]++
+			}
+			if mask == 0 {
 				builder.WriteRune(' ')
 				continue
 			}
+			token := dominantToken(counts)
+			glyph := asciiGlyphForBlock(mask, token, counts[token])
 			if !styled {
-				switch {
-				case topOpaque && bottomOpaque && topToken == bottomToken:
-					builder.WriteRune('█')
-				case topOpaque && !bottomOpaque:
-					builder.WriteRune('▀')
-				case !topOpaque && bottomOpaque:
-					builder.WriteRune('▄')
-				default:
-					builder.WriteRune('▀')
-				}
+				builder.WriteRune(glyph)
 				continue
 			}
-			switch {
-			case topOpaque && bottomOpaque && topToken == bottomToken:
-				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[topToken]).Render("█"))
-			case topOpaque && !bottomOpaque:
-				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[topToken]).Render("▀"))
-			case !topOpaque && bottomOpaque:
-				builder.WriteString(lipgloss.NewStyle().Foreground(magicianSpritePalette[bottomToken]).Render("▄"))
-			default:
-				topColor, topOK := magicianSpritePalette[topToken]
-				bottomColor, bottomOK := magicianSpritePalette[bottomToken]
-				if !topOK || !bottomOK {
-					builder.WriteRune('▀')
-					continue
-				}
-				builder.WriteString(lipgloss.NewStyle().Foreground(topColor).Background(bottomColor).Render("▀"))
+			color, ok := magicianSpritePalette[token]
+			if !ok {
+				builder.WriteRune(glyph)
 				continue
 			}
+			builder.WriteString(lipgloss.NewStyle().Foreground(color).Render(string(glyph)))
 		}
 		rendered = append(rendered, builder.String())
 	}
@@ -160,9 +295,9 @@ func renderHalfBlockSprite(frame string, styled bool) string {
 }
 
 func renderMagicianASCII(frame string) string {
-	return renderHalfBlockSprite(frame, false)
+	return renderASCIISprite(frame, false)
 }
 
 func renderMagician(frame string, width int) string {
-	return centerBlock(renderHalfBlockSprite(frame, true), max(12, width))
+	return centerBlock(renderASCIISprite(frame, true), max(12, width))
 }
