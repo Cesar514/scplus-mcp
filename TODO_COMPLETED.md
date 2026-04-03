@@ -19,6 +19,9 @@
 - [x] inspect the live GitHub repo metadata, tracked landing links, and fresh-shell command state to identify the remaining stale Context+ public surface
 - [x] update the tracked repo links to `Cesar514/scplus-cli`, update the live GitHub About description to the scplus product contract, and sync the local `origin` remote to the renamed repository URL
 - [x] verify the updated metadata and command cleanup, document the current GitHub fork-network constraint, and move this goal out of `TODO.md`
+- [x] capture a safe local mirror backup plus the current GitHub metadata and ref state before publishing the standalone `Cesar514/scplus-mcp` repository
+- [x] replace the dead hosted-app instruction source and tracked repo links with the standalone `scplus-mcp` repository metadata and clear the obsolete homepage field
+- [x] publish `Cesar514/scplus-mcp` with the current local commit history intact, repoint `origin` to the new standalone repository, preserve `fork-origin` and `upstream` for reference and syncing, and verify the new standalone state
 
 ## v1.5
 
