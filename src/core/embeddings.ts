@@ -500,7 +500,7 @@ function shouldMaterializeCurrentGenerationWrite(): boolean {
 function cloneEmbeddingCacheValue(value: EmbeddingCacheValue): EmbeddingCacheValue {
   return {
     hash: value.hash,
-    vector: [...value.vector],
+    vector: value.vector,
   };
 }
 
@@ -578,7 +578,7 @@ async function loadEmbeddingNamespaceEntries(
       const entries = await loadVectorCollection(rootDir, namespace, { generation });
       namespaceCache.entries = new Map(entries.map((entry) => [
         entry.id,
-        { hash: entry.contentHash, vector: [...entry.vector] },
+        { hash: entry.contentHash, vector: entry.vector },
       ]));
       namespaceCache.fullyLoaded = true;
     }
@@ -598,7 +598,7 @@ async function loadEmbeddingNamespaceEntries(
     for (const entry of fetchedEntries) {
       namespaceCache.entries.set(entry.id, {
         hash: entry.contentHash,
-        vector: [...entry.vector],
+        vector: entry.vector,
       });
     }
   }
@@ -622,7 +622,7 @@ function mergeEntriesIntoProcessCache(
   const current = embeddingProcessCache.get(cacheKey);
   const nextEntries = new Map(entries.map((entry) => [
     entry.id,
-    { hash: entry.contentHash, vector: [...entry.vector] },
+    { hash: entry.contentHash, vector: entry.vector },
   ]));
   if (mode === "replace") {
     embeddingProcessCache.set(cacheKey, {
