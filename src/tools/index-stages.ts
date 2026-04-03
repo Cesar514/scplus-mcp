@@ -19,7 +19,7 @@ import { ensureScplusLayout, type ScplusLayout } from "../core/project-layout.js
 import { walkDirectory } from "../core/walker.js";
 import { ensureFileSearchIndex, type FileSearchIndexProgress, type FileSearchIndexStats } from "./semantic-search.js";
 import { ensureIdentifierSearchIndex, type IdentifierIndexProgress, type IdentifierIndexStats } from "./semantic-identifiers.js";
-import { ensureFullIndexArtifacts, type FullIndexArtifactStats, type FullIndexProgress } from "./full-index-artifacts.js";
+import { ensureFullIndexArtifacts, type FullIndexProgress } from "./full-index-artifacts.js";
 import {
   buildIndexContract,
   DEFAULT_INDEX_MODE,
