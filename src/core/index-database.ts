@@ -226,6 +226,9 @@ function hasTable(db: DatabaseSync, tableName: string): boolean {
 }
 
 function getTableColumns(db: DatabaseSync, tableName: string): string[] {
+  if (!/^[a-z0-9_]+$/i.test(tableName)) {
+    throw new Error(`Invalid table name: ${tableName}`);
+  }
   if (!hasTable(db, tableName)) return [];
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return rows.map((row) => row.name);
@@ -715,12 +718,15 @@ export async function deleteIndexArtifact(
   const db = openIndexDatabase(rootDir);
   try {
     const serving = readServingStateFromDb(db);
-    const table = kind === "artifact" ? "index_artifacts" : "index_text_artifacts";
     const storedKey = qualifyArtifactStorageKey(
       artifactKey,
       resolveArtifactGeneration(artifactKey, options, serving.activeGeneration, "write"),
     );
-    db.prepare(`DELETE FROM ${table} WHERE artifact_key = ?`).run(storedKey);
+    if (kind === "artifact") {
+      db.prepare("DELETE FROM index_artifacts WHERE artifact_key = ?").run(storedKey);
+    } else {
+      db.prepare("DELETE FROM index_text_artifacts WHERE artifact_key = ?").run(storedKey);
+    }
   } finally {
     db.close();
   }
