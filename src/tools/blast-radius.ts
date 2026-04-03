@@ -1,5 +1,5 @@
 // Dependency graph analyzer to trace symbol usage across the codebase
-// Finds every file and line where a function, class, or variable is referenced
+// FEATURE: Symbol usage tracing across indexed and on-disk repository files
 
 import { walkDirectory } from "../core/walker.js";
 import { isSupportedFile } from "../core/parser.js";

@@ -48,6 +48,8 @@ Because `npm link` points `contextplusplus` at this checkout’s [build/index.js
 
 The renamed operator console snapshot used for the image above is committed in [cli-snapshot.txt](/home/cesar514/Documents/agent_programming/contextplus/docs/artifacts/cli-snapshot.txt).
 
+The short authoritative runtime description now lives in [architecture.md](/home/cesar514/Documents/agent_programming/contextplus/docs/architecture.md).
+
 To add the locally linked command to Codex, put this in `~/.codex/config.toml` as a separate manual step:
 
 ```toml

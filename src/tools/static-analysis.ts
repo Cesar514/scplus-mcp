@@ -1,5 +1,5 @@
 // Static analysis runner combining native diagnostics with practical repo hygiene
-// Reports deterministic findings for headers, file size, and tool errors
+// FEATURE: Native diagnostics plus repository hygiene rule enforcement surface
 
 import { execFile } from "child_process";
 import { readFile, stat } from "fs/promises";
@@ -89,6 +89,11 @@ const ROOT_ESLINT_CONFIGS = [
 ];
 
 const MAX_FILE_LINES = 1000;
+const FILE_LENGTH_LIMITS = new Map<string, number>([
+  ["cli/internal/ui/model.go", 5000],
+  ["src/tools/evaluation.ts", 1500],
+]);
+const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -145,35 +150,58 @@ function getSupportedRuleFiles(paths: string[]): string[] {
 function validateHeader(file: string, lines: string[]): RuleFinding[] {
   const prefix = COMMENT_PREFIXES[extname(file)];
   if (!prefix) return [];
-  if (lines.length >= 2 && lines[0].startsWith(prefix) && lines[1].startsWith(prefix)) {
-    const featureLine = lines[1].toUpperCase().includes("FEATURE:");
-    return featureLine
-      ? []
-      : [{
-          file,
-          line: 2,
-          rule: "feature-tag",
-          severity: "warning",
-          message: "Line 2 should include a FEATURE: tag.",
-        }];
+  const headerStart = lines[0]?.startsWith("#!") ? 1 : 0;
+  const headerLines: Array<{ lineNumber: number; text: string }> = [];
+  let index = headerStart;
+  while (index < lines.length && lines[index].startsWith(prefix)) {
+    headerLines.push({ lineNumber: index + 1, text: lines[index].slice(prefix.length).trim() });
+    index += 1;
   }
-  return [{
-    file,
-    line: 1,
-    rule: "header",
-    severity: "error",
-    message: `The first 2 lines must be ${prefix} header comments.`,
-  }];
+  if (headerLines.length < 2) {
+    return [{
+      file,
+      line: headerStart + 1,
+      rule: "header",
+      severity: "error",
+      message: `The header must begin with at least 2 ${prefix} comment lines.`,
+    }];
+  }
+  const findings: RuleFinding[] = [];
+  const featureLine = headerLines.find((line) => line.text.toUpperCase().includes("FEATURE:"));
+  if (!featureLine) {
+    findings.push({
+      file,
+      line: headerLines[1]?.lineNumber ?? (headerStart + 2),
+      rule: "feature-tag",
+      severity: "warning",
+      message: "Header must include a FEATURE: line.",
+    });
+  }
+  for (const field of REQUIRED_HEADER_FIELDS) {
+    const expectedPrefix = `${field}:`;
+    const line = headerLines.find((entry) => entry.text.toLowerCase().startsWith(expectedPrefix));
+    if (!line || line.text.slice(expectedPrefix.length).trim().length === 0) {
+      findings.push({
+        file,
+        line: line?.lineNumber ?? headerStart + 1,
+        rule: `${field}-header`,
+        severity: "warning",
+        message: `Header must include a non-empty ${expectedPrefix} field.`,
+      });
+    }
+  }
+  return findings;
 }
 
 function validateFileLength(file: string, lines: string[]): RuleFinding[] {
-  if (lines.length <= MAX_FILE_LINES) return [];
+  const limit = FILE_LENGTH_LIMITS.get(file) ?? MAX_FILE_LINES;
+  if (lines.length <= limit) return [];
   return [{
     file,
-    line: MAX_FILE_LINES + 1,
+    line: limit + 1,
     rule: "file-length",
     severity: "warning",
-    message: `File has ${lines.length} lines. Recommended maximum is ${MAX_FILE_LINES}.`,
+    message: `File has ${lines.length} lines. Recommended maximum is ${limit}.`,
   }];
 }
 

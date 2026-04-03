@@ -1,3 +1,5 @@
+// Theme context provider for the Context+ landing application.
+// FEATURE: Landing light and dark theme state with persistence.
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";

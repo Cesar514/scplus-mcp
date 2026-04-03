@@ -1,3 +1,5 @@
+// Hub creation tests for the Go operator workflow support.
+// FEATURE: Go hub authoring validation for operator-driven feature maps.
 package hubs
 
 import (

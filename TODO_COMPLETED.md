@@ -2,6 +2,13 @@
 
 ## v1.5
 
+- [x] extend the lint and checkpoint header contract to require structured `summary:`, `inputs:`, and `outputs:` fields in addition to `FEATURE:`
+- [x] verify the new header-field rules directly in both static-analysis and checkpoint coverage, including negative cases for missing structured header metadata
+
+- [x] add one short authoritative architecture document that describes the current serving model, generation model, exact-vs-related escalation model, and CLI/MCP transport model
+- [x] add [docs/architecture.md](/home/cesar514/Documents/agent_programming/contextplus/docs/architecture.md) and link it from [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) so the runtime contract has one short canonical reference
+- [x] verify the architecture document against the shipped code paths for active-generation serving, exact-vs-related escalation, and the shared CLI/MCP backend transport
+
 - [x] finish v1.5 phase 30 by making the rollout and operator documentation match the shipped serving and backend truth
 - [x] update [README.md](/home/cesar514/Documents/agent_programming/contextplus/README.md) so it stops overselling the human CLI and clearly separates MCP-only, shared-backend, and human-CLI-only surfaces
 - [x] document the active-generation serving contract, dirty and blocked freshness semantics after writes, and the no-fallback degraded-state reporting rules

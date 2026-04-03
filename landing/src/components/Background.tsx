@@ -1,3 +1,5 @@
+// Animated background wrapper for the Context+ landing experience.
+// FEATURE: Landing visual atmosphere with client-side glitch rendering.
 "use client";
 
 import dynamic from "next/dynamic";

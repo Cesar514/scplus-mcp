@@ -1,5 +1,5 @@
 // Web-tree-sitter based multi-language parser using pooled WASM grammars
-// Supports 36 languages via tree-sitter-wasms, extracts symbols from AST
+// FEATURE: Multi-language parser runtime with pooled grammars and AST access
 
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";

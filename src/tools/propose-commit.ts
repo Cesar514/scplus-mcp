@@ -1,5 +1,5 @@
 // Code commit gatekeeper enforcing practical file hygiene before writes
-// Validates headers and file complexity before creating shadow restore points
+// FEATURE: Write-time validation and restore point creation for file edits
 
 import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";
@@ -27,6 +27,8 @@ export interface CheckpointReport {
   restorePointCreated: boolean;
 }
 
+const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
+
 function validateHeader(lines: string[], ext: string): ValidationError[] {
   const errors: ValidationError[] = [];
   const commentPrefixes: Record<string, string> = {
@@ -39,19 +41,38 @@ function validateHeader(lines: string[], ext: string): ValidationError[] {
   const prefix = commentPrefixes[ext];
   if (!prefix) return errors;
 
-  if (lines.length < 2 || !lines[0].startsWith(prefix) || !lines[1].startsWith(prefix)) {
+  const headerStart = lines[0]?.startsWith("#!") ? 1 : 0;
+  const headerLines: string[] = [];
+  let index = headerStart;
+  while (index < lines.length && lines[index].startsWith(prefix)) {
+    headerLines.push(lines[index].slice(prefix.length).trim());
+    index += 1;
+  }
+
+  if (headerLines.length < 2) {
     errors.push({
       rule: "header",
-      message: `Missing 2-line file header. The first 2 lines must be ${prefix} comments explaining the file.`,
+      message: `Missing header block. Start the file with at least 2 ${prefix} comment lines.`,
     });
     return errors;
   }
 
-  if (!lines[1].toUpperCase().includes("FEATURE:")) {
+  if (!headerLines.some((line) => line.toUpperCase().includes("FEATURE:"))) {
     errors.push({
       rule: "feature-tag",
-      message: `Line 2 should include a FEATURE: tag (e.g., "${prefix} FEATURE: Feature Name"). Links files to feature hubs.`,
+      message: `Header must include a FEATURE: line (e.g., "${prefix} FEATURE: Feature Name").`,
     });
+  }
+
+  for (const field of REQUIRED_HEADER_FIELDS) {
+    const expectedPrefix = `${field}:`;
+    const line = headerLines.find((entry) => entry.toLowerCase().startsWith(expectedPrefix));
+    if (!line || line.slice(expectedPrefix.length).trim().length === 0) {
+      errors.push({
+        rule: `${field}-header`,
+        message: `Header must include a non-empty ${expectedPrefix} field.`,
+      });
+    }
   }
 
   return errors;

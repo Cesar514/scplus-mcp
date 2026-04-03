@@ -1,3 +1,5 @@
+// Root layout for the Context+ landing application shell.
+// FEATURE: Landing app frame, fonts, and global theme providers.
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";

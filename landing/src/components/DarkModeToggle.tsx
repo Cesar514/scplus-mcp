@@ -1,3 +1,5 @@
+// Theme toggle control for the Context+ landing header.
+// FEATURE: Landing theme switching through the shared theme provider.
 "use client";
 
 import { useTheme } from "./ThemeProvider";

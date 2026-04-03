@@ -1,5 +1,5 @@
 // Structural tree generator with file headers, symbols, and depth control
-// Dynamic token-aware pruning: Level 0 (files only) to Level 2 (deep context)
+// FEATURE: Token-aware structural tree rendering for rapid repo navigation
 
 import { walkDirectory, type FileEntry } from "../core/walker.js";
 import { analyzeFile, formatSymbol, isSupportedFile } from "../core/parser.js";

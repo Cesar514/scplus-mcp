@@ -1,3 +1,5 @@
+// CLI root parsing tests for the Go operator entrypoint.
+// FEATURE: Go launcher argument validation for operator startup behavior.
 package main
 
 import "testing"

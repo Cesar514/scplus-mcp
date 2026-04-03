@@ -13,7 +13,17 @@ import { getContextTree } from "../tools/context-tree.js";
 import { getFeatureHub } from "../tools/feature-hub.js";
 import { ensureIdentifierSearchIndex, type IdentifierIndexProgress } from "../tools/semantic-identifiers.js";
 import { ensureFileSearchIndex, type FileSearchIndexProgress } from "../tools/semantic-search.js";
-import { buildDoctorReport, type BridgeDoctorReport } from "./reports.js";
+import {
+  buildWatchExecutionPlan,
+  dedupePaths,
+  formatIntegrityObservabilitySummary,
+  formatSchedulerObservabilitySummary,
+  formatStageObservabilitySummary,
+  normalizeRelativePath,
+  summarizeChangedPaths,
+  type WatchExecutionPlan,
+} from "./backend-core-helpers.js";
+import { buildDoctorReport } from "./reports.js";
 
 const WATCH_IGNORE_PREFIXES = [
   ".contextplus/",
@@ -78,18 +88,7 @@ interface JobControlPayload {
   lastMode: IndexMode;
 }
 
-interface WatchExecutionPlan {
-  job: BackendJobName;
-  mode: IndexMode;
-  changedPaths: string[];
-  reason: string;
-}
-
 type EventSink = (event: BackendEvent) => Promise<void> | void;
-
-function normalizeRelativePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "");
-}
 
 function shouldWatchPath(path: string): boolean {
   if (!path) return false;
@@ -110,16 +109,6 @@ function firstNonEmptyLine(text: string): string {
 
 function formatFileFingerprint(size: number, mtimeMs: number): string {
   return `${size}:${mtimeMs}`;
-}
-
-function summarizeChangedPaths(paths: string[]): string {
-  if (paths.length === 0) return "no changed paths";
-  if (paths.length <= 4) return paths.join(", ");
-  return `${paths.slice(0, 4).join(", ")} +${paths.length - 4} more`;
-}
-
-function dedupePaths(paths: Iterable<string>): string[] {
-  return Array.from(new Set(paths)).sort();
 }
 
 function formatFileProgress(progress: FileSearchIndexProgress): string {
@@ -166,111 +155,6 @@ function scaleRefreshPercent(stageIndex: number, stageCount: number, stagePercen
     ? 100
     : Math.floor((100 * (stageIndex + 1)) / stageCount);
   return Math.max(start, Math.min(end, start + Math.round(((end - start) * stagePercent) / 100)));
-}
-
-function getWatchFullRebuildReasonForPath(path: string): string | null {
-  const normalized = normalizeRelativePath(path);
-  const baseName = normalized.split("/").at(-1) ?? normalized;
-  if (
-    normalized === "package.json"
-    || normalized === "package-lock.json"
-    || normalized === "pnpm-lock.yaml"
-    || normalized === "yarn.lock"
-    || normalized === "bun.lock"
-    || normalized === "bun.lockb"
-    || normalized === "pixi.toml"
-    || normalized === "pixi.lock"
-    || normalized === "go.mod"
-    || normalized === "go.sum"
-    || normalized === "Cargo.toml"
-    || normalized === "Cargo.lock"
-    || normalized === "pyproject.toml"
-    || normalized === "poetry.lock"
-    || normalized === "uv.lock"
-    || normalized === "requirements.txt"
-    || normalized === "requirements-dev.txt"
-    || normalized === "requirements-dev.lock"
-    || normalized === ".gitignore"
-  ) {
-    return `${normalized} changed dependency or workspace configuration`;
-  }
-  if (
-    baseName === "tsconfig.json"
-    || baseName === "jsconfig.json"
-    || /^tsconfig\..+\.json$/.test(baseName)
-  ) {
-    return `${normalized} changed TypeScript or JavaScript compilation settings`;
-  }
-  return null;
-}
-
-function buildWatchExecutionPlan(changedPaths: string[]): WatchExecutionPlan {
-  const normalizedPaths = dedupePaths(changedPaths);
-  const rebuildReasons = normalizedPaths
-    .map((path) => getWatchFullRebuildReasonForPath(path))
-    .filter((reason): reason is string => Boolean(reason));
-  if (rebuildReasons.length > 0) {
-    return {
-      job: "index",
-      mode: DEFAULT_INDEX_MODE,
-      changedPaths: normalizedPaths,
-      reason: `full rebuild required after watch changes: ${rebuildReasons.join(" | ")}`,
-    };
-  }
-  return {
-    job: "refresh",
-    mode: DEFAULT_INDEX_MODE,
-    changedPaths: normalizedPaths,
-    reason: `background incremental refresh for ${summarizeChangedPaths(normalizedPaths)}`,
-  };
-}
-
-function formatStageObservabilitySummary(report: BridgeDoctorReport): string {
-  const entries = Object.entries(report.observability.indexing.stages);
-  if (entries.length === 0) return "observability indexing: no completed stage metrics";
-  const stageParts = entries.map(([stage, metrics]) => {
-    const throughput = [
-      metrics.filesPerSecond ? `files/s=${metrics.filesPerSecond}` : "",
-      metrics.chunksPerSecond ? `chunks/s=${metrics.chunksPerSecond}` : "",
-      metrics.embedsPerSecond ? `embeds/s=${metrics.embedsPerSecond}` : "",
-    ].filter(Boolean).join(" | ");
-    return `${stage}=${metrics.durationMs}ms${throughput ? ` (${throughput})` : ""}`;
-  });
-  return `observability indexing: ${stageParts.join(" ; ")}`;
-}
-
-function formatIntegrityObservabilitySummary(report: BridgeDoctorReport): string {
-  const parseFailuresByLanguage = Object.entries(report.observability.integrity.parseFailuresByLanguage)
-    .map(([language, failures]) => `${language}:${failures}`)
-    .join(", ");
-  const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
-  const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;
-  return [
-    "observability integrity:",
-    `chunkVectors=${chunkCoverage.loadedVectorCount}/${chunkCoverage.requestedVectorCount} ${chunkCoverage.state}`,
-    `identifierVectors=${identifierCoverage.loadedVectorCount}/${identifierCoverage.requestedVectorCount} ${identifierCoverage.state}`,
-    `staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"}`,
-    `fallbackMarkers=${report.observability.integrity.fallbackMarkerCount}`,
-    `parseFailuresByLanguage=${parseFailuresByLanguage || "none"}`,
-    `fileRefreshFailures=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures}`,
-    `writeRefreshFailures=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
-  ].join(" | ");
-}
-
-function formatSchedulerObservabilitySummary(report: BridgeDoctorReport): string {
-  const scheduler = report.observability.scheduler;
-  return [
-    "observability scheduler:",
-    `watch=${scheduler.watchEnabled ? "enabled" : "disabled"}`,
-    `queueDepth=${scheduler.queueDepth}`,
-    `pendingChanges=${scheduler.pendingChangeCount}`,
-    `pendingJob=${scheduler.pendingJobKind ?? "none"}`,
-    `maxQueueDepth=${scheduler.maxQueueDepth}`,
-    `batches=${scheduler.batchCount}`,
-    `deduped=${scheduler.dedupedPathEvents}`,
-    `canceled=${scheduler.canceledJobs}`,
-    `superseded=${scheduler.supersededJobs}`,
-  ].join(" | ");
 }
 
 class BackendRootSession {

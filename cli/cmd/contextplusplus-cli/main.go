@@ -1,3 +1,5 @@
+// Human CLI entrypoint for the Context+ Bubble Tea operator console.
+// FEATURE: Go launcher for the persistent Context+ operator workflow.
 package main
 
 import (

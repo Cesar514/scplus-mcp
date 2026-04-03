@@ -37,7 +37,7 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "clean.ts"),
-        "// Clean module\n// FEATURE: Static Analysis Tests\n\nexport const x: number = 1;\n",
+        "// summary: Clean static analysis fixture module\n// FEATURE: Static Analysis Tests\n// inputs: none\n// outputs: exported numeric constant\n\nexport const x: number = 1;\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -65,7 +65,7 @@ describe("static-analysis", async () => {
     it("handles Python files with py_compile", async () => {
       await writeFile(
         join(FIXTURE_DIR, "good.py"),
-        "# Clean script\n# FEATURE: Static Analysis Tests\n\ndef hello():\n    return 'hi'\n",
+        "# summary: Clean static analysis python fixture\n# FEATURE: Static Analysis Tests\n# inputs: none\n# outputs: hello() greeting string\n\ndef hello():\n    return 'hi'\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -82,7 +82,7 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "err.ts"),
-        "// Broken module\n// FEATURE: Static Analysis Tests\n\nconst a: number = 'wrong';\n",
+        "// summary: Broken static analysis fixture module\n// FEATURE: Static Analysis Tests\n// inputs: none\n// outputs: type error for lint coverage\n\nconst a: number = 'wrong';\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -113,6 +113,20 @@ describe("static-analysis", async () => {
       assert.ok(result.includes("Lowest-scoring files:"));
       assert.ok(result.includes("score="));
       assert.ok(result.includes("[header]"));
+    });
+
+    it("reports missing structured header fields as rule findings", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "missing-fields.ts"),
+        "// FEATURE: Static Analysis Tests\n// plain header line\n\nexport const missingFields = 1;\n",
+      );
+      const result = await runStaticAnalysis({
+        rootDir: FIXTURE_DIR,
+        targetPath: "missing-fields.ts",
+      });
+      assert.ok(result.includes("[summary-header]"));
+      assert.ok(result.includes("[inputs-header]"));
+      assert.ok(result.includes("[outputs-header]"));
     });
   });
 

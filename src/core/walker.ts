@@ -1,5 +1,5 @@
 // Gitignore-aware recursive directory walker with depth control
-// Returns filtered file paths respecting project ignore patterns
+// FEATURE: Repository traversal respecting gitignore and scoped path filters
 
 import { readdir, readFile, stat } from "fs/promises";
 import { join, relative, resolve } from "path";

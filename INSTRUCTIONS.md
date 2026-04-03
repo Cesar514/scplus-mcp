@@ -83,15 +83,19 @@ Default to execution-first behavior. Use minimal tokens, minimal narration, and 
 
 ### File Header (Mandatory)
 
-Every file MUST start with exactly 2 comment lines (10 words each) explaining the file:
+Every supported source file MUST start with a leading comment header block. The header must include:
 
 ```
-// Regex-based symbol extraction engine for multi-language AST parsing
+// summary: Regex-based symbol extraction for multi-language AST parsing
 // FEATURE: Core parsing layer for structural code analysis
+// inputs: Source file contents and language-specific parser availability
+// outputs: Structured symbols, ranges, and explicit parser failures
 ```
 
-Line 1: What the file does.
-Line 2: `FEATURE: <name>` - the primary feature it belongs to. Links to hub.
+- `summary:` describes what the file does in specific terms.
+- `FEATURE: <name>` links the file to its primary feature area.
+- `inputs:` describes the main inputs, dependencies, or prerequisites.
+- `outputs:` describes the main outputs, side effects, or produced data.
 
 ### Comment Policy
 

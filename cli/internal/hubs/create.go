@@ -1,3 +1,5 @@
+// Hub creation helpers for the Go operator workflow surface.
+// FEATURE: Go hub authoring support for operator-driven feature maps.
 package hubs
 
 import (

@@ -1,5 +1,5 @@
 // Persisted file-level semantic search with eager indexing and refresh support
-// Builds reusable file search state under .contextplus for fast queries
+// FEATURE: File-level semantic retrieval over persisted prepared-index artifacts
 
 import { readFile, stat } from "fs/promises";
 import { extname, resolve } from "path";

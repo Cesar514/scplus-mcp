@@ -1,5 +1,5 @@
 // Shadow git branch manager for safe AI change tracking
-// Creates restore points on hidden branch without polluting main history
+// FEATURE: Restore point persistence for reversible AI-authored file changes
 
 import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";

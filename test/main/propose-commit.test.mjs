@@ -17,7 +17,7 @@ describe("propose-commit", async () => {
   describe("proposeCommit", () => {
     it("saves a valid file with proper header", async () => {
       const content =
-        "// Module description line 1\n// Module description line 2\n\nfunction main() {\n  return 1;\n}\n";
+        "// summary: Valid checkpoint fixture module\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: main() return value\n\nfunction main() {\n  return 1;\n}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "valid.ts",
@@ -44,7 +44,7 @@ describe("propose-commit", async () => {
 
     it("allows comments after the required header", async () => {
       const content =
-        "// Line 1\n// Line 2\n\n// This is an inline comment\nfunction x() {}\n";
+        "// summary: Comment-friendly checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: x() side effect free\n\n// This is an inline comment\nfunction x() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "comments.ts",
@@ -54,8 +54,12 @@ describe("propose-commit", async () => {
     });
 
     it("warns when the second header line is missing a feature tag", async () => {
-      const lines = ["// H1", "// H2", ""];
-      lines[1] = "// Header without feature tag";
+      const lines = [
+        "// summary: Header without feature tag",
+        "// inputs: none",
+        "// outputs: x() result",
+        "",
+      ];
       lines.push("// allowed comment");
       lines.push("function x() {}");
       const content = lines.join("\n");
@@ -68,7 +72,7 @@ describe("propose-commit", async () => {
     });
 
     it("warns about high nesting depth", async () => {
-      let content = "// H1\n// H2\n\n";
+      let content = "// summary: Nested checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: nesting warning\n\n";
       for (let i = 0; i < 8; i++) content += "  ".repeat(i) + "if (true) {\n";
       content += "  ".repeat(8) + "doStuff();\n";
       for (let i = 7; i >= 0; i--) content += "  ".repeat(i) + "}\n";
@@ -85,7 +89,7 @@ describe("propose-commit", async () => {
     });
 
     it("warns about excessively long files", async () => {
-      const lines = ["// Header 1", "// Header 2", ""];
+      const lines = ["// summary: Long checkpoint fixture", "// FEATURE: Checkpoint Tests", "// inputs: none", "// outputs: file length warning", ""];
       for (let i = 0; i < 1100; i++) lines.push(`const x${i} = ${i};`);
       const content = lines.join("\n");
       const result = await proposeCommit({
@@ -102,7 +106,7 @@ describe("propose-commit", async () => {
 
     it("creates a restore point before saving", async () => {
       const content =
-        "// Restore test 1\n// Restore test 2\n\nfunction r() {}\n";
+        "// summary: Restore checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: r() placeholder\n\nfunction r() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "restore.ts",
@@ -126,7 +130,7 @@ describe("propose-commit", async () => {
     });
 
     it("creates nested directories when needed", async () => {
-      const content = "// Deep 1\n// Deep 2\n\nfunction deep() {}\n";
+      const content = "// summary: Deep checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: deep() placeholder\n\nfunction deep() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "sub/dir/deep.ts",
@@ -145,12 +149,12 @@ describe("propose-commit", async () => {
         proposeCommit({
           rootDir: FIXTURE_DIR,
           filePath: "parallel/left.ts",
-          newContent: "// Left 1\n// FEATURE: Left\n\nexport const left = 1;\n",
+          newContent: "// summary: Left parallel checkpoint fixture\n// FEATURE: Left\n// inputs: none\n// outputs: left constant\n\nexport const left = 1;\n",
         }),
         proposeCommit({
           rootDir: FIXTURE_DIR,
           filePath: "parallel/right.ts",
-          newContent: "// Right 1\n// FEATURE: Right\n\nexport const right = 2;\n",
+          newContent: "// summary: Right parallel checkpoint fixture\n// FEATURE: Right\n// inputs: none\n// outputs: right constant\n\nexport const right = 2;\n",
         }),
       ]);
       assert.ok(left.includes("saved") || left.includes("✅"));
@@ -161,6 +165,17 @@ describe("propose-commit", async () => {
       ]);
       assert.match(leftWritten, /export const left = 1;/);
       assert.match(rightWritten, /export const right = 2;/);
+    });
+
+    it("warns when structured header fields are missing", async () => {
+      const result = await proposeCommit({
+        rootDir: FIXTURE_DIR,
+        filePath: "missing-fields.ts",
+        newContent: "// FEATURE: Checkpoint Tests\n// plain header line\n\nexport const value = 1;\n",
+      });
+      assert.ok(result.includes("summary-header"));
+      assert.ok(result.includes("inputs-header"));
+      assert.ok(result.includes("outputs-header"));
     });
   });
 

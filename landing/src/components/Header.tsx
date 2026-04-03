@@ -1,3 +1,5 @@
+// Landing page header with repo status and theme controls.
+// FEATURE: Landing hero navigation and GitHub status presentation.
 "use client";
 
 import DarkModeToggle from "./DarkModeToggle";
