@@ -30,7 +30,6 @@ import {
   formatExactSymbolResults,
   formatRepoStatusSummary,
   formatOutline,
-  formatPathCandidates,
   formatRepoChangesSummary,
   formatWordMatches,
   getDependencyInfo,
