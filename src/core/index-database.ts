@@ -10,11 +10,16 @@ import { join, resolve } from "path";
 import {
   encodeVectorBlob,
   mapVectorEntryRow,
-  type LegacyVectorEntryRow,
   type VectorCollectionRow,
   type VectorEntryRow,
   type VectorStoreEntry,
 } from "./index-database-vectors.js";
+import {
+  createBinaryVectorEntriesTable,
+  getTableColumns,
+  hasTable,
+  migrateLegacyVectorEntriesToBinary,
+} from "./index-database-schema.js";
 import { SCPLUS_INDEX_DB_FILE, ensureScplusLayout } from "./project-layout.js";
 
 export type { VectorStoreEntry } from "./index-database-vectors.js";
@@ -213,92 +218,6 @@ function writeServingStateToDb(db: DatabaseSync, state: IndexServingState): void
     statement.run(META_ACTIVE_GENERATION_BLOCKED_REASON, state.activeGenerationBlockedReason);
   } else {
     db.prepare(`DELETE FROM index_db_meta WHERE meta_key = ?`).run(META_ACTIVE_GENERATION_BLOCKED_REASON);
-  }
-}
-
-function hasTable(db: DatabaseSync, tableName: string): boolean {
-  const row = db.prepare(`
-    SELECT name
-    FROM sqlite_master
-    WHERE type = 'table' AND name = ?
-  `).get(tableName) as { name: string } | undefined;
-  return row?.name === tableName;
-}
-
-function getTableColumns(db: DatabaseSync, tableName: string): string[] {
-  if (!/^[a-z0-9_]+$/i.test(tableName)) {
-    throw new Error(`Invalid table name: ${tableName}`);
-  }
-  if (!hasTable(db, tableName)) return [];
-  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-  return rows.map((row) => row.name);
-}
-
-function createBinaryVectorEntriesTable(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS vector_entries (
-      namespace TEXT NOT NULL,
-      entry_id TEXT NOT NULL,
-      content_hash TEXT NOT NULL,
-      search_text TEXT NOT NULL,
-      vector_blob BLOB NOT NULL,
-      metadata_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (namespace, entry_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_vector_entries_namespace
-    ON vector_entries(namespace);
-  `);
-}
-
-function migrateLegacyVectorEntriesToBinary(db: DatabaseSync): void {
-  const columns = getTableColumns(db, "vector_entries");
-  if (columns.includes("vector_blob")) return;
-  if (!columns.includes("vector_json")) {
-    throw new Error("vector_entries table exists but does not expose either vector_blob or vector_json.");
-  }
-
-  db.exec("BEGIN");
-  try {
-    db.prepare(`ALTER TABLE vector_entries RENAME TO vector_entries_legacy`).run();
-    createBinaryVectorEntriesTable(db);
-    const legacyRows = db.prepare(`
-      SELECT namespace, entry_id, content_hash, search_text, vector_json, metadata_json, updated_at
-      FROM vector_entries_legacy
-      ORDER BY namespace, entry_id
-    `).all() as unknown as LegacyVectorEntryRow[];
-    const insert = db.prepare(`
-      INSERT INTO vector_entries (
-        namespace,
-        entry_id,
-        content_hash,
-        search_text,
-        vector_blob,
-        metadata_json,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const row of legacyRows) {
-      const parsedVector = JSON.parse(row.vector_json) as unknown;
-      if (!Array.isArray(parsedVector)) {
-        throw new Error(`Legacy vector entry ${row.namespace}/${row.entry_id} did not contain a JSON array.`);
-      }
-      insert.run(
-        row.namespace,
-        row.entry_id,
-        row.content_hash,
-        row.search_text,
-        encodeVectorBlob(parsedVector as number[]),
-        row.metadata_json,
-        row.updated_at,
-      );
-    }
-    db.prepare(`DROP TABLE vector_entries_legacy`).run();
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
   }
 }
 

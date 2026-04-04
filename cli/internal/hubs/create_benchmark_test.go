@@ -1,3 +1,8 @@
+// summary: Benchmarks alternative string-building strategies for hub markdown generation.
+// FEATURE: measures concat versus fmt.Sprintf hub line construction on large file lists.
+// inputs: Synthetic hub titles, summaries, and repeated dummy file paths.
+// outputs: Benchmark timing for old and new hub markdown builders.
+
 package hubs
 
 import (

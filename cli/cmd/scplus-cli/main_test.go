@@ -1,5 +1,7 @@
 // summary: Verifies launcher-side global shutdown process matching for scplus commands.
 // FEATURE: keeps Ctrl+X process sweeps scoped to scplus-related commands only.
+// inputs: Process command lines, fake process listings, and spawned sleep processes.
+// outputs: Verified scplus-process matching decisions and explicit termination behavior.
 package main
 
 import (
