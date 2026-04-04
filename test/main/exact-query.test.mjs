@@ -59,6 +59,73 @@ async function createFixtureRepo(rootDir) {
   );
 }
 
+describe("formatExactSymbolResults", () => {
+  it("formats empty hits correctly", async () => {
+    const { formatExactSymbolResults } = await import("../../build/tools/exact-query.js");
+    const result = formatExactSymbolResults("testQuery", []);
+    assert.equal(result, 'Exact symbol matches for "testQuery" (0)\nNo exact symbol matches.');
+  });
+
+  it("formats hits without parentName correctly", async () => {
+    const { formatExactSymbolResults } = await import("../../build/tools/exact-query.js");
+    const hits = [{
+      path: "src/test.ts",
+      name: "testFn",
+      kind: "function",
+      line: 10,
+      endLine: 15,
+      signature: "testFn()",
+      header: "test header",
+      modulePath: "src/test.js"
+    }];
+    const result = formatExactSymbolResults("testFn", hits);
+    assert.equal(result, 'Exact symbol matches for "testFn" (1)\n- src/test.ts:10-15 | function | testFn()');
+  });
+
+  it("formats hits with parentName correctly", async () => {
+    const { formatExactSymbolResults } = await import("../../build/tools/exact-query.js");
+    const hits = [{
+      path: "src/test.ts",
+      name: "testMethod",
+      kind: "method",
+      line: 20,
+      endLine: 25,
+      signature: "testMethod()",
+      parentName: "TestClass",
+      header: "test header",
+      modulePath: "src/test.js"
+    }];
+    const result = formatExactSymbolResults("testMethod", hits);
+    assert.equal(result, 'Exact symbol matches for "testMethod" (1)\n- src/test.ts:20-25 | method | testMethod() | parent TestClass');
+  });
+
+  it("formats multiple hits correctly", async () => {
+    const { formatExactSymbolResults } = await import("../../build/tools/exact-query.js");
+    const hits = [{
+      path: "src/test1.ts",
+      name: "test1",
+      kind: "function",
+      line: 1,
+      endLine: 2,
+      signature: "test1()",
+      header: "h1",
+      modulePath: "m1"
+    }, {
+      path: "src/test2.ts",
+      name: "test2",
+      kind: "class",
+      line: 5,
+      endLine: 10,
+      signature: "class test2",
+      parentName: "Parent",
+      header: "h2",
+      modulePath: "m2"
+    }];
+    const result = formatExactSymbolResults("test", hits);
+    assert.equal(result, 'Exact symbol matches for "test" (2)\n- src/test1.ts:1-2 | function | test1()\n- src/test2.ts:5-10 | class | class test2 | parent Parent');
+  });
+});
+
 describe("exact-query", () => {
   it("builds fast exact-query caches for symbols, words, outlines, dependencies, and git changes", async () => {
     const { indexCodebase } = await import("../../build/tools/index-codebase.js");
