@@ -384,15 +384,12 @@ function normalizeBridgeCommand(command: string): string {
   return command.replace(/_/g, "-");
 }
 
-async function executeSharedBridgeCommand(command: string, rawArgs: Record<string, unknown>): Promise<unknown> {
-  const normalizedCommand = normalizeBridgeCommand(command);
-  if (normalizedCommand === "doctor") {
-    return bridgeServiceCore.doctor(assertString(rawArgs.root, "root"));
-  }
-  if (normalizedCommand === "tree") {
-    return bridgeServiceCore.tree(assertString(rawArgs.root, "root"));
-  }
-  if (normalizedCommand === "hubs" || normalizedCommand === "find-hub") {
+type BridgeCommandHandler = (rawArgs: Record<string, unknown>) => Promise<unknown> | unknown;
+
+const BRIDGE_COMMAND_HANDLERS: Record<string, BridgeCommandHandler> = {
+  doctor: (rawArgs) => bridgeServiceCore.doctor(assertString(rawArgs.root, "root")),
+  tree: (rawArgs) => bridgeServiceCore.tree(assertString(rawArgs.root, "root")),
+  hubs: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const rendered = await getFeatureHub({
       rootDir: root,
@@ -403,11 +400,10 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       showOrphans: rawArgs.showOrphans === undefined ? false : assertBoolean(rawArgs.showOrphans, "showOrphans"),
     });
     return { root, text: rendered };
-  }
-  if (normalizedCommand === "cluster") {
-    return bridgeServiceCore.refreshClusters(assertString(rawArgs.root, "root"));
-  }
-  if (normalizedCommand === "view-clusters") {
+  },
+  "find-hub": async (rawArgs) => BRIDGE_COMMAND_HANDLERS.hubs(rawArgs),
+  cluster: (rawArgs) => bridgeServiceCore.refreshClusters(assertString(rawArgs.root, "root")),
+  "view-clusters": async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const rendered = await semanticNavigate({
       rootDir: root,
@@ -415,42 +411,30 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       maxClusters: assertOptionalPositiveNumber(rawArgs.maxClusters, "maxClusters"),
     });
     return { root, text: rendered };
-  }
-  if (normalizedCommand === "restore-points") {
-    return bridgeServiceCore.restorePoints(assertString(rawArgs.root, "root"));
-  }
-  if (normalizedCommand === "index") {
-    return {
-      output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizeBridgeIndexMode(rawArgs.mode)),
-    };
-  }
-  if (normalizedCommand === "job-control") {
-    return bridgeServiceCore.controlJob(assertString(rawArgs.root, "root"), assertJobControlAction(rawArgs.action));
-  }
-  if (normalizedCommand === "status") {
-    return getRepoStatus(assertString(rawArgs.root, "root"));
-  }
-  if (normalizedCommand === "changes") {
-    return getRepoChanges(assertString(rawArgs.root, "root"), {
-      path: assertOptionalString(rawArgs.path, "path"),
-      limit: assertOptionalPositiveNumber(rawArgs.limit, "limit"),
-    });
-  }
-  if (normalizedCommand === "validate-index") {
-    return validatePreparedIndex({
-      rootDir: assertString(rawArgs.root, "root"),
-      mode: normalizePreparedIndexMode(rawArgs.mode),
-    });
-  }
-  if (normalizedCommand === "repair-index") {
+  },
+  "restore-points": (rawArgs) => bridgeServiceCore.restorePoints(assertString(rawArgs.root, "root")),
+  index: async (rawArgs) => ({
+    output: await bridgeServiceCore.index(assertString(rawArgs.root, "root"), normalizeBridgeIndexMode(rawArgs.mode)),
+  }),
+  "job-control": (rawArgs) => bridgeServiceCore.controlJob(assertString(rawArgs.root, "root"), assertJobControlAction(rawArgs.action)),
+  status: (rawArgs) => getRepoStatus(assertString(rawArgs.root, "root")),
+  changes: (rawArgs) => getRepoChanges(assertString(rawArgs.root, "root"), {
+    path: assertOptionalString(rawArgs.path, "path"),
+    limit: assertOptionalPositiveNumber(rawArgs.limit, "limit"),
+  }),
+  "validate-index": (rawArgs) => validatePreparedIndex({
+    rootDir: assertString(rawArgs.root, "root"),
+    mode: normalizePreparedIndexMode(rawArgs.mode),
+  }),
+  "repair-index": async (rawArgs) => {
     const target = assertString(rawArgs.target, "target");
     return {
       root: assertString(rawArgs.root, "root"),
       target,
       output: await repairPreparedIndex(assertString(rawArgs.root, "root"), target as Parameters<typeof repairPreparedIndex>[1]),
     };
-  }
-  if (normalizedCommand === "symbol") {
+  },
+  symbol: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const query = assertString(rawArgs.query, "query");
     const topK = assertOptionalPositiveNumber(rawArgs.topK, "topK") ?? 10;
@@ -461,8 +445,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       hits,
       text: formatExactSymbolResults(query, hits),
     });
-  }
-  if (normalizedCommand === "word") {
+  },
+  word: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const query = assertString(rawArgs.query, "query");
     const topK = assertOptionalPositiveNumber(rawArgs.topK, "topK") ?? 10;
@@ -473,8 +457,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       hits,
       text: formatWordMatches(query, hits),
     });
-  }
-  if (normalizedCommand === "outline") {
+  },
+  outline: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const filePath = assertString(rawArgs.filePath, "filePath");
     const outline = await getOutline(root, filePath);
@@ -483,8 +467,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       outline,
       text: formatOutline(outline),
     });
-  }
-  if (normalizedCommand === "deps") {
+  },
+  deps: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const target = assertString(rawArgs.target, "target");
     const dependencyInfo = await getDependencyInfo(root, target);
@@ -493,8 +477,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       dependencyInfo,
       text: formatDependencyInfo(dependencyInfo),
     });
-  }
-  if (normalizedCommand === "search") {
+  },
+  search: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const report = await buildSearchByIntentReport({
       rootDir: root,
@@ -506,8 +490,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       includeKinds: assertOptionalStringArray(rawArgs.includeKinds, "includeKinds"),
     });
     return buildPreparedBridgePayload(root, report);
-  }
-  if (normalizedCommand === "research") {
+  },
+  research: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const query = assertString(rawArgs.query, "query");
     const report = await buildResearchReport({
@@ -524,8 +508,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       report,
       text: formatResearchReport(report),
     });
-  }
-  if (normalizedCommand === "lint") {
+  },
+  lint: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const targetPath = assertOptionalString(rawArgs.targetPath, "targetPath");
     const report = await buildStaticAnalysisReport({ rootDir: root, targetPath });
@@ -535,8 +519,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       report,
       text: formatStaticAnalysisReport(report),
     };
-  }
-  if (normalizedCommand === "blast-radius") {
+  },
+  "blast-radius": async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const symbolName = assertString(rawArgs.symbolName, "symbolName");
     const fileContext = assertOptionalString(rawArgs.fileContext, "fileContext");
@@ -548,8 +532,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       report,
       text: formatBlastRadiusReport(report),
     };
-  }
-  if (normalizedCommand === "checkpoint") {
+  },
+  checkpoint: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const filePath = assertString(rawArgs.filePath, "filePath");
     const report = await buildCheckpointReport({
@@ -563,8 +547,8 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
       report,
       text: formatCheckpointReport(report),
     };
-  }
-  if (normalizedCommand === "restore") {
+  },
+  restore: async (rawArgs) => {
     const root = assertString(rawArgs.root, "root");
     const pointId = assertString(rawArgs.pointId, "pointId");
     const restoredFiles = await restorePoint(root, pointId);
@@ -576,16 +560,22 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
         ? `Restored ${restoredFiles.length} file(s):\n${restoredFiles.join("\n")}`
         : "No files were restored. The backup may be empty.",
     };
-  }
-  if (normalizedCommand === "watch-set") {
-    return bridgeServiceCore.setWatchEnabled(
-      assertString(rawArgs.root, "root"),
-      assertBoolean(rawArgs.enabled, "enabled"),
-      normalizeDebounceMs(rawArgs.debounceMs),
-    );
-  }
-  if (normalizedCommand === "shutdown") {
-    return { shuttingDown: true };
+  },
+  "watch-set": (rawArgs) => bridgeServiceCore.setWatchEnabled(
+    assertString(rawArgs.root, "root"),
+    assertBoolean(rawArgs.enabled, "enabled"),
+    normalizeDebounceMs(rawArgs.debounceMs),
+  ),
+  shutdown: () => ({ shuttingDown: true }),
+};
+
+async function executeSharedBridgeCommand(command: string, rawArgs: Record<string, unknown>): Promise<unknown> {
+  const normalizedCommand = normalizeBridgeCommand(command);
+  if (Object.prototype.hasOwnProperty.call(BRIDGE_COMMAND_HANDLERS, normalizedCommand)) {
+    const handler = BRIDGE_COMMAND_HANDLERS[normalizedCommand];
+    if (handler) {
+      return handler(rawArgs);
+    }
   }
   throw new Error(`Unsupported bridge command "${command}".`);
 }
