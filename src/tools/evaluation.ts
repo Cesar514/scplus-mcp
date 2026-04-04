@@ -244,11 +244,19 @@ function buildFile(prefix: string, description: string, feature: string, body: s
   return [`${prefix} ${description}`, `${prefix} FEATURE: ${feature}`, "", ...body, ""].join("\n");
 }
 
+const REPO_WRITE_BATCH_SIZE = 64;
+
 async function writeRepoFiles(rootDir: string, files: Record<string, string>): Promise<void> {
-  for (const [relativePath, content] of Object.entries(files)) {
-    const targetPath = join(rootDir, relativePath);
-    await mkdir(dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, content);
+  const entries = Object.entries(files);
+  for (let index = 0; index < entries.length; index += REPO_WRITE_BATCH_SIZE) {
+    const batch = entries.slice(index, index + REPO_WRITE_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async ([relativePath, content]) => {
+        const targetPath = join(rootDir, relativePath);
+        await mkdir(dirname(targetPath), { recursive: true });
+        await writeFile(targetPath, content);
+      }),
+    );
   }
 }
 
