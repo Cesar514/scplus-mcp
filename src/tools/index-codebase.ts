@@ -17,7 +17,6 @@ import {
   loadIndexStatus,
   saveIndexStageState,
   saveIndexStatus,
-  type ChunkIndexStatus,
   type IndexObservabilityStatus,
   type IndexStageObservabilityStatus,
   type IndexStatus,
