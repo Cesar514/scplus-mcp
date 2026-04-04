@@ -81,7 +81,7 @@ func BuildHubMarkdown(title, summary string, files []string) string {
 		"",
 	}
 	for _, filePath := range files {
-		lines = append(lines, fmt.Sprintf("- [[%s]]", filePath))
+		lines = append(lines, "- [["+filePath+"]]")
 	}
 	lines = append(lines, "")
 	return strings.Join(lines, "\n")
