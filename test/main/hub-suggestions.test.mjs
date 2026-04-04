@@ -7,6 +7,8 @@ import { join } from "node:path";
 
 const { indexCodebase } = await import("../../build/tools/index-codebase.js");
 const { getFeatureHub } = await import("../../build/tools/feature-hub.js");
+const { saveIndexArtifact } = await import("../../build/core/index-database.js");
+const { refreshHubSuggestionState } = await import("../../build/tools/hub-suggestions.js");
 
 function readArtifact(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
@@ -109,6 +111,95 @@ describe("hub suggestions", () => {
     } finally {
       if (previousProvider === undefined) delete process.env.SCPLUS_EMBED_PROVIDER;
       else process.env.SCPLUS_EMBED_PROVIDER = previousProvider;
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes colliding markdown writes while keeping path buckets concurrent", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-hub-collision-"));
+    try {
+      await mkdir(join(rootDir, "src"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "first.ts"),
+        [
+          "// First auth fixture",
+          "export const firstAuth = true;",
+        ].join("\n"),
+      );
+      await writeFile(
+        join(rootDir, "src", "second.ts"),
+        [
+          "// Second auth fixture",
+          "export const secondAuth = true;",
+        ].join("\n"),
+      );
+
+      await saveIndexArtifact(rootDir, "code-structure-index", {
+        files: {
+          "src/first.ts": {
+            artifact: {
+              path: "src/first.ts",
+              header: "First auth fixture",
+              modulePath: "src/first.ts",
+              dependencyPaths: [],
+            },
+          },
+          "src/second.ts": {
+            artifact: {
+              path: "src/second.ts",
+              header: "Second auth fixture",
+              modulePath: "src/second.ts",
+              dependencyPaths: [],
+            },
+          },
+        },
+        moduleSummaries: {},
+        moduleImportEdges: [],
+      });
+      await saveIndexArtifact(rootDir, "semantic-cluster-index", {
+        root: {
+          id: "cluster-root",
+          label: "Root",
+          pathPattern: null,
+          summary: "",
+          filePaths: ["src/first.ts", "src/second.ts"],
+          children: [],
+        },
+        relatedFiles: {},
+        subsystemSummaries: {
+          "subsystem-first": {
+            id: "subsystem-first",
+            label: "Authentication",
+            overarchingTheme: "Handles authentication entrypoints.",
+            distinguishingFeature: "Owns the first auth path.",
+            pathPattern: "src/first.ts",
+            fileCount: 1,
+            filePaths: ["src/first.ts"],
+          },
+          "subsystem-second": {
+            id: "subsystem-second",
+            label: "Authentication",
+            overarchingTheme: "Handles authentication refresh.",
+            distinguishingFeature: "Owns the second auth path.",
+            pathPattern: "src/second.ts",
+            fileCount: 1,
+            filePaths: ["src/second.ts"],
+          },
+        },
+      });
+
+      const { state, stats } = await refreshHubSuggestionState(rootDir);
+      assert.equal(stats.suggestionCount, 2);
+      assert.equal(stats.generatedMarkdownCount, 2);
+      assert.equal(state.suggestions["subsystem-first"].markdownPath, ".scplus/hubs/suggested/authentication.md");
+      assert.equal(state.suggestions["subsystem-second"].markdownPath, ".scplus/hubs/suggested/authentication.md");
+
+      const markdown = await readFile(join(rootDir, ".scplus", "hubs", "suggested", "authentication.md"), "utf8");
+      assert.match(markdown, /Handles authentication refresh\./);
+      assert.match(markdown, /Owns the second auth path\./);
+      assert.match(markdown, /\[\[src\/second\.ts\|/);
+      assert.doesNotMatch(markdown, /\[\[src\/first\.ts\|/);
+    } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
   });

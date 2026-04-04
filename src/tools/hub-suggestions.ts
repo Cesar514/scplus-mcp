@@ -205,6 +205,19 @@ async function writeSuggestionMarkdown(rootDir: string, suggestion: HubSuggestio
   await writeFile(fullPath, lines.join("\n"), "utf8");
 }
 
+function groupSuggestionsByMarkdownPath(suggestionOrder: HubSuggestion[]): HubSuggestion[][] {
+  const buckets = new Map<string, HubSuggestion[]>();
+  for (const suggestion of suggestionOrder) {
+    const existing = buckets.get(suggestion.markdownPath);
+    if (existing) {
+      existing.push(suggestion);
+      continue;
+    }
+    buckets.set(suggestion.markdownPath, [suggestion]);
+  }
+  return Array.from(buckets.values());
+}
+
 function countSuggestionLinks(
   relatedFiles: Record<string, RelatedFileEdge[]>,
   leftPaths: string[],
@@ -319,11 +332,13 @@ export async function refreshHubSuggestionState(rootDir: string): Promise<{ stat
   if (suggestionOrder.length > 0) {
     await mkdir(suggestionsDir, { recursive: true });
     await Promise.all(
-      suggestionOrder.map((suggestion) => {
-        const linkedSuggestions = suggestion.linkedSuggestionIds
-          .map((suggestionId) => suggestions[suggestionId])
-          .filter((value): value is HubSuggestion => Boolean(value));
-        return writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
+      groupSuggestionsByMarkdownPath(suggestionOrder).map(async (bucket) => {
+        for (const suggestion of bucket) {
+          const linkedSuggestions = suggestion.linkedSuggestionIds
+            .map((suggestionId) => suggestions[suggestionId])
+            .filter((value): value is HubSuggestion => Boolean(value));
+          await writeSuggestionMarkdown(rootDir, suggestion, linkedSuggestions);
+        }
       }),
     );
   }
