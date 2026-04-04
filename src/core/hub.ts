@@ -3,7 +3,7 @@
 // inputs: Hub markdown text, repository-relative link targets, and tag patterns.
 // outputs: Parsed hub structures, wikilink lists, and feature metadata.
 
-import { readFile, readdir, stat } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { resolve, relative, join, extname, basename } from "path";
 
 export interface HubLink {
