@@ -9,7 +9,7 @@ import { activateIndexGeneration, clearPendingIndexGeneration, reservePendingInd
 import { type FileSearchIndexProgress } from "./semantic-search.js";
 import { type IdentifierIndexProgress } from "./semantic-identifiers.js";
 import { type FullIndexProgress } from "./full-index-artifacts.js";
-import { DEFAULT_INDEX_MODE, getStageDefinitions, type IndexMode } from "./index-contract.js";
+import { DEFAULT_INDEX_MODE, getStageDefinitions, type IndexMode, type PersistedIndexStageState } from "./index-contract.js";
 import {
   createIndexRuntime,
   executeIndexStage,
@@ -20,6 +20,7 @@ import {
   type IndexObservabilityStatus,
   type IndexStageObservabilityStatus,
   type IndexStatus,
+  type IndexStageRuntime,
 } from "./index-stages.js";
 
 export interface IndexCodebaseOptions {
@@ -213,6 +214,185 @@ function formatFullProgress(progress: FullIndexProgress): string {
   ].join(" | ");
 }
 
+interface StageExecutionContext {
+  runtime: IndexStageRuntime;
+  status: IndexStatus;
+  stageState: PersistedIndexStageState;
+  persistStatusImmediately: () => Promise<void>;
+  progressPersistence: { persist(phase: string): Promise<boolean> };
+  appendProgress: (message: string, progress?: Partial<Pick<IndexCodebaseProgressEvent, "processedItems" | "totalItems" | "currentFile">>) => void;
+}
+
+async function runBootstrapStage(ctx: StageExecutionContext): Promise<void> {
+  const { runtime, status, stageState, persistStatusImmediately, appendProgress } = ctx;
+  const bootstrapTiming = createStageTimingRecorder(Date.now());
+  noteStagePhase(bootstrapTiming, "bootstrap", bootstrapTiming.startedAtMs);
+  await executeIndexStage({
+    runtime,
+    status,
+    stageState,
+    stage: "bootstrap",
+    persist: persistStatusImmediately,
+  });
+  appendProgress(
+    `bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`,
+    {
+      processedItems: status.bootstrap?.files,
+      totalItems: status.bootstrap?.files,
+    },
+  );
+  status.observability!.stages.bootstrap = buildStageObservabilityStatus("bootstrap", finalizeStageTiming(bootstrapTiming), status);
+  await persistStatusImmediately();
+}
+
+async function runFileSearchStage(ctx: StageExecutionContext): Promise<void> {
+  const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
+  const fileSearchTiming = createStageTimingRecorder(Date.now());
+  await executeIndexStage({
+    runtime,
+    status,
+    stageState,
+    stage: "file-search",
+    persist: persistStatusImmediately,
+    onFileProgress: async (progress) => {
+      noteStagePhase(fileSearchTiming, progress.phase);
+      status.phase = progress.phase;
+      status.fileSearch = {
+        ...status.fileSearch,
+        totalFiles: progress.totalFiles,
+        processedFiles: progress.processedFiles,
+        changedFiles: progress.changedFiles,
+        removedFiles: progress.removedFiles,
+        indexedDocuments: progress.indexedDocuments,
+      };
+      appendProgress(formatFileProgress(progress), {
+        processedItems: progress.processedFiles,
+        totalItems: progress.totalFiles,
+        currentFile: progress.currentFile,
+      });
+      await progressPersistence.persist(status.phase);
+    },
+  });
+  noteStagePhase(fileSearchTiming, "file-embeddings");
+  appendProgress(
+    `file-ready | ${status.fileSearch?.indexedDocuments ?? 0} docs | ` +
+    `${status.fileSearch?.embeddedDocuments ?? 0} embedded | ${status.fileSearch?.reusedDocuments ?? 0} reused`,
+    {
+      processedItems: status.fileSearch?.processedFiles,
+      totalItems: status.fileSearch?.totalFiles,
+    },
+  );
+  status.observability!.stages["file-search"] = buildStageObservabilityStatus("file-search", finalizeStageTiming(fileSearchTiming), status);
+  await persistStatusImmediately();
+}
+
+async function runIdentifierSearchStage(ctx: StageExecutionContext): Promise<void> {
+  const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
+  const identifierTiming = createStageTimingRecorder(Date.now());
+  await executeIndexStage({
+    runtime,
+    status,
+    stageState,
+    stage: "identifier-search",
+    persist: persistStatusImmediately,
+    onIdentifierProgress: async (progress) => {
+      noteStagePhase(identifierTiming, progress.phase);
+      status.phase = progress.phase;
+      status.identifierSearch = {
+        ...status.identifierSearch,
+        totalFiles: progress.totalFiles,
+        processedFiles: progress.processedFiles,
+        changedFiles: progress.changedFiles,
+        removedFiles: progress.removedFiles,
+        indexedIdentifiers: progress.indexedIdentifiers,
+      };
+      appendProgress(formatIdentifierProgress(progress), {
+        processedItems: progress.processedFiles,
+        totalItems: progress.totalFiles,
+        currentFile: progress.currentFile,
+      });
+      await progressPersistence.persist(status.phase);
+    },
+  });
+  noteStagePhase(identifierTiming, "identifier-embeddings");
+  appendProgress(
+    `identifier-ready | ${status.identifierSearch?.indexedIdentifiers ?? 0} identifiers | ` +
+    `${status.identifierSearch?.embeddedIdentifiers ?? 0} embedded | ${status.identifierSearch?.reusedIdentifiers ?? 0} reused`,
+    {
+      processedItems: status.identifierSearch?.processedFiles,
+      totalItems: status.identifierSearch?.totalFiles,
+    },
+  );
+  status.observability!.stages["identifier-search"] = buildStageObservabilityStatus("identifier-search", finalizeStageTiming(identifierTiming), status);
+}
+
+async function runFullArtifactsStage(ctx: StageExecutionContext): Promise<void> {
+  const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
+  const fullArtifactsTiming = createStageTimingRecorder(Date.now());
+  await executeIndexStage({
+    runtime,
+    status,
+    stageState,
+    stage: "full-artifacts",
+    persist: persistStatusImmediately,
+    onFullProgress: async (progress) => {
+      noteStagePhase(fullArtifactsTiming, progress.phase);
+      status.phase = progress.phase;
+      status.fullIndex = {
+        ...status.fullIndex,
+        chunkIndex: {
+          ...(status.fullIndex?.chunkIndex ?? {}),
+          totalFiles: progress.totalFiles,
+          processedFiles: progress.processedFiles,
+          changedFiles: progress.changedFiles,
+          removedFiles: progress.removedFiles,
+          indexedChunks: progress.indexedChunks,
+        },
+        structureIndex: {
+          ...(status.fullIndex?.structureIndex ?? {}),
+          totalFiles: progress.totalFiles,
+          processedFiles: progress.processedFiles,
+          changedFiles: progress.changedFiles,
+          removedFiles: progress.removedFiles,
+          indexedStructures: progress.indexedStructures,
+        },
+        hybridChunkIndex: {
+          ...(status.fullIndex?.hybridChunkIndex ?? {}),
+          indexedDocuments: progress.indexedHybridChunks,
+        },
+        hybridIdentifierIndex: {
+          ...(status.fullIndex?.hybridIdentifierIndex ?? {}),
+          indexedDocuments: progress.indexedHybridIdentifiers,
+        },
+        queryExplanationIndex: {
+          ...(status.fullIndex?.queryExplanationIndex ?? {}),
+          fileCardCount: progress.indexedQueryExplanations,
+        },
+      };
+      appendProgress(formatFullProgress(progress), {
+        processedItems: progress.processedFiles,
+        totalItems: progress.totalFiles,
+        currentFile: progress.currentFile,
+      });
+      await progressPersistence.persist(status.phase);
+    },
+  });
+  noteStagePhase(fullArtifactsTiming, "explanation-scan");
+  appendProgress(
+    `full-ready | ${status.fullIndex?.chunkIndex?.indexedChunks ?? 0} chunks | ` +
+    `${status.fullIndex?.structureIndex?.indexedStructures ?? 0} structures | ` +
+    `${status.fullIndex?.chunkIndex?.embeddedChunks ?? 0} chunk embeddings | ` +
+    `${status.fullIndex?.hybridChunkIndex?.indexedDocuments ?? 0} hybrid chunk docs | ` +
+    `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs | ` +
+    `${status.fullIndex?.queryExplanationIndex?.fileCardCount ?? 0} explanation cards`,
+    {
+      processedItems: status.fullIndex?.chunkIndex?.processedFiles ?? status.fullIndex?.structureIndex?.processedFiles,
+      totalItems: status.fullIndex?.chunkIndex?.totalFiles ?? status.fullIndex?.structureIndex?.totalFiles,
+    },
+  );
+  status.observability!.stages["full-artifacts"] = buildStageObservabilityStatus("full-artifacts", finalizeStageTiming(fullArtifactsTiming), status);
+}
+
 export async function indexCodebase(options: IndexCodebaseOptions): Promise<string> {
   const rootDir = options.rootDir;
   const mode = options.mode ?? DEFAULT_INDEX_MODE;
@@ -269,103 +449,22 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
   });
 
   try {
+    const ctx: StageExecutionContext = {
+      runtime,
+      status,
+      stageState,
+      persistStatusImmediately,
+      progressPersistence,
+      appendProgress,
+    };
+
     await runWithIndexGenerationContext({
       readGeneration: runtime.servingState.activeGeneration,
       writeGeneration: pendingGeneration,
     }, async () => {
-      const bootstrapTiming = createStageTimingRecorder(Date.now());
-      noteStagePhase(bootstrapTiming, "bootstrap", bootstrapTiming.startedAtMs);
-      await executeIndexStage({
-      runtime,
-      status,
-      stageState,
-      stage: "bootstrap",
-      persist: persistStatusImmediately,
-      });
-      appendProgress(
-        `bootstrap | ${status.bootstrap?.files ?? 0} files | ${status.bootstrap?.directories ?? 0} directories`,
-        {
-          processedItems: status.bootstrap?.files,
-          totalItems: status.bootstrap?.files,
-        },
-      );
-      status.observability!.stages.bootstrap = buildStageObservabilityStatus("bootstrap", finalizeStageTiming(bootstrapTiming), status);
-      await persistStatusImmediately();
-
-      const fileSearchTiming = createStageTimingRecorder(Date.now());
-      await executeIndexStage({
-        runtime,
-        status,
-        stageState,
-        stage: "file-search",
-        persist: persistStatusImmediately,
-        onFileProgress: async (progress) => {
-        noteStagePhase(fileSearchTiming, progress.phase);
-        status.phase = progress.phase;
-        status.fileSearch = {
-          ...status.fileSearch,
-          totalFiles: progress.totalFiles,
-          processedFiles: progress.processedFiles,
-          changedFiles: progress.changedFiles,
-          removedFiles: progress.removedFiles,
-          indexedDocuments: progress.indexedDocuments,
-        };
-        appendProgress(formatFileProgress(progress), {
-          processedItems: progress.processedFiles,
-          totalItems: progress.totalFiles,
-          currentFile: progress.currentFile,
-        });
-        await progressPersistence.persist(status.phase);
-      },
-      });
-      noteStagePhase(fileSearchTiming, "file-embeddings");
-      appendProgress(
-        `file-ready | ${status.fileSearch?.indexedDocuments ?? 0} docs | ` +
-        `${status.fileSearch?.embeddedDocuments ?? 0} embedded | ${status.fileSearch?.reusedDocuments ?? 0} reused`,
-        {
-          processedItems: status.fileSearch?.processedFiles,
-          totalItems: status.fileSearch?.totalFiles,
-        },
-      );
-      status.observability!.stages["file-search"] = buildStageObservabilityStatus("file-search", finalizeStageTiming(fileSearchTiming), status);
-      await persistStatusImmediately();
-
-      const identifierTiming = createStageTimingRecorder(Date.now());
-      await executeIndexStage({
-        runtime,
-        status,
-        stageState,
-        stage: "identifier-search",
-        persist: persistStatusImmediately,
-        onIdentifierProgress: async (progress) => {
-        noteStagePhase(identifierTiming, progress.phase);
-        status.phase = progress.phase;
-        status.identifierSearch = {
-          ...status.identifierSearch,
-          totalFiles: progress.totalFiles,
-          processedFiles: progress.processedFiles,
-          changedFiles: progress.changedFiles,
-          removedFiles: progress.removedFiles,
-          indexedIdentifiers: progress.indexedIdentifiers,
-        };
-        appendProgress(formatIdentifierProgress(progress), {
-          processedItems: progress.processedFiles,
-          totalItems: progress.totalFiles,
-          currentFile: progress.currentFile,
-        });
-        await progressPersistence.persist(status.phase);
-      },
-      });
-      noteStagePhase(identifierTiming, "identifier-embeddings");
-      appendProgress(
-        `identifier-ready | ${status.identifierSearch?.indexedIdentifiers ?? 0} identifiers | ` +
-        `${status.identifierSearch?.embeddedIdentifiers ?? 0} embedded | ${status.identifierSearch?.reusedIdentifiers ?? 0} reused`,
-        {
-          processedItems: status.identifierSearch?.processedFiles,
-          totalItems: status.identifierSearch?.totalFiles,
-        },
-      );
-      status.observability!.stages["identifier-search"] = buildStageObservabilityStatus("identifier-search", finalizeStageTiming(identifierTiming), status);
+      await runBootstrapStage(ctx);
+      await runFileSearchStage(ctx);
+      await runIdentifierSearchStage(ctx);
     });
 
     if (mode === "full") {
@@ -373,69 +472,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
         readGeneration: pendingGeneration,
         writeGeneration: pendingGeneration,
       }, async () => {
-        const fullArtifactsTiming = createStageTimingRecorder(Date.now());
-        await executeIndexStage({
-          runtime,
-          status,
-          stageState,
-          stage: "full-artifacts",
-          persist: persistStatusImmediately,
-          onFullProgress: async (progress) => {
-          noteStagePhase(fullArtifactsTiming, progress.phase);
-          status.phase = progress.phase;
-          status.fullIndex = {
-            ...status.fullIndex,
-            chunkIndex: {
-              ...(status.fullIndex?.chunkIndex ?? {}),
-              totalFiles: progress.totalFiles,
-              processedFiles: progress.processedFiles,
-              changedFiles: progress.changedFiles,
-              removedFiles: progress.removedFiles,
-              indexedChunks: progress.indexedChunks,
-            },
-            structureIndex: {
-              ...(status.fullIndex?.structureIndex ?? {}),
-              totalFiles: progress.totalFiles,
-              processedFiles: progress.processedFiles,
-              changedFiles: progress.changedFiles,
-              removedFiles: progress.removedFiles,
-              indexedStructures: progress.indexedStructures,
-            },
-            hybridChunkIndex: {
-              ...(status.fullIndex?.hybridChunkIndex ?? {}),
-              indexedDocuments: progress.indexedHybridChunks,
-            },
-            hybridIdentifierIndex: {
-              ...(status.fullIndex?.hybridIdentifierIndex ?? {}),
-              indexedDocuments: progress.indexedHybridIdentifiers,
-            },
-            queryExplanationIndex: {
-              ...(status.fullIndex?.queryExplanationIndex ?? {}),
-              fileCardCount: progress.indexedQueryExplanations,
-            },
-          };
-          appendProgress(formatFullProgress(progress), {
-            processedItems: progress.processedFiles,
-            totalItems: progress.totalFiles,
-            currentFile: progress.currentFile,
-          });
-          await progressPersistence.persist(status.phase);
-        },
-        });
-        noteStagePhase(fullArtifactsTiming, "explanation-scan");
-        appendProgress(
-          `full-ready | ${status.fullIndex?.chunkIndex?.indexedChunks ?? 0} chunks | ` +
-          `${status.fullIndex?.structureIndex?.indexedStructures ?? 0} structures | ` +
-          `${status.fullIndex?.chunkIndex?.embeddedChunks ?? 0} chunk embeddings | ` +
-          `${status.fullIndex?.hybridChunkIndex?.indexedDocuments ?? 0} hybrid chunk docs | ` +
-          `${status.fullIndex?.hybridIdentifierIndex?.indexedDocuments ?? 0} hybrid identifier docs | ` +
-          `${status.fullIndex?.queryExplanationIndex?.fileCardCount ?? 0} explanation cards`,
-          {
-            processedItems: status.fullIndex?.chunkIndex?.processedFiles ?? status.fullIndex?.structureIndex?.processedFiles,
-            totalItems: status.fullIndex?.chunkIndex?.totalFiles ?? status.fullIndex?.structureIndex?.totalFiles,
-          },
-        );
-        status.observability!.stages["full-artifacts"] = buildStageObservabilityStatus("full-artifacts", finalizeStageTiming(fullArtifactsTiming), status);
+        await runFullArtifactsStage(ctx);
       });
     }
 
