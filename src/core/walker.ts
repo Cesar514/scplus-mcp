@@ -7,6 +7,8 @@ import { readdir, readFile, stat } from "fs/promises";
 import { join, relative, resolve } from "path";
 import ignore, { type Ignore } from "ignore";
 
+const WALK_DIRECTORY_CONCURRENCY = 10;
+
 export interface WalkOptions {
   targetPath?: string;
   depthLimit?: number;
@@ -56,11 +58,12 @@ async function walkRecursive(
   ig: Ignore,
   depth: number,
   maxDepth: number,
-  results: FileEntry[],
-): Promise<void> {
-  if (maxDepth > 0 && depth > maxDepth) return;
+): Promise<FileEntry[]> {
+  if (maxDepth > 0 && depth > maxDepth) return [];
 
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const results: FileEntry[] = [];
+  const subdirs: Array<{ index: number; fullPath: string }> = [];
   for (const entry of entries) {
     if (ALWAYS_IGNORE.has(entry.name) || entry.name.startsWith(".")) continue;
 
@@ -71,24 +74,42 @@ async function walkRecursive(
     const isDir = entry.isDirectory();
     results.push({ path: fullPath, relativePath: relPath, isDirectory: isDir, depth });
 
-    if (isDir) await walkRecursive(fullPath, rootDir, ig, depth + 1, maxDepth, results);
+    if (isDir) subdirs.push({ index: results.length - 1, fullPath });
   }
+
+  const childEntriesByIndex = new Map<number, FileEntry[]>();
+  for (let index = 0; index < subdirs.length; index += WALK_DIRECTORY_CONCURRENCY) {
+    const batch = subdirs.slice(index, index + WALK_DIRECTORY_CONCURRENCY);
+    const childResults = await Promise.all(
+      batch.map(async (subdir) => ({
+        index: subdir.index,
+        entries: await walkRecursive(subdir.fullPath, rootDir, ig, depth + 1, maxDepth),
+      })),
+    );
+    for (const childResult of childResults) childEntriesByIndex.set(childResult.index, childResult.entries);
+  }
+
+  const orderedResults: FileEntry[] = [];
+  for (let index = 0; index < results.length; index++) {
+    orderedResults.push(results[index]);
+    const childEntries = childEntriesByIndex.get(index);
+    if (childEntries) orderedResults.push(...childEntries);
+  }
+  return orderedResults;
 }
 
 export async function walkDirectory(options: WalkOptions): Promise<FileEntry[]> {
   const rootDir = resolve(options.rootDir);
   const startDir = options.targetPath ? resolve(rootDir, options.targetPath) : rootDir;
   const ig = await loadIgnoreRules(rootDir);
-  const results: FileEntry[] = [];
 
   try {
     await stat(startDir);
   } catch {
-    return results;
+    return [];
   }
 
-  await walkRecursive(startDir, rootDir, ig, 0, options.depthLimit ?? 0, results);
-  return results;
+  return walkRecursive(startDir, rootDir, ig, 0, options.depthLimit ?? 0);
 }
 
 export function groupByDirectory(entries: FileEntry[]): Map<string, FileEntry[]> {
