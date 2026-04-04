@@ -159,6 +159,8 @@ export interface FullIndexArtifactResult {
   stats: FullIndexArtifactStats;
 }
 
+const CONTENT_HASH_BATCH_SIZE = 32;
+
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
@@ -401,9 +403,14 @@ export async function refreshStructureIndexState(
   let processedFiles = 0;
   let changedFiles = 0;
 
-  for (const file of files) {
-    const relativePath = normalizeRelativePath(file.relativePath);
-    contentHashes[relativePath] = await computeFileContentHash(file.path);
+  for (let index = 0; index < files.length; index += CONTENT_HASH_BATCH_SIZE) {
+    const batch = files.slice(index, index + CONTENT_HASH_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (file) => {
+        const relativePath = normalizeRelativePath(file.relativePath);
+        contentHashes[relativePath] = await computeFileContentHash(file.path);
+      }),
+    );
   }
 
   for (const file of files) {
