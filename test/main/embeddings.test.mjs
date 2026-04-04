@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   SearchIndex,
+  fetchFallbackEmbeddings,
   fetchEmbedding,
   getEmbeddingRuntimeStats,
   getEmbeddingBatchSize,
@@ -216,6 +217,53 @@ describe("embeddings", () => {
         Ollama.prototype.embed = originalEmbed;
         await rm(rootDir, { recursive: true, force: true });
       }
+    });
+
+    it("stops launching new fallback requests after the first hard failure", async () => {
+      const startedSingles = [];
+      const batch = [
+        { idx: 0, text: "alpha", hash: "hash-a" },
+        { idx: 1, text: "fail", hash: "hash-b" },
+        { idx: 2, text: "gamma", hash: "hash-c" },
+        { idx: 3, text: "delta", hash: "hash-d" },
+        { idx: 4, text: "epsilon", hash: "hash-e" },
+      ];
+
+      const fetchOne = async (text) => {
+        startedSingles.push(text);
+        if (text.includes("fail")) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          throw new Error("provider unavailable");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return [text.length];
+      };
+
+      await assert.rejects(
+        () => fetchFallbackEmbeddings(batch, fetchOne),
+        /provider unavailable/,
+      );
+      assert.equal(startedSingles.length, 3);
+      assert.ok(startedSingles.some((value) => value.includes("fail")));
+    });
+
+    it("keeps successful fallback vectors aligned by document index", async () => {
+      const fallbackVectors = await fetchFallbackEmbeddings(
+        [
+          { idx: 4, text: "alpha", hash: "hash-a" },
+          { idx: 1, text: "context", hash: "hash-b" },
+          { idx: 7, text: "gamma", hash: "hash-c" },
+        ],
+        async (text) => {
+          if (text === "context") throw new Error("input length exceeds context length");
+          return [text.length];
+        },
+      );
+
+      assert.deepEqual(Array.from(fallbackVectors.entries()), [
+        [4, [5]],
+        [7, [5]],
+      ]);
     });
   });
 

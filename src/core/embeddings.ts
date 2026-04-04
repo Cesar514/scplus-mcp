@@ -132,6 +132,7 @@ const CACHE_FILE = `embeddings-cache-${EMBED_PROVIDER}-${ACTIVE_EMBED_MODEL.repl
 const MIN_EMBED_BATCH_SIZE = 5;
 const MAX_EMBED_BATCH_SIZE = 10;
 const DEFAULT_EMBED_BATCH_SIZE = 8;
+const FALLBACK_EMBED_CONCURRENCY = 3;
 const MIN_EMBED_INPUT_CHARS = 1;
 const SINGLE_INPUT_SHRINK_FACTOR = 0.75;
 const MAX_SINGLE_INPUT_RETRIES = 40;
@@ -271,6 +272,41 @@ function isContextLengthError(error: unknown): boolean {
   return message.includes("input length exceeds context length")
     || (message.includes("context") && message.includes("exceed"))
     || message.includes("maximum context length");
+}
+
+export async function fetchFallbackEmbeddings(
+  batch: { idx: number; text: string; hash: string }[],
+  fetchOne: (text: string) => Promise<number[]> = async (text) => {
+    const [vector] = await fetchEmbedding(text);
+    return vector;
+  },
+): Promise<Map<number, number[]>> {
+  const fallbackVectors = new Map<number, number[]>();
+  let nextIndex = 0;
+  let hardFailure: unknown = null;
+
+  const worker = async (): Promise<void> => {
+    while (!hardFailure) {
+      const itemIndex = nextIndex;
+      nextIndex++;
+      if (itemIndex >= batch.length) return;
+
+      const item = batch[itemIndex];
+      try {
+        const vector = await fetchOne(item.text);
+        fallbackVectors.set(item.idx, vector);
+      } catch (itemError) {
+        if (isContextLengthError(itemError)) continue;
+        hardFailure = itemError;
+        return;
+      }
+    }
+  };
+
+  const workerCount = Math.min(FALLBACK_EMBED_CONCURRENCY, batch.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (hardFailure) throw hardFailure;
+  return fallbackVectors;
 }
 
 function shrinkEmbeddingInput(input: string): string {
@@ -907,15 +943,15 @@ export class SearchIndex {
           }
         } catch (error) {
           if (!isContextLengthError(error)) throw error;
+          const fallbackVectors = await fetchFallbackEmbeddings(batch);
           for (const item of batch) {
-            try {
-              const [vector] = await fetchEmbedding(item.text);
-              this.vectors[item.idx] = vector;
-              cache[docs[item.idx].path] = { hash: item.hash, vector };
-            } catch (itemError) {
-              if (!isContextLengthError(itemError)) throw itemError;
+            const vector = fallbackVectors.get(item.idx);
+            if (!vector) {
               delete cache[docs[item.idx].path];
+              continue;
             }
+            this.vectors[item.idx] = vector;
+            cache[docs[item.idx].path] = { hash: item.hash, vector };
           }
         }
       }
