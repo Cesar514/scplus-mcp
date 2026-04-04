@@ -38,7 +38,6 @@ import {
   getRepoChanges,
   getRepoStatus,
   lookupExactSymbol,
-  lookupPathCandidates,
   lookupWord,
 } from "../tools/exact-query.js";
 import { getFeatureHub } from "../tools/feature-hub.js";
