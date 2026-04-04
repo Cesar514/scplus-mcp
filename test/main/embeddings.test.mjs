@@ -470,6 +470,29 @@ describe("embeddings", () => {
       }
     });
 
+    it("returns cloned vectors so cache readers cannot mutate process-cache state", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-clone-safety-"));
+      try {
+        await saveEmbeddingCache(rootDir, {
+          "src/a.ts": { hash: "hash-a", vector: [1, 2, 3] },
+        }, "chunk-embeddings-cache.json");
+
+        const fullCache = await loadEmbeddingCache(rootDir, "chunk-embeddings-cache.json");
+        fullCache["src/a.ts"].vector[0] = 999;
+
+        const afterFullReadMutation = await loadEmbeddingCache(rootDir, "chunk-embeddings-cache.json");
+        assert.deepEqual(afterFullReadMutation["src/a.ts"].vector, [1, 2, 3]);
+
+        const selectedEntries = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        selectedEntries["src/a.ts"].vector[1] = 777;
+
+        const afterSelectedReadMutation = await loadEmbeddingCacheEntries(rootDir, "chunk-embeddings-cache.json", ["src/a.ts"]);
+        assert.deepEqual(afterSelectedReadMutation["src/a.ts"].vector, [1, 2, 3]);
+      } finally {
+        await rm(rootDir, { recursive: true, force: true });
+      }
+    });
+
     it("invalidates process-cached namespace entries when the active generation changes", async () => {
       const rootDir = await mkdtemp(join(tmpdir(), "scplus-embed-generation-cache-"));
       try {
