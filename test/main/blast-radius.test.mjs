@@ -90,6 +90,27 @@ describe("blast-radius", async () => {
       });
       assert.ok(result.includes("2 files") || result.includes("usages"));
     });
+
+    it("scans large file sets with bounded concurrent reads", async () => {
+      await rm(FIXTURE_DIR, { recursive: true, force: true });
+      await mkdir(FIXTURE_DIR, { recursive: true });
+      for (let index = 0; index < 128; index++) {
+        await writeFile(
+          join(FIXTURE_DIR, `bulk-${index}.ts`),
+          index % 8 === 0
+            ? `import { target } from './target';\ntarget();\n`
+            : `export function helper${index}() {\n  return ${index};\n}\n`,
+        );
+      }
+
+      const result = await getBlastRadius({
+        rootDir: FIXTURE_DIR,
+        symbolName: "target",
+      });
+      assert.ok(result.includes("target"));
+      assert.ok(result.includes("32 usages") || result.includes("32 usage"));
+      assert.ok(result.includes("16 files") || result.includes("16 file"));
+    });
   });
 
   after(async () => {

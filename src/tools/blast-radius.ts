@@ -7,6 +7,8 @@ import { walkDirectory } from "../core/walker.js";
 import { isSupportedFile } from "../core/parser.js";
 import { readFile } from "fs/promises";
 
+const BLAST_RADIUS_READ_BATCH_SIZE = 32;
+
 export interface BlastRadiusOptions {
   rootDir: string;
   symbolName: string;
@@ -58,25 +60,34 @@ export async function buildBlastRadiusReport(options: BlastRadiusOptions): Promi
   const entries = await walkDirectory({ rootDir: options.rootDir, depthLimit: 0 });
   const files = entries.filter((e) => !e.isDirectory && isSupportedFile(e.path));
   const usages: BlastRadiusUsage[] = [];
-  const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
 
-  for (const file of files) {
-    const content = await readFile(file.path, "utf-8");
-    const lines = content.split("\n");
+  for (let index = 0; index < files.length; index += BLAST_RADIUS_READ_BATCH_SIZE) {
+    const batch = files.slice(index, index + BLAST_RADIUS_READ_BATCH_SIZE);
+    const batchUsages = await Promise.all(
+      batch.map(async (file) => {
+        const fileUsages: BlastRadiusUsage[] = [];
+        const content = await readFile(file.path, "utf-8");
+        const lines = content.split("\n");
+        const symbolPattern = new RegExp(`\\b${escapeRegex(options.symbolName)}\\b`, "g");
 
-    for (let i = 0; i < lines.length; i++) {
-      if (symbolPattern.test(lines[i])) {
-        const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
-        if (!isDefinition) {
-          usages.push({
-            file: file.relativePath,
-            line: i + 1,
-            context: lines[i].trim().substring(0, 120),
-          });
+        for (let i = 0; i < lines.length; i++) {
+          if (symbolPattern.test(lines[i])) {
+            const isDefinition = options.fileContext && file.relativePath === options.fileContext && isDefinitionLine(lines[i], options.symbolName);
+            if (!isDefinition) {
+              fileUsages.push({
+                file: file.relativePath,
+                line: i + 1,
+                context: lines[i].trim().substring(0, 120),
+              });
+            }
+            symbolPattern.lastIndex = 0;
+          }
         }
-        symbolPattern.lastIndex = 0;
-      }
-    }
+
+        return fileUsages;
+      }),
+    );
+    usages.push(...batchUsages.flat());
   }
 
   const byFile = new Map<string, BlastRadiusUsage[]>();
