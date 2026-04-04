@@ -1,5 +1,6 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import {
   createRestorePoint,
   restorePoint,
@@ -17,6 +18,16 @@ async function setup() {
 
 async function cleanup() {
   await rm(FIXTURE_DIR, { recursive: true, force: true });
+}
+
+function getRestorePointBackupCount(rootDir) {
+  const db = new DatabaseSync(join(rootDir, ".scplus", "state", "index.sqlite"));
+  try {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM restore_point_backups").get();
+    return Number(row.count);
+  } finally {
+    db.close();
+  }
 }
 
 describe("shadow", async () => {
@@ -64,6 +75,24 @@ describe("shadow", async () => {
         "empty backup",
       );
       assert.ok(point.id);
+    });
+
+    it("cleans up partial backups when a concurrent backup task fails", async () => {
+      await setup();
+      await writeFile(join(FIXTURE_DIR, "ok.txt"), "safe");
+      await mkdir(join(FIXTURE_DIR, "dir-as-file"), { recursive: true });
+
+      await assert.rejects(
+        () => createRestorePoint(
+          FIXTURE_DIR,
+          ["ok.txt", "dir-as-file"],
+          "failing backup",
+        ),
+      );
+
+      const points = await listRestorePoints(FIXTURE_DIR);
+      assert.deepEqual(points, []);
+      assert.equal(getRestorePointBackupCount(FIXTURE_DIR), 0);
     });
   });
 

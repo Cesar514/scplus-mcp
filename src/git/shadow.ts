@@ -6,11 +6,12 @@
 import { simpleGit, type SimpleGit } from "simple-git";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, join } from "path";
-import { loadIndexArtifact, loadRestorePointBackup, pruneRestorePointBackups, saveIndexArtifact, saveRestorePointBackup } from "../core/index-database.js";
+import { deleteRestorePointBackups, loadIndexArtifact, loadRestorePointBackup, pruneRestorePointBackups, saveIndexArtifact, saveRestorePointBackup } from "../core/index-database.js";
 import { ensureScplusLayout } from "../core/project-layout.js";
 import { refreshPreparedIndexAfterWrite, runSerializedRootMutation } from "../tools/write-freshness.js";
 
 const SHADOW_BRANCH = "mcp-shadow-history";
+const RESTORE_POINT_BACKUP_BATCH_SIZE = 32;
 export interface RestorePoint {
   id: string;
   timestamp: number;
@@ -31,15 +32,25 @@ export async function createRestorePoint(rootDir: string, files: string[], messa
   await ensureScplusLayout(rootDir);
   const id = `rp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  for (const file of files) {
-    const fullPath = join(rootDir, file);
-    try {
-      const content = await readFile(fullPath, "utf-8");
-      await saveRestorePointBackup(rootDir, id, file, content);
-    } catch (error) {
-      const readError = error as NodeJS.ErrnoException;
-      if (readError?.code === "ENOENT") continue;
-      throw error;
+  for (let index = 0; index < files.length; index += RESTORE_POINT_BACKUP_BATCH_SIZE) {
+    const batch = files.slice(index, index + RESTORE_POINT_BACKUP_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (file) => {
+        const fullPath = join(rootDir, file);
+        try {
+          const content = await readFile(fullPath, "utf-8");
+          await saveRestorePointBackup(rootDir, id, file, content);
+        } catch (error) {
+          const readError = error as NodeJS.ErrnoException;
+          if (readError?.code === "ENOENT") return;
+          throw error;
+        }
+      }),
+    );
+    const rejected = results.find((result) => result.status === "rejected");
+    if (rejected) {
+      await deleteRestorePointBackups(rootDir, id);
+      throw rejected.reason;
     }
   }
 

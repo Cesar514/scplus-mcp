@@ -646,6 +646,22 @@ export async function pruneRestorePointBackups(
   }
 }
 
+export async function deleteRestorePointBackups(
+  rootDir: string,
+  pointId: string,
+): Promise<void> {
+  await ensureScplusLayout(resolve(rootDir));
+  const db = openIndexDatabase(rootDir);
+  try {
+    db.prepare(`
+      DELETE FROM restore_point_backups
+      WHERE point_id = ?
+    `).run(pointId);
+  } finally {
+    db.close();
+  }
+}
+
 export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
   const batchSize = 32;
   for (let index = 0; index < paths.length; index += batchSize) {
