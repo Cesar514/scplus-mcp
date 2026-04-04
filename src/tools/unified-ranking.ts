@@ -445,25 +445,18 @@ export async function runCanonicalSearch(options: CanonicalSearchOptions): Promi
   return formatUnifiedSearchResults(options.query, entityTypes, report.hits, normalizeRetrievalMode(options.retrievalMode), report.diagnostics);
 }
 
-export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): Promise<UnifiedSearchReport> {
-  await assertValidPreparedIndex({
-    rootDir: options.rootDir,
-    mode: "full",
-    consumer: "search",
-  });
-  const rootDir = options.rootDir;
-  const queryTerms = splitTerms(options.query);
-  const topK = normalizeTopK(options.topK, 5);
-  const entityTypes = new Set(options.entityTypes ?? ["file", "symbol"]);
-  const retrievalMode = normalizeRetrievalMode(options.retrievalMode);
-  const semanticWeight = retrievalMode === "keyword" ? 0 : options.semanticWeight;
-  const lexicalWeight = retrievalMode === "semantic" ? 0 : options.lexicalWeight;
-  const structureState = await loadStructureState(rootDir);
-  const candidates = new Map<string, Candidate>();
-  const [queryVector] = await fetchEmbedding(options.query);
-
+async function processFileSearchEvidence(
+  candidates: Map<string, Candidate>,
+  rootDir: string,
+  query: string,
+  queryTerms: string[],
+  topK: number,
+  semanticWeight: number | undefined,
+  lexicalWeight: number | undefined,
+  queryVector: number[]
+) {
   const { index } = await ensureFileSearchIndex(rootDir);
-  const fileResults = await index.search(options.query, {
+  const fileResults = await index.search(query, {
     topK: Math.max(topK * 8, 20),
     semanticWeight,
     keywordWeight: lexicalWeight,
@@ -481,8 +474,18 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
     }
     candidates.set(id, candidate);
   }
+}
 
-  const chunkSearch = await searchHybridChunkIndex(rootDir, options.query, {
+async function processChunkSearchEvidence(
+  candidates: Map<string, Candidate>,
+  rootDir: string,
+  query: string,
+  topK: number,
+  semanticWeight: number | undefined,
+  lexicalWeight: number | undefined,
+  queryVector: number[]
+): Promise<HybridSearchDiagnostics> {
+  const chunkSearch = await searchHybridChunkIndex(rootDir, query, {
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
@@ -502,8 +505,19 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
     applyHybridEvidence(fileCandidate, match, "chunk");
     candidates.set(fileCandidateId, fileCandidate);
   }
+  return chunkSearch.diagnostics;
+}
 
-  const identifierSearch = await searchHybridIdentifierIndex(rootDir, options.query, {
+async function processIdentifierSearchEvidence(
+  candidates: Map<string, Candidate>,
+  rootDir: string,
+  query: string,
+  topK: number,
+  semanticWeight: number | undefined,
+  lexicalWeight: number | undefined,
+  queryVector: number[]
+): Promise<HybridSearchDiagnostics> {
+  const identifierSearch = await searchHybridIdentifierIndex(rootDir, query, {
     topK: Math.max(topK * 10, 40),
     semanticWeight,
     lexicalWeight,
@@ -524,11 +538,20 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
     fileCandidate.supportingIdentifierIds.add(match.id);
     candidates.set(fileCandidateId, fileCandidate);
   }
+  return identifierSearch.diagnostics;
+}
 
+function processStructureEvidence(
+  candidates: Map<string, Candidate>,
+  query: string,
+  queryTerms: string[],
+  structureState: PersistedStructureIndexState,
+  retrievalMode: RetrievalMode
+) {
   for (const candidate of candidates.values()) {
     if (candidate.entityType === "file") {
       const structure = computeStructureScoreForFile(
-        options.query,
+        query,
         queryTerms,
         candidate.path,
         structureState,
@@ -554,7 +577,7 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
         return symbol?.name === candidate.title && symbol?.line === candidate.line;
       }) ?? fileSymbolIds.find((symbolId) => structureState.symbols[symbolId]?.name === candidate.title);
       const structure = computeStructureScoreForSymbol(
-        options.query,
+        query,
         queryTerms,
         matchingSymbolId ? structureState.symbols[matchingSymbolId] : undefined,
         fileEntry,
@@ -574,6 +597,30 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
       }
     }
   }
+}
+
+export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): Promise<UnifiedSearchReport> {
+  await assertValidPreparedIndex({
+    rootDir: options.rootDir,
+    mode: "full",
+    consumer: "search",
+  });
+  const rootDir = options.rootDir;
+  const queryTerms = splitTerms(options.query);
+  const topK = normalizeTopK(options.topK, 5);
+  const entityTypes = new Set(options.entityTypes ?? ["file", "symbol"]);
+  const retrievalMode = normalizeRetrievalMode(options.retrievalMode);
+  const semanticWeight = retrievalMode === "keyword" ? 0 : options.semanticWeight;
+  const lexicalWeight = retrievalMode === "semantic" ? 0 : options.lexicalWeight;
+  const structureState = await loadStructureState(rootDir);
+  const candidates = new Map<string, Candidate>();
+  const [queryVector] = await fetchEmbedding(options.query);
+
+  await processFileSearchEvidence(candidates, rootDir, options.query, queryTerms, topK, semanticWeight, lexicalWeight, queryVector);
+  const chunkDiagnostics = await processChunkSearchEvidence(candidates, rootDir, options.query, topK, semanticWeight, lexicalWeight, queryVector);
+  const identifierDiagnostics = await processIdentifierSearchEvidence(candidates, rootDir, options.query, topK, semanticWeight, lexicalWeight, queryVector);
+
+  processStructureEvidence(candidates, options.query, queryTerms, structureState, retrievalMode);
 
   const normalizedKinds = options.includeKinds?.map((value) => value.trim().toLowerCase()).filter(Boolean);
   const kindFilter = normalizedKinds && normalizedKinds.length > 0 ? new Set(normalizedKinds) : null;
@@ -594,8 +641,8 @@ export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): 
     hits,
     diagnostics: {
       retrievalMode,
-      chunk: chunkSearch.diagnostics,
-      identifier: identifierSearch.diagnostics,
+      chunk: chunkDiagnostics,
+      identifier: identifierDiagnostics,
     },
   };
 }

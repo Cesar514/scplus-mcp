@@ -159,6 +159,8 @@ describe("unified-ranking", () => {
           env: {
             ...process.env,
             SCPLUS_EMBED_PROVIDER: "ollama",
+            SCPLUS_OPENAI_BASE_URL: "mock",
+            SCPLUS_OPENAI_API_KEY: "mock",
             TEST_ROOT: rootDir,
           },
         },
