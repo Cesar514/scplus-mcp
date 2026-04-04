@@ -647,8 +647,12 @@ export async function pruneRestorePointBackups(
 }
 
 export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
-  for (const path of paths) {
-    await rm(path, { recursive: true, force: true });
+  const batchSize = 32;
+  for (let index = 0; index < paths.length; index += batchSize) {
+    const batch = paths.slice(index, index + batchSize);
+    await Promise.all(
+      batch.map((path) => rm(path, { recursive: true, force: true })),
+    );
   }
 }
 
