@@ -128,12 +128,25 @@ async function inspectFallbackMarkers(rootDir: string): Promise<{ count: number;
   const files = entries.filter((entry) => !entry.isDirectory && shouldInspectFallbackMarkers(entry.relativePath));
   const markerFiles: string[] = [];
   let count = 0;
-  for (const file of files) {
-    const content = await readFile(file.path, "utf8").catch(() => "");
-    if (!content.includes("// FALLBACK")) continue;
-    markerFiles.push(file.relativePath.replace(/\\/g, "/"));
-    const matches = content.match(/\/\/ FALLBACK/g);
-    count += matches?.length ?? 0;
+  const batchSize = 20;
+  for (let index = 0; index < files.length; index += batchSize) {
+    const batch = files.slice(index, index + batchSize);
+    const results = await Promise.all(
+      batch.map(async (file) => {
+        const content = await readFile(file.path, "utf8");
+        if (!content.includes("// FALLBACK")) return undefined;
+        const matches = content.match(/\/\/ FALLBACK/g);
+        return {
+          count: matches ? matches.length : 0,
+          relativePath: file.relativePath.replace(/\\/g, "/"),
+        };
+      }),
+    );
+    for (const result of results) {
+      if (!result) continue;
+      markerFiles.push(result.relativePath);
+      count += result.count;
+    }
   }
   return {
     count,
