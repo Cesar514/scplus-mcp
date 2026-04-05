@@ -1,0 +1,3 @@
+// Completed tasks for the current goal. \
+// Format: [x] <timestamp> <task> \
+[x] 2026-04-05 Reformat the old todo list from `TODO.bak` into the current numbered `TODO.md` format and keep the imported items as the active backlog. \
