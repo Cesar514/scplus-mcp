@@ -542,3 +542,10 @@
 - [x] Add an explicit provider-repair retry plus local malformed-JSON recovery for repeated missing-comma and truncation cases in structured chat responses.
 - [x] Reduce semantic cluster descriptor verbosity and scale its token budget with cluster count so the real Ollama-backed `index` flow can complete on `/home/cesar514/Documents/agent_programming/infinite_tower_reloaded`.
 - [x] Verify the change with `npm run build`, focused Node test coverage, a real `node build/index.js index /home/cesar514/Documents/agent_programming/infinite_tower_reloaded` run, and follow-up `validate-index` plus `doctor` checks on that same repo.
+
+## broken symlink traversal repair completed
+
+- [x] Eliminate traversal crashes from dangling symlinks so repository walking no longer throws `ENOENT` when a symlink target is missing.
+- [x] Harden watch snapshot scanning so disappearing or broken paths are skipped instead of failing backend refresh logic.
+- [x] Add regression coverage for walker traversal and bridge doctor/index behavior against fixtures containing broken symlinks.
+- [x] Verify the fix with `npm run build`, targeted Node tests, and real `index`, `validate-index`, and `doctor` runs on `/home/cesar514/Documents/agent_programming/kalshi_botter_reloaded`.

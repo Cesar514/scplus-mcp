@@ -121,6 +121,15 @@ describe("walker", () => {
       await rm(join(FIXTURE_DIR, "linked-dir"), { force: true });
       await rm(join(FIXTURE_DIR, "linked-target"), { recursive: true, force: true });
     });
+
+    it("skips broken symlinks without failing the walk", async () => {
+      await symlink(join(FIXTURE_DIR, "missing-target"), join(FIXTURE_DIR, "broken-link"));
+      const entries = await walkDirectory({ rootDir: FIXTURE_DIR });
+      const brokenEntry = entries.find((entry) => entry.relativePath === "broken-link");
+      assert.equal(brokenEntry, undefined);
+      assert.ok(entries.some((entry) => entry.relativePath === "index.ts"));
+      await rm(join(FIXTURE_DIR, "broken-link"), { force: true });
+    });
   });
 
   describe("groupByDirectory", () => {

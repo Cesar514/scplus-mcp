@@ -662,7 +662,10 @@ export class BackendRootSession {
   }
 
   private async scanSnapshot(directoryPath: string = this.rootDir, snapshot: Map<string, string> = new Map()): Promise<Map<string, string>> {
-    const entries = await readdir(directoryPath, { withFileTypes: true });
+    const entries = await readdir(directoryPath, { withFileTypes: true }).catch((error) => {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return [];
+      throw error;
+    });
     for (const entry of entries) {
       const absolutePath = join(directoryPath, entry.name);
       const relativePath = normalizeRelativePath(relative(this.rootDir, absolutePath));
@@ -671,7 +674,11 @@ export class BackendRootSession {
         await this.scanSnapshot(absolutePath, snapshot);
         continue;
       }
-      const info = await stat(absolutePath);
+      const info = await stat(absolutePath).catch((error) => {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!info) continue;
       if (!info.isFile()) continue;
       snapshot.set(relativePath, formatFileFingerprint(info.size, info.mtimeMs));
     }

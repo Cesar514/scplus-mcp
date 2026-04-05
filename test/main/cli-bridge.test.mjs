@@ -206,4 +206,41 @@ describe("cli bridge", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("keeps index and doctor working when the repo contains a broken symlink", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-cli-bridge-broken-link-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// App entrypoint used to exercise broken symlink handling\n// FEATURE: Doctor and index skip dangling symlinks during traversal\n\nexport function runApp() {\n  return 1;\n}\n",
+      );
+      await symlink(join(cwd, "missing-target"), join(cwd, "datasets"));
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "scplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            SCPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const doctor = await execBridge(cwd, "doctor");
+      assert.equal(doctor.root, cwd);
+      assert.equal(doctor.indexValidation.ok, true);
+      assert.equal(doctor.observability.integrity.fallbackMarkerCount, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

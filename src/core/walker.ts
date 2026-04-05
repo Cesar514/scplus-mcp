@@ -52,6 +52,13 @@ async function loadIgnoreRules(rootDir: string): Promise<Ignore> {
   return ig;
 }
 
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && error.code === "ENOENT";
+}
+
 async function walkRecursive(
   dir: string,
   rootDir: string,
@@ -73,7 +80,13 @@ async function walkRecursive(
 
     let isDir = entry.isDirectory();
     if (!isDir && entry.isSymbolicLink()) {
-      const resolvedStats = await stat(fullPath);
+      let resolvedStats;
+      try {
+        resolvedStats = await stat(fullPath);
+      } catch (error) {
+        if (isMissingPathError(error)) continue;
+        throw error;
+      }
       isDir = resolvedStats.isDirectory();
     }
     results.push({ path: fullPath, relativePath: relPath, isDirectory: isDir, depth });
