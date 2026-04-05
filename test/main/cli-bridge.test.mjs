@@ -243,4 +243,37 @@ describe("cli bridge", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("keeps doctor working in a git repo with no HEAD commit yet", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-cli-bridge-unborn-head-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// App entrypoint used to exercise unborn HEAD handling\n// FEATURE: Doctor reports git status without requiring an initial commit\n\nexport function runApp() {\n  return 1;\n}\n",
+      );
+      await git(cwd, "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            SCPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const doctor = await execBridge(cwd, "doctor");
+      assert.equal(doctor.root, cwd);
+      assert.equal(doctor.indexValidation.ok, true);
+      assert.equal(doctor.repoStatus.branch.length > 0, true);
+      assert.equal(doctor.repoStatus.createdCount >= 1, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

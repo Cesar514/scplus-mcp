@@ -319,6 +319,17 @@ function parsePorcelainLine(line: string): RepoStatusFile | null {
   };
 }
 
+function parsePorcelainBranch(line: string): string {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("##")) return "detached";
+  const body = trimmed.slice(2).trim();
+  const unbornMatch = body.match(/^No commits yet on (.+)$/);
+  if (unbornMatch?.[1]) return unbornMatch[1].trim();
+  const branchSection = body.split("...")[0]?.trim();
+  if (!branchSection) return "detached";
+  return branchSection;
+}
+
 function summarizeStatus(branch: string, ahead: number, behind: number, files: RepoStatusFile[]): RepoStatusSummary {
   const stagedCount = files.filter((file) => file.index !== " " && file.index !== "?").length;
   const unstagedCount = files.filter((file) => file.workingTree !== " " && file.workingTree !== "?").length;
@@ -582,9 +593,11 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
     throw new Error(`Git status queries require a git repository: ${normalizedRootDir}`);
   }
 
-  const branch = (await git.branchLocal()).current;
   const status = await git.status();
   const porcelain = await git.raw(["status", "--short", "--branch"]);
+  const porcelainLines = porcelain.split("\n");
+  const branch = parsePorcelainBranch(porcelainLines[0] ?? "");
+  const hasHead = await git.revparse(["--verify", "HEAD"]).then(() => true).catch(() => false);
   const files = porcelain
     .split("\n")
     .slice(1)
@@ -630,8 +643,13 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
     const diff = await git.diff(["--unified=0", "--no-ext-diff", "--", path]);
     const ranges = parseDiffRanges(diff);
     if (ranges.length > 0) fileRanges.set(path, ranges);
-    const patch = await git.diff(["--no-ext-diff", "HEAD", "--", path]);
-    const normalizedPatch = patch.trim();
+    const patchSections = hasHead
+      ? [await git.diff(["--no-ext-diff", "HEAD", "--", path])]
+      : [
+        await git.diff(["--no-ext-diff", "--", path]),
+        await git.diff(["--no-ext-diff", "--cached", "--", path]),
+      ];
+    const normalizedPatch = patchSections.map((section) => section.trim()).filter((section) => section.length > 0).join("\n").trim();
     if (normalizedPatch.length > 0) filePatches.set(path, normalizedPatch);
     const current = changeMap.get(path);
     if (current && ranges.length > 0) current.ranges = ranges;

@@ -549,3 +549,10 @@
 - [x] Harden watch snapshot scanning so disappearing or broken paths are skipped instead of failing backend refresh logic.
 - [x] Add regression coverage for walker traversal and bridge doctor/index behavior against fixtures containing broken symlinks.
 - [x] Verify the fix with `npm run build`, targeted Node tests, and real `index`, `validate-index`, and `doctor` runs on `/home/cesar514/Documents/agent_programming/kalshi_botter_reloaded`.
+
+## unborn head doctor repair completed
+
+- [x] Eliminate `fatal: bad revision 'HEAD'` crashes from repo status and changes logic when a git repository has been initialized but has no first commit yet.
+- [x] Preserve the existing `HEAD`-based diff behavior for normal repos while switching unborn repos to safe `git diff --cached` plus worktree diff handling.
+- [x] Add regression coverage proving bridge doctor works in a no-commit git repo after indexing.
+- [x] Verify the fix with `npm run build`, focused bridge tests, and real `doctor` plus `status` runs on `/home/cesar514/Documents/agent_programming/todoer-cli`.
