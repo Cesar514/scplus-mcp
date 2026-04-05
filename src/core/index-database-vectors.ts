@@ -56,11 +56,20 @@ function decodeVectorBlob(blob: Uint8Array): number[] {
 }
 
 export function mapVectorEntryRow<TMetadata>(row: VectorEntryRow): VectorStoreEntry<TMetadata> {
+  let metadata: TMetadata;
+  try {
+    metadata = JSON.parse(row.metadata_json) as TMetadata;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Malformed vector metadata JSON for entry "${row.entry_id}": ${error.message}`);
+    }
+    throw error;
+  }
   return {
     id: row.entry_id,
     contentHash: row.content_hash,
     searchText: row.search_text,
     vector: decodeVectorBlob(row.vector_blob),
-    metadata: JSON.parse(row.metadata_json) as TMetadata,
+    metadata,
   };
 }

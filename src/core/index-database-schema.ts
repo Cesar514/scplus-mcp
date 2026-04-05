@@ -70,7 +70,15 @@ export function migrateLegacyVectorEntriesToBinary(db: DatabaseSync): void {
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     for (const row of legacyRows) {
-      const parsedVector = JSON.parse(row.vector_json) as unknown;
+      let parsedVector: unknown;
+      try {
+        parsedVector = JSON.parse(row.vector_json) as unknown;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw new Error(`Malformed legacy vector JSON for ${row.namespace}/${row.entry_id}: ${error.message}`);
+        }
+        throw error;
+      }
       if (!Array.isArray(parsedVector)) {
         throw new Error(`Legacy vector entry ${row.namespace}/${row.entry_id} did not contain a JSON array.`);
       }

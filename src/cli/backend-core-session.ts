@@ -415,8 +415,12 @@ export class BackendRootSession {
     return acquireRepoRuntimeLock(this.rootDir, "mutation", {
       holder,
       timeoutMs: 0,
+      allowTakeover: true,
       onBusy: async (owner) => {
         this.emitLog(`waiting blocked by ${owner.holder} in pid ${owner.pid} since ${owner.startedAt}`, "error");
+      },
+      onTakeover: async (owner) => {
+        this.emitLog(`terminating competing scplus mutation owner ${owner.holder} in pid ${owner.pid}`, "error");
       },
     });
   }
@@ -515,6 +519,10 @@ export class BackendRootSession {
     this.watchLock = await acquireRepoRuntimeLock(this.rootDir, "watcher", {
       holder: "bridge watcher",
       timeoutMs: 0,
+      allowTakeover: true,
+      onTakeover: async (owner) => {
+        this.emitLog(`terminating competing scplus watcher owner ${owner.holder} in pid ${owner.pid}`, "error");
+      },
     });
     try {
       this.previousSnapshot = await this.scanSnapshot();

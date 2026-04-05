@@ -6,6 +6,8 @@
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { ensureScplusLayout } from "./project-layout.js";
 
 export type RepoRuntimeLockKind = "mutation" | "watcher";
@@ -24,6 +26,8 @@ export interface AcquireRepoRuntimeLockOptions {
   timeoutMs?: number;
   pollMs?: number;
   onBusy?: (owner: RepoRuntimeLockOwner) => Promise<void> | void;
+  allowTakeover?: boolean;
+  onTakeover?: (owner: RepoRuntimeLockOwner) => Promise<void> | void;
 }
 
 export interface RepoRuntimeLockHandle {
@@ -45,6 +49,8 @@ export class RepoRuntimeLockBusyError extends Error {
 }
 
 const DEFAULT_POLL_MS = 100;
+const TAKEOVER_TERM_WAIT_MS = 1500;
+const execFileAsync = promisify(execFile);
 
 function runtimeLockPath(rootDir: string, kind: RepoRuntimeLockKind): string {
   return join(resolve(rootDir), ".scplus", "locks", `${kind}.lock`);
@@ -81,6 +87,54 @@ async function readLockOwner(lockPath: string): Promise<RepoRuntimeLockOwner> {
     throw new Error(`Runtime lock file ${lockPath} is invalid.`);
   }
   return parsed as RepoRuntimeLockOwner;
+}
+
+async function processCommandLine(pid: number): Promise<string> {
+  try {
+    const raw = await readFile(`/proc/${pid}/cmdline`, "utf8");
+    return raw.replace(/\0/g, " ").trim();
+  } catch {
+    const { stdout } = await execFileAsync("ps", ["-p", String(pid), "-o", "args="]);
+    return stdout.trim();
+  }
+}
+
+async function isVerifiedScplusOwnerProcess(owner: RepoRuntimeLockOwner): Promise<boolean> {
+  const commandLine = await processCommandLine(owner.pid).catch(() => "");
+  const mentionsScplus =
+    commandLine.includes("scplus")
+    || commandLine.includes("bridge-serve")
+    || commandLine.includes("cli-launcher.js")
+    || commandLine.includes("index.js");
+  return mentionsScplus;
+}
+
+async function terminateProcessForTakeover(owner: RepoRuntimeLockOwner): Promise<void> {
+  try {
+    process.kill(owner.pid, "SIGTERM");
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ESRCH") return;
+    throw error;
+  }
+  const deadline = Date.now() + TAKEOVER_TERM_WAIT_MS;
+  while (Date.now() <= deadline) {
+    if (!isProcessAlive(owner.pid)) return;
+    await sleep(DEFAULT_POLL_MS);
+  }
+  try {
+    process.kill(owner.pid, "SIGKILL");
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ESRCH") return;
+    throw error;
+  }
+  const killDeadline = Date.now() + TAKEOVER_TERM_WAIT_MS;
+  while (Date.now() <= killDeadline) {
+    if (!isProcessAlive(owner.pid)) return;
+    await sleep(DEFAULT_POLL_MS);
+  }
+  throw new Error(`Timed out terminating competing scplus process ${owner.pid} for ${owner.rootDir}.`);
 }
 
 export async function acquireRepoRuntimeLock(
@@ -136,6 +190,16 @@ export async function acquireRepoRuntimeLock(
       if (nodeError.code !== "EEXIST") throw error;
       const currentOwner = await readLockOwner(lockPath);
       if (!isProcessAlive(currentOwner.pid)) {
+        await rm(lockPath, { force: true });
+        continue;
+      }
+      if (
+        options.allowTakeover
+        && currentOwner.pid !== process.pid
+        && await isVerifiedScplusOwnerProcess(currentOwner)
+      ) {
+        await options.onTakeover?.(currentOwner);
+        await terminateProcessForTakeover(currentOwner);
         await rm(lockPath, { force: true });
         continue;
       }

@@ -192,6 +192,10 @@ function buildClusterDescriptorSchema(clusterCount: number): object {
   };
 }
 
+function getClusterDescriptorMaxTokens(clusterCount: number): number {
+  return Math.max(900, Math.min(4096, clusterCount * 160));
+}
+
 function normalizeClusterDescriptor(value: ClusterDescriptor, index: number): ClusterDescriptor {
   const label = value.label?.trim();
   const overarchingTheme = value.overarchingTheme?.trim();
@@ -213,9 +217,9 @@ async function describeClusters(clusters: { files: FileInfo[]; pathPattern: stri
       "You generate semantic labels for clustered source-code groups.",
       "Return strict JSON only.",
       "Preserve cluster order and cluster count exactly.",
-      "Each label must be 2 to 5 words and should describe the software capability, not generic words like cluster or files.",
-      "Each overarchingTheme must be one sentence that names the responsibility shared by the files.",
-      "Each distinguishingFeature must be one short sentence naming the most specific evidence that separates this group from neighbors.",
+      "Each label must be 2 to 4 words and should describe the software capability, not generic words like cluster or files.",
+      "Each overarchingTheme must be a short phrase under 12 words naming the shared responsibility.",
+      "Each distinguishingFeature must be a short phrase under 12 words naming the clearest differentiator.",
     ].join(" "),
     prompt: JSON.stringify({
       task: "semantic-cluster-descriptors",
@@ -232,16 +236,16 @@ async function describeClusters(clusters: { files: FileInfo[]; pathPattern: stri
       responseShape: {
         clusters: [
           {
-            label: "short semantic label",
-            overarchingTheme: "one-sentence shared responsibility",
-            distinguishingFeature: "one-sentence concrete evidence",
+            label: "semantic label",
+            overarchingTheme: "shared responsibility phrase",
+            distinguishingFeature: "differentiating evidence phrase",
           },
         ],
       },
     }, null, 2),
     mock: () => buildMockClusterDescriptorResponse(clusters),
     temperature: 0.1,
-    maxTokens: 900,
+    maxTokens: getClusterDescriptorMaxTokens(clusters.length),
     schema: buildClusterDescriptorSchema(clusters.length),
   });
   if (!Array.isArray(response.clusters)) {

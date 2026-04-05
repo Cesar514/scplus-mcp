@@ -446,7 +446,16 @@ export async function loadIndexArtifact<T>(
       WHERE artifact_key = ?
     `).get(storedKey) as IndexArtifactRow | undefined;
     if (!row) return emptyValue();
-    return JSON.parse(row.artifact_json) as T;
+    try {
+      return JSON.parse(row.artifact_json) as T;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error(
+          `Malformed persisted index artifact "${storedKey}" in ${resolve(rootDir)}/.scplus/state/index.sqlite: ${error.message}`,
+        );
+      }
+      throw error;
+    }
   } finally {
     db.close();
   }

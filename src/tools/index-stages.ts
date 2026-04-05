@@ -265,8 +265,14 @@ async function cleanupLegacyArtifacts(layout: ScplusLayout): Promise<void> {
 async function loadLegacyJsonIfPresent<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+      return null;
+    }
+    if (error instanceof SyntaxError) {
+      throw new Error(`Malformed legacy JSON state at ${path}: ${error.message}`);
+    }
+    throw error;
   }
 }
 

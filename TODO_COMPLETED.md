@@ -2,6 +2,8 @@
 
 ## Current Goal History
 
+- [x] Allow same-repo scplus runtimes to take over watcher and mutation locks by terminating verified competing scplus processes for that repository, while preserving independent operation across different repositories, and add regression tests for same-repo takeover behavior.
+- [x] Make `scplus-cli index` fail with actionable corruption context when persisted JSON state is malformed, including the exact legacy file path or sqlite artifact key, and add regression tests for both malformed legacy JSON and malformed persisted artifact JSON.
 - [x] Fix `scplus-cli doctor` so repositories containing directory symlinks do not fail with `EISDIR` during fallback-marker inspection, and add a regression test that proves the doctor command succeeds against a repo fixture with a symlinked directory.
 - [x] Run an exhaustive local verification pass across the current scplus setup, including full automated suites, live doctor/status checks, and direct command smoke tests for the main shipped CLI and backend surfaces.
 - [x] Verify the real built `scplus-cli` and `node build/index.js` command surfaces on this repository and on a fixture repository, then capture any remaining failing commands instead of assuming setup health from partial tests.
@@ -533,3 +535,10 @@
 - [x] Rework the CLI girl-magician renderer around a dense square inner canvas so the sprite keeps the PNG silhouette, distinct eyes, and colored ASCII glyphs instead of coarse pixel blocks.
 - [x] Keep the mascot constrained to about eight visible CLI lines while centering a denser inner projection backed by a `64x64` virtual canvas and a compact visible ASCII container.
 - [x] Verify the refined mascot through focused UI tests, a rebuilt live `scplus-cli snapshot`, and palette preview inspection of the resulting ASCII render.
+
+## real provider cluster json repair completed
+
+- [x] Harden structured chat JSON parsing so malformed provider output no longer aborts semantic cluster generation immediately.
+- [x] Add an explicit provider-repair retry plus local malformed-JSON recovery for repeated missing-comma and truncation cases in structured chat responses.
+- [x] Reduce semantic cluster descriptor verbosity and scale its token budget with cluster count so the real Ollama-backed `index` flow can complete on `/home/cesar514/Documents/agent_programming/infinite_tower_reloaded`.
+- [x] Verify the change with `npm run build`, focused Node test coverage, a real `node build/index.js index /home/cesar514/Documents/agent_programming/infinite_tower_reloaded` run, and follow-up `validate-index` plus `doctor` checks on that same repo.

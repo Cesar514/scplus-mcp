@@ -17,6 +17,14 @@ async function expectExists(path) {
   await access(path);
 }
 
+async function createFixtureRepo(cwd) {
+  await mkdir(join(cwd, "src"), { recursive: true });
+  await writeFile(
+    join(cwd, "src", "app.ts"),
+    "// App entrypoint for index testing\n// FEATURE: Index command smoke coverage\n\nexport function run() {\n  return 1;\n}\n",
+  );
+}
+
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -65,11 +73,7 @@ describe("index", () => {
   it("creates the populated .scplus project layout and snapshots", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "scplus-index-"));
     try {
-      await mkdir(join(cwd, "src"), { recursive: true });
-      await writeFile(
-        join(cwd, "src", "app.ts"),
-        "// App entrypoint for index testing\n// FEATURE: Index command smoke coverage\n\nexport function run() {\n  return 1;\n}\n",
-      );
+      await createFixtureRepo(cwd);
 
       const { stdout } = await execFileAsync(
         process.execPath,
@@ -274,6 +278,92 @@ describe("index", () => {
       await assert.rejects(access(join(cwd, ".scplus", "memories")));
       await assert.rejects(access(join(cwd, ".scplus", "memories", "memory-graph.json")));
       await assert.rejects(access(join(cwd, ".scplus", "checkpoints", "restore-points.json")));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("fails with the exact malformed legacy JSON path during bootstrap", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-index-bad-legacy-"));
+    try {
+      await createFixtureRepo(cwd);
+      await mkdir(join(cwd, ".scplus", "checkpoints"), { recursive: true });
+      const legacyPath = join(cwd, ".scplus", "checkpoints", "restore-points.json");
+      await writeFile(
+        legacyPath,
+        [
+          "[",
+          '  {"id": "rp-1", "files": ["src/app.ts"]}',
+          '  {"id": "rp-2", "files": ["src/other.ts"]}',
+          "]",
+          "",
+        ].join("\n"),
+      );
+
+      await assert.rejects(
+        () => execFileAsync(
+          process.execPath,
+          [join(process.cwd(), "build", "index.js"), "index", cwd],
+          {
+            cwd,
+            env: {
+              ...process.env,
+              SCPLUS_EMBED_PROVIDER: "mock",
+              NODE_NO_WARNINGS: "1",
+            },
+          },
+        ),
+        new RegExp(`Malformed legacy JSON state at ${legacyPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("fails with the exact persisted artifact key when sqlite artifact JSON is malformed", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-index-bad-artifact-"));
+    try {
+      await createFixtureRepo(cwd);
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            SCPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const dbPath = join(cwd, ".scplus", "state", "index.sqlite");
+      const db = new DatabaseSync(dbPath);
+      try {
+        db.prepare(`
+          UPDATE index_artifacts
+          SET artifact_json = ?
+          WHERE artifact_key = ?
+        `).run("{\n  \"state\": \"completed\",\n  \"stageOrder\": [\n    \"bootstrap\"\n    \"file-search\"\n  ]\n}\n", "index-status");
+      } finally {
+        db.close();
+      }
+
+      await assert.rejects(
+        () => execFileAsync(
+          process.execPath,
+          [join(process.cwd(), "build", "index.js"), "index"],
+          {
+            cwd,
+            env: {
+              ...process.env,
+              SCPLUS_EMBED_PROVIDER: "mock",
+              NODE_NO_WARNINGS: "1",
+            },
+          },
+        ),
+        /Malformed persisted index artifact "index-status" .*index\.sqlite/,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

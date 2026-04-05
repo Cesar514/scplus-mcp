@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 
 const CHAT_TIMEOUT_MS = 90_000;
+const MAX_CHAT_ATTEMPTS = 2;
 let chatAbortController = new AbortController();
 
 const CHAT_PROVIDER = (process.env.SCPLUS_CHAT_PROVIDER ?? process.env.SCPLUS_EMBED_PROVIDER ?? "ollama").toLowerCase();
@@ -61,6 +62,131 @@ function extractJsonPayload(raw: string): string {
   const end = Math.max(objectEnd, arrayEnd);
   if (end < start) throw new Error(`Chat model returned malformed JSON output: ${trimmed.slice(0, 200)}`);
   return trimmed.slice(start, end + 1);
+}
+
+function formatChatError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return String(error);
+}
+
+function buildRawPreview(raw: string): string {
+  const compact = raw.replace(/\s+/g, " ").trim();
+  return compact.length <= 240 ? compact : `${compact.slice(0, 240)}...`;
+}
+
+function parseStructuredResponse<T>(raw: string): T {
+  return JSON.parse(extractJsonPayload(raw)) as T;
+}
+
+function isJsonParseFailure(error: unknown): boolean {
+  return error instanceof SyntaxError || formatChatError(error).includes("JSON");
+}
+
+function parseErrorPosition(error: unknown): number | null {
+  const match = formatChatError(error).match(/position (\d+)/);
+  if (!match) return null;
+  return Number.parseInt(match[1] ?? "", 10);
+}
+
+function repairMissingCommaPayload(payload: string, error: unknown): string | null {
+  const position = parseErrorPosition(error);
+  if (position === null || position < 0 || position > payload.length) return null;
+  const message = formatChatError(error);
+  if (!message.includes("Expected ',' or")) return null;
+  return `${payload.slice(0, position)},${payload.slice(position)}`;
+}
+
+function repairTruncatedPayload(payload: string, error: unknown): string | null {
+  if (!formatChatError(error).includes("Unexpected end of JSON input")) return null;
+  let repaired = payload.trimEnd();
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const character of repaired) {
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (character === "\"") inString = false;
+      continue;
+    }
+    if (character === "\"") {
+      inString = true;
+      continue;
+    }
+    if (character === "{" || character === "[") {
+      stack.push(character);
+      continue;
+    }
+    if (character === "}" && stack.at(-1) === "{") {
+      stack.pop();
+      continue;
+    }
+    if (character === "]" && stack.at(-1) === "[") {
+      stack.pop();
+    }
+  }
+  if (inString) repaired += "\"";
+  for (let index = stack.length - 1; index >= 0; index--) {
+    repaired += stack[index] === "{" ? "}" : "]";
+  }
+  return repaired === payload ? null : repaired;
+}
+
+function parseStructuredResponseWithRepair<T>(raw: string): T {
+  let payload = extractJsonPayload(raw);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      return JSON.parse(payload) as T;
+    } catch (error) {
+      lastError = error;
+      const repairedPayload = repairMissingCommaPayload(payload, error)
+        ?? repairTruncatedPayload(payload, error);
+      if (!repairedPayload || repairedPayload === payload) throw error;
+      payload = repairedPayload;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Chat model returned invalid JSON after local repair attempts.");
+}
+
+async function repairStructuredResponse<T>(
+  options: StructuredChatOptions<T>,
+  raw: string,
+  parseError: unknown,
+  requestJson: (override: Pick<StructuredChatOptions<T>, "system" | "prompt">) => Promise<string>,
+): Promise<T> {
+  const repairedRaw = await requestJson({
+    system: [
+      options.system,
+      "Your previous response was invalid JSON.",
+      "Return only corrected JSON that matches the requested structure exactly.",
+      "Do not add commentary, markdown fences, or explanations.",
+    ].join(" "),
+    prompt: JSON.stringify({
+      task: "repair-invalid-json",
+      originalPrompt: options.prompt,
+      parseError: formatChatError(parseError),
+      invalidResponse: raw,
+    }),
+  });
+  try {
+    return parseStructuredResponseWithRepair<T>(repairedRaw);
+  } catch (repairError) {
+    throw new Error(
+      [
+        "Chat model returned invalid JSON after repair attempt.",
+        `Parse error: ${formatChatError(repairError)}`,
+        `Original response preview: ${buildRawPreview(raw)}`,
+        `Repair response preview: ${buildRawPreview(repairedRaw)}`,
+      ].join(" "),
+    );
+  }
 }
 
 async function callOllamaJson(options: StructuredChatOptions<unknown>, signal: AbortSignal): Promise<string> {
@@ -131,15 +257,24 @@ export async function generateStructuredChat<T>(options: StructuredChatOptions<T
   chatAbortController.signal.addEventListener("abort", abortForwarder, { once: true });
   try {
     let lastError: unknown = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const requestJson = async (override: Pick<StructuredChatOptions<T>, "system" | "prompt">): Promise<string> => {
+      const request = { ...options, ...override };
+      return CHAT_PROVIDER === "openai"
+        ? await callOpenAIJson(request, controller.signal)
+        : await callOllamaJson(request, controller.signal);
+    };
+    for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
       try {
         const retrySystem = attempt === 0
           ? options.system
           : `${options.system} Your previous response was invalid. Return only valid JSON that matches the requested structure exactly.`;
-        const raw = CHAT_PROVIDER === "openai"
-          ? await callOpenAIJson({ ...options, system: retrySystem }, controller.signal)
-          : await callOllamaJson({ ...options, system: retrySystem }, controller.signal);
-        return JSON.parse(extractJsonPayload(raw)) as T;
+        const raw = await requestJson({ system: retrySystem, prompt: options.prompt });
+        try {
+          return parseStructuredResponseWithRepair<T>(raw);
+        } catch (parseError) {
+          if (!isJsonParseFailure(parseError)) throw parseError;
+          return await repairStructuredResponse(options, raw, parseError, requestJson);
+        }
       } catch (error) {
         lastError = error;
       }

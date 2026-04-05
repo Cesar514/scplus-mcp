@@ -401,6 +401,7 @@ export async function indexCodebase(options: IndexCodebaseOptions): Promise<stri
     : await acquireRepoRuntimeLock(rootDir, "mutation", {
       holder: `prepared ${mode} index build`,
       timeoutMs: 0,
+      allowTakeover: true,
     });
   try {
   const pendingGeneration = await reservePendingIndexGeneration(rootDir);
