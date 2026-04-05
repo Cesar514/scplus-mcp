@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -164,6 +164,44 @@ describe("cli bridge", () => {
 
       const cleanStatusPayload = await execBridge(cwd, "status");
       assert.equal(cleanStatusPayload.modifiedCount, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps doctor working when the repo contains a symlinked directory", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-cli-bridge-symlink-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await mkdir(join(cwd, "shared"), { recursive: true });
+      await writeFile(
+        join(cwd, "src", "app.ts"),
+        "// App entrypoint used to exercise doctor symlink handling\n// FEATURE: Doctor skips directory symlinks during fallback scanning\n\nexport function runApp() {\n  return 1;\n}\n",
+      );
+      await symlink(join(cwd, "shared"), join(cwd, "shared-link"));
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "scplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            SCPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const doctor = await execBridge(cwd, "doctor");
+      assert.equal(doctor.root, cwd);
+      assert.equal(doctor.indexValidation.ok, true);
+      assert.equal(doctor.observability.integrity.fallbackMarkerCount, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

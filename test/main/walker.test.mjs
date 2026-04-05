@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { walkDirectory, groupByDirectory } from "../../build/core/walker.js";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir, rm, symlink } from "fs/promises";
 import { join } from "path";
 
 const FIXTURE_DIR = join(process.cwd(), "test", "_walk_fixtures");
@@ -109,6 +109,17 @@ describe("walker", () => {
       );
       assert.equal(docFiles.length, 0, "files inside docs/ should be ignored");
       await rm(join(FIXTURE_DIR, ".gitignore"));
+    });
+
+    it("treats symlinked directories as directories", async () => {
+      await mkdir(join(FIXTURE_DIR, "linked-target"), { recursive: true });
+      await symlink(join(FIXTURE_DIR, "linked-target"), join(FIXTURE_DIR, "linked-dir"));
+      const entries = await walkDirectory({ rootDir: FIXTURE_DIR });
+      const linkedEntry = entries.find((entry) => entry.relativePath === "linked-dir");
+      assert.ok(linkedEntry);
+      assert.equal(linkedEntry.isDirectory, true);
+      await rm(join(FIXTURE_DIR, "linked-dir"), { force: true });
+      await rm(join(FIXTURE_DIR, "linked-target"), { recursive: true, force: true });
     });
   });
 

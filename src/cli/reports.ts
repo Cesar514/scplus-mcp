@@ -3,7 +3,7 @@
 // inputs: Backend doctor payloads, status data, and health report structures.
 // outputs: Human-readable report sections for the terminal operator interface.
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getBackendSchedulerObservability, type BackendSchedulerObservability } from "../core/runtime-observability.js";
@@ -133,6 +133,8 @@ async function inspectFallbackMarkers(rootDir: string): Promise<{ count: number;
     const batch = files.slice(index, index + batchSize);
     const results = await Promise.all(
       batch.map(async (file) => {
+        const fileStats = await stat(file.path);
+        if (!fileStats.isFile()) return undefined;
         const content = await readFile(file.path, "utf8");
         if (!content.includes("// FALLBACK")) return undefined;
         const matches = content.match(/\/\/ FALLBACK/g);

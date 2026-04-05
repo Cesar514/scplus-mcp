@@ -71,7 +71,11 @@ async function walkRecursive(
     const relPath = relative(rootDir, fullPath).replace(/\\/g, "/");
     if (ig.ignores(relPath)) continue;
 
-    const isDir = entry.isDirectory();
+    let isDir = entry.isDirectory();
+    if (!isDir && entry.isSymbolicLink()) {
+      const resolvedStats = await stat(fullPath);
+      isDir = resolvedStats.isDirectory();
+    }
     results.push({ path: fullPath, relativePath: relPath, isDirectory: isDir, depth });
 
     if (isDir) subdirs.push({ index: results.length - 1, fullPath });

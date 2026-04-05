@@ -2,6 +2,7 @@
 
 ## Current Goal History
 
+- [x] Fix `scplus-cli doctor` so repositories containing directory symlinks do not fail with `EISDIR` during fallback-marker inspection, and add a regression test that proves the doctor command succeeds against a repo fixture with a symlinked directory.
 - [x] Run an exhaustive local verification pass across the current scplus setup, including full automated suites, live doctor/status checks, and direct command smoke tests for the main shipped CLI and backend surfaces.
 - [x] Verify the real built `scplus-cli` and `node build/index.js` command surfaces on this repository and on a fixture repository, then capture any remaining failing commands instead of assuming setup health from partial tests.
 - [x] Reproduce the live `cluster` JSON failure against this repository, inspect the real chat-model response contract, and stop relying on mock-only verification for semantic cluster refresh.
