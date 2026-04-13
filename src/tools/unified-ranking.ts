@@ -155,6 +155,9 @@ interface Candidate {
   supportingIdentifierIds: Set<string>;
 }
 
+// Purpose: Split free-form search queries into normalized lexical terms.
+// Inputs: Arbitrary query or title text that may contain camelCase and punctuation.
+// Returns/Effects: Returns lowercase tokens longer than one character.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -164,6 +167,9 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Clamp a numeric score into the inclusive `[0, 1]` range.
+// Inputs: Any numeric score produced by canonical ranking heuristics.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
@@ -189,6 +195,9 @@ function normalizeRetrievalMode(value: RetrievalMode | undefined): RetrievalMode
   return value ?? "both";
 }
 
+// Purpose: Create a zeroed candidate record for file or symbol ranking evidence.
+// Inputs: Candidate identity fields including entity type, path, title, kind, lines, and module path.
+// Returns/Effects: Returns a fresh mutable candidate accumulator.
 function createCandidate(id: string, entityType: EntityType, path: string, title: string, kind: string, line: number, endLine: number, modulePath?: string): Candidate {
   return {
     id,
@@ -211,6 +220,9 @@ function createCandidate(id: string, entityType: EntityType, path: string, title
   };
 }
 
+// Purpose: Score lexical coverage between the query vocabulary and a candidate text blob.
+// Inputs: The raw query text, normalized query terms, and the candidate text.
+// Returns/Effects: Returns a bounded lexical score and the matched query terms.
 function computeCoverageScore(query: string, terms: string[], text: string): { score: number; matchedTerms: string[] } {
   const normalizedText = text.toLowerCase();
   if (terms.length === 0) return { score: 0, matchedTerms: [] };
@@ -233,6 +245,9 @@ function getFileCandidateId(path: string): string {
   return `file:${path}`;
 }
 
+// Purpose: Merge hybrid retrieval evidence into a mutable ranking candidate.
+// Inputs: The mutable candidate, one hybrid search match, and the evidence source label.
+// Returns/Effects: Updates candidate scores, matched terms, and supporting ids in place.
 function applyHybridEvidence(candidate: Candidate, match: HybridSearchMatch, source: "chunk" | "identifier"): void {
   const normalizedScore = normalizeEvidenceScore(match.score);
   const normalizedSemantic = normalizeEvidenceScore(match.semanticScore);
@@ -249,6 +264,9 @@ function applyHybridEvidence(candidate: Candidate, match: HybridSearchMatch, sou
   for (const term of match.matchedTerms) candidate.matchedTerms.add(term);
 }
 
+// Purpose: Load the persisted structure index state used for structure-aware ranking signals.
+// Inputs: The repo root whose `code-structure-index` artifact should be read.
+// Returns/Effects: Returns the persisted structure state or an empty baseline.
 async function loadStructureState(rootDir: string): Promise<PersistedStructureIndexState> {
   return loadIndexArtifact(rootDir, "code-structure-index", () => ({
     generatedAt: "",
@@ -264,6 +282,9 @@ async function loadStructureState(rootDir: string): Promise<PersistedStructureIn
   }));
 }
 
+// Purpose: Compute structure evidence for one file candidate from persisted structure artifacts.
+// Inputs: The query, normalized terms, file path, structure state, hybrid-evidence flag, and retrieval mode.
+// Returns/Effects: Returns a structure score, matched terms, and optional module path.
 function computeStructureScoreForFile(
   query: string,
   queryTerms: string[],
@@ -299,6 +320,9 @@ function computeStructureScoreForFile(
   };
 }
 
+// Purpose: Compute structure evidence for one symbol candidate from persisted structure artifacts.
+// Inputs: The query, normalized terms, symbol record, optional file entry, hybrid-evidence flag, and retrieval mode.
+// Returns/Effects: Returns a structure score, matched terms, and optional module path.
 function computeStructureScoreForSymbol(
   query: string,
   queryTerms: string[],
@@ -329,6 +353,9 @@ function computeStructureScoreForSymbol(
   };
 }
 
+// Purpose: Finalize one mutable candidate into the stable ranked-hit output shape.
+// Inputs: The mutable candidate accumulator and the current unified ranking options.
+// Returns/Effects: Returns a normalized ranked hit with aggregated evidence.
 function finalizeCandidate(candidate: Candidate, options: UnifiedRankingOptions): UnifiedRankedHit {
   const fileWeight = normalizeWeight(options.fileWeight, 0.2);
   const chunkWeight = normalizeWeight(options.chunkWeight, 0.22);
@@ -368,6 +395,9 @@ function finalizeCandidate(candidate: Candidate, options: UnifiedRankingOptions)
   };
 }
 
+// Purpose: Format the evidence scores attached to one ranked hit.
+// Inputs: The ranked hit whose evidence fields should be rendered.
+// Returns/Effects: Returns a concise evidence summary string.
 function formatEvidenceSummary(hit: UnifiedRankedHit): string {
   return [
     `evidence file=${hit.evidence.file.toFixed(2)}`,
@@ -379,6 +409,9 @@ function formatEvidenceSummary(hit: UnifiedRankedHit): string {
   ].join(" | ");
 }
 
+// Purpose: Format vector coverage diagnostics for one hybrid retrieval subsystem.
+// Inputs: The subsystem label and its hybrid retrieval diagnostics payload.
+// Returns/Effects: Returns a concise vector coverage summary string.
 function formatVectorCoverageLine(label: string, diagnostics: HybridSearchDiagnostics): string {
   const coverage = diagnostics.vectorCoverage;
   if (coverage.state === "explicit-lexical-only") {
@@ -387,6 +420,9 @@ function formatVectorCoverageLine(label: string, diagnostics: HybridSearchDiagno
   return `${label} ${coverage.loadedVectorCount}/${coverage.requestedVectorCount} (${coverage.coverageRatio.toFixed(2)})`;
 }
 
+// Purpose: Format canonical ranked hits and diagnostics into the user-facing report text.
+// Inputs: The query, requested entity types, ranked hits, retrieval mode, and optional diagnostics.
+// Returns/Effects: Returns a printable canonical search report string.
 export function formatUnifiedSearchResults(
   query: string,
   entityTypes: EntityType[],
@@ -439,12 +475,18 @@ export function formatUnifiedSearchResults(
   return lines.join("\n").trimEnd();
 }
 
+// Purpose: Execute canonical search and return the formatted user-facing results.
+// Inputs: Canonical search options describing the repo root, query, ranking weights, and filters.
+// Returns/Effects: Returns a formatted canonical search report string.
 export async function runCanonicalSearch(options: CanonicalSearchOptions): Promise<string> {
   const entityTypes = options.entityTypes ?? ["file", "symbol"];
   const report = await buildUnifiedSearchReport(options);
   return formatUnifiedSearchResults(options.query, entityTypes, report.hits, normalizeRetrievalMode(options.retrievalMode), report.diagnostics);
 }
 
+// Purpose: Gather file-search evidence and merge it into the candidate accumulator map.
+// Inputs: Candidate map, repo root, query text, query terms, topK, weights, and query vector.
+// Returns/Effects: Updates file candidates in place from semantic file-search results.
 async function processFileSearchEvidence(
   candidates: Map<string, Candidate>,
   rootDir: string,
@@ -476,6 +518,9 @@ async function processFileSearchEvidence(
   }
 }
 
+// Purpose: Gather hybrid chunk-search evidence and merge it into the candidate accumulator map.
+// Inputs: Candidate map, repo root, query text, topK, weights, and query vector.
+// Returns/Effects: Updates file and symbol candidates in place and returns chunk diagnostics.
 async function processChunkSearchEvidence(
   candidates: Map<string, Candidate>,
   rootDir: string,
@@ -508,6 +553,9 @@ async function processChunkSearchEvidence(
   return chunkSearch.diagnostics;
 }
 
+// Purpose: Gather hybrid identifier-search evidence and merge it into the candidate accumulator map.
+// Inputs: Candidate map, repo root, query text, topK, weights, and query vector.
+// Returns/Effects: Updates file and symbol candidates in place and returns identifier diagnostics.
 async function processIdentifierSearchEvidence(
   candidates: Map<string, Candidate>,
   rootDir: string,
@@ -541,6 +589,9 @@ async function processIdentifierSearchEvidence(
   return identifierSearch.diagnostics;
 }
 
+// Purpose: Apply persisted structure evidence to every candidate accumulated so far.
+// Inputs: Candidate map, query text, query terms, structure state, and retrieval mode.
+// Returns/Effects: Mutates candidates in place with structure scores and module context.
 function processStructureEvidence(
   candidates: Map<string, Candidate>,
   query: string,
@@ -599,6 +650,9 @@ function processStructureEvidence(
   }
 }
 
+// Purpose: Build the canonical ranked-hit report from retrieval and structure evidence.
+// Inputs: Unified ranking options describing the repo root, query, filters, and scoring weights.
+// Returns/Effects: Returns ranked hits plus hybrid retrieval diagnostics.
 export async function buildUnifiedSearchReport(options: UnifiedRankingOptions): Promise<UnifiedSearchReport> {
   await assertValidPreparedIndex({
     rootDir: options.rootDir,

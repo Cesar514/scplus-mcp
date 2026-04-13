@@ -106,6 +106,9 @@ export interface HubSuggestionStats {
   generatedMarkdownCount: number;
 }
 
+// Purpose: Convert a label or feature tag into a stable markdown-safe slug.
+// Inputs: Arbitrary display text such as a feature label or subsystem name.
+// Returns/Effects: Returns a lowercase dash-separated slug limited to 64 characters.
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -118,6 +121,9 @@ function normalizePath(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+// Purpose: Count and rank repeated feature tags collected from subsystem files.
+// Inputs: The raw feature tags extracted from files within one subsystem.
+// Returns/Effects: Returns tags sorted by descending count and then alphabetically.
 function rankFeatureTags(tags: string[]): Array<{ tag: string; count: number }> {
   const counts = new Map<string, number>();
   for (const tag of tags) {
@@ -129,6 +135,9 @@ function rankFeatureTags(tags: string[]): Array<{ tag: string; count: number }> 
     .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag));
 }
 
+// Purpose: Choose the display label for a suggested hub from subsystem and tag evidence.
+// Inputs: The subsystem summary and ranked feature-tag counts for its files.
+// Returns/Effects: Returns either the preferred tag label or the subsystem label.
 function chooseLabel(subsystem: SubsystemSummary, rankedTags: Array<{ tag: string; count: number }>): string {
   const preferred = rankedTags[0];
   if (!preferred) return subsystem.label;
@@ -136,6 +145,9 @@ function chooseLabel(subsystem: SubsystemSummary, rankedTags: Array<{ tag: strin
   return subsystem.label;
 }
 
+// Purpose: Collect semantic cluster ids that overlap with a target file set.
+// Inputs: The current cluster node, target file paths, and the mutable result set.
+// Returns/Effects: Adds matching cluster ids into the provided `found` set.
 function collectClusterIds(node: SemanticClusterArtifactNode, targetPaths: Set<string>, found: Set<string>): void {
   const overlap = node.filePaths.some((filePath) => targetPaths.has(filePath));
   if (!overlap) return;
@@ -143,6 +155,9 @@ function collectClusterIds(node: SemanticClusterArtifactNode, targetPaths: Set<s
   for (const child of node.children) collectClusterIds(child, targetPaths, found);
 }
 
+// Purpose: Read and extract the feature tag from a source file if one exists.
+// Inputs: The repo root and relative file path whose content may contain a feature tag.
+// Returns/Effects: Returns the extracted feature tag or null when unavailable.
 async function readFeatureTag(rootDir: string, relativePath: string): Promise<string | null> {
   try {
     const content = await readFile(resolve(rootDir, relativePath), "utf8");
@@ -152,6 +167,9 @@ async function readFeatureTag(rootDir: string, relativePath: string): Promise<st
   }
 }
 
+// Purpose: Load the persisted structure artifact state required for hub suggestion generation.
+// Inputs: The repo root whose `code-structure-index` artifact should be read.
+// Returns/Effects: Returns the persisted structure index state or an empty baseline.
 async function loadStructureState(rootDir: string): Promise<PersistedStructureIndexState> {
   return loadIndexArtifact(rootDir, "code-structure-index", () => ({
     files: {},
@@ -160,6 +178,9 @@ async function loadStructureState(rootDir: string): Promise<PersistedStructureIn
   }));
 }
 
+// Purpose: Load the persisted semantic cluster state required for hub suggestion generation.
+// Inputs: The repo root whose `semantic-cluster-index` artifact should be read.
+// Returns/Effects: Returns the persisted cluster state or an empty baseline.
 async function loadClusterState(rootDir: string): Promise<PersistedSemanticClusterState> {
   return loadIndexArtifact(rootDir, "semantic-cluster-index", () => ({
     root: { id: "cluster-empty", label: "Empty", pathPattern: null, summary: "", filePaths: [], children: [] },
@@ -168,6 +189,9 @@ async function loadClusterState(rootDir: string): Promise<PersistedSemanticClust
   }));
 }
 
+// Purpose: Load the persisted hub suggestion state from the full artifact store.
+// Inputs: The repo root whose `hub-suggestion-index` artifact should be read.
+// Returns/Effects: Returns the current persisted hub suggestions or an empty baseline.
 export async function loadHubSuggestionState(rootDir: string): Promise<PersistedHubSuggestionState> {
   return loadIndexArtifact(rootDir, "hub-suggestion-index", () => ({
     generatedAt: "",
@@ -179,6 +203,9 @@ export async function loadHubSuggestionState(rootDir: string): Promise<Persisted
   }));
 }
 
+// Purpose: Write one suggested hub markdown file with linked suggestions and file links.
+// Inputs: The repo root, the suggestion to render, and related suggestions to cross-link.
+// Returns/Effects: Creates or overwrites the suggestion markdown file on disk.
 async function writeSuggestionMarkdown(rootDir: string, suggestion: HubSuggestion, linkedSuggestions: HubSuggestion[]): Promise<void> {
   const fullPath = resolve(rootDir, suggestion.markdownPath);
   await mkdir(dirname(fullPath), { recursive: true });
@@ -205,6 +232,9 @@ async function writeSuggestionMarkdown(rootDir: string, suggestion: HubSuggestio
   await writeFile(fullPath, lines.join("\n"), "utf8");
 }
 
+// Purpose: Group hub suggestions by their target markdown file path before writing.
+// Inputs: The ordered list of generated hub suggestions.
+// Returns/Effects: Returns suggestion buckets keyed by shared markdown output path.
 function groupSuggestionsByMarkdownPath(suggestionOrder: HubSuggestion[]): HubSuggestion[][] {
   const buckets = new Map<string, HubSuggestion[]>();
   for (const suggestion of suggestionOrder) {
@@ -218,6 +248,9 @@ function groupSuggestionsByMarkdownPath(suggestionOrder: HubSuggestion[]): HubSu
   return Array.from(buckets.values());
 }
 
+// Purpose: Count related-file edges that connect one suggestion to another.
+// Inputs: Related-file edges, the current suggestion file paths, and the candidate file set.
+// Returns/Effects: Returns the number of cross-suggestion related-file matches.
 function countSuggestionLinks(
   relatedFiles: Record<string, RelatedFileEdge[]>,
   leftPaths: string[],
@@ -232,6 +265,9 @@ function countSuggestionLinks(
   return matches;
 }
 
+// Purpose: Regenerate suggested hubs and feature groups from persisted structure and cluster evidence.
+// Inputs: The repo root whose full-mode artifacts should drive suggestion generation.
+// Returns/Effects: Rewrites suggestion markdown, persists suggestion state, and returns summary stats.
 export async function refreshHubSuggestionState(rootDir: string): Promise<{ state: PersistedHubSuggestionState; stats: HubSuggestionStats }> {
   const layout = await ensureScplusLayout(rootDir);
   const structureState = await loadStructureState(rootDir);

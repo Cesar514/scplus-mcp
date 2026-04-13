@@ -140,53 +140,70 @@ export interface TreeSitterRuntimeStats {
   recentFailures: TreeSitterFailureRecord[];
 }
 
-// Purpose: Report a grammar load failure with the grammar and wasm path attached.
+export interface TreeSitterGrammarLoadError extends Error {
+  grammarName: string;
+  wasmPath: string;
+  cause: unknown;
+}
+
+// Purpose: Build a typed grammar-load error that preserves wasm-path context.
 // Inputs: A grammar name, the expected wasm path, and the original thrown cause.
-// Returns/Effects: Constructs an error instance that preserves load failure context for callers.
-export class TreeSitterGrammarLoadError extends Error {
-  readonly grammarName: string;
-  readonly wasmPath: string;
-  readonly cause: unknown;
-
-  constructor(grammarName: string, wasmPath: string, cause: unknown) {
-    const causeMessage = cause instanceof Error ? cause.message : String(cause);
-    super(`Failed to load tree-sitter grammar "${grammarName}" from ${wasmPath}: ${causeMessage}`);
-    this.name = "TreeSitterGrammarLoadError";
-    this.grammarName = grammarName;
-    this.wasmPath = wasmPath;
-    this.cause = cause;
-  }
+// Returns/Effects: Returns an `Error` object augmented with grammar-load metadata.
+export function createTreeSitterGrammarLoadError(
+  grammarName: string,
+  wasmPath: string,
+  cause: unknown,
+): TreeSitterGrammarLoadError {
+  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  const error = new Error(
+    `Failed to load tree-sitter grammar "${grammarName}" from ${wasmPath}: ${causeMessage}`,
+  ) as TreeSitterGrammarLoadError;
+  error.name = "TreeSitterGrammarLoadError";
+  error.grammarName = grammarName;
+  error.wasmPath = wasmPath;
+  error.cause = cause;
+  return error;
 }
 
-// Purpose: Report a tree-sitter parse failure with the active grammar attached.
+export interface TreeSitterParseError extends Error {
+  grammarName: string;
+  cause: unknown;
+}
+
+// Purpose: Build a typed parse error that preserves the active grammar context.
 // Inputs: A grammar name and the original thrown parse cause.
-// Returns/Effects: Constructs an error instance that preserves parse failure context for callers.
-export class TreeSitterParseError extends Error {
-  readonly grammarName: string;
-  readonly cause: unknown;
-
-  constructor(grammarName: string, cause: unknown) {
-    const causeMessage = cause instanceof Error ? cause.message : String(cause);
-    super(`Failed to parse content with tree-sitter grammar "${grammarName}": ${causeMessage}`);
-    this.name = "TreeSitterParseError";
-    this.grammarName = grammarName;
-    this.cause = cause;
-  }
+// Returns/Effects: Returns an `Error` object augmented with parse-failure metadata.
+export function createTreeSitterParseError(
+  grammarName: string,
+  cause: unknown,
+): TreeSitterParseError {
+  const causeMessage = cause instanceof Error ? cause.message : String(cause);
+  const error = new Error(
+    `Failed to parse content with tree-sitter grammar "${grammarName}": ${causeMessage}`,
+  ) as TreeSitterParseError;
+  error.name = "TreeSitterParseError";
+  error.grammarName = grammarName;
+  error.cause = cause;
+  return error;
 }
 
-// Purpose: Report when a file extension has no configured tree-sitter grammar.
+export interface TreeSitterUnsupportedLanguageError extends Error {
+  extension: string;
+}
+
+// Purpose: Build a typed unsupported-language error for unmapped file extensions.
 // Inputs: The unsupported file extension supplied by the caller.
-// Returns/Effects: Constructs an error instance that explains the unsupported language boundary.
-export class TreeSitterUnsupportedLanguageError extends Error {
-  readonly extension: string;
-
-  constructor(extension: string) {
-    super(`Unsupported tree-sitter extension: ${extension || "<none>"}`);
-    this.name = "TreeSitterUnsupportedLanguageError";
-    this.extension = extension;
-  }
+// Returns/Effects: Returns an `Error` object augmented with extension metadata.
+export function createTreeSitterUnsupportedLanguageError(extension: string): TreeSitterUnsupportedLanguageError {
+  const error = new Error(`Unsupported tree-sitter extension: ${extension || "<none>"}`) as TreeSitterUnsupportedLanguageError;
+  error.name = "TreeSitterUnsupportedLanguageError";
+  error.extension = extension;
+  return error;
 }
 
+// Purpose: Create the zeroed runtime statistics structure for tree-sitter observability.
+// Inputs: No direct inputs beyond the fixed runtime-stats shape.
+// Returns/Effects: Returns a fresh runtime-stats object with empty counters and failures.
 function createEmptyRuntimeStats(): TreeSitterRuntimeStats {
   return {
     totalParseCalls: 0,
@@ -206,6 +223,9 @@ function getGrammarDir(): string {
   return grammarDirOverride ?? GRAMMAR_DIR;
 }
 
+// Purpose: Ensure one per-language runtime-stats bucket exists before updating counters.
+// Inputs: The grammar name whose counters should be read or initialized.
+// Returns/Effects: Returns the mutable stats bucket for that grammar.
 function ensureLanguageStats(grammarName: string): TreeSitterLanguageRuntimeStats {
   const existing = runtimeStats.languages[grammarName];
   if (existing) return existing;
@@ -221,6 +241,9 @@ function ensureLanguageStats(grammarName: string): TreeSitterLanguageRuntimeStat
   return created;
 }
 
+// Purpose: Record one grammar-load or parse failure in the runtime observability snapshot.
+// Inputs: The grammar name, failure stage, and thrown error or value.
+// Returns/Effects: Updates failure counters and recent-failure history in memory.
 function recordFailure(grammarName: string, stage: "grammar-load" | "parse", error: unknown): void {
   const languageStats = ensureLanguageStats(grammarName);
   const message = error instanceof Error ? error.message : String(error);
@@ -240,6 +263,9 @@ function recordFailure(grammarName: string, stage: "grammar-load" | "parse", err
   languageStats.parseFailures++;
 }
 
+// Purpose: Clone the current runtime observability snapshot without exposing mutable internals.
+// Inputs: No direct inputs beyond the in-memory runtime stats owned by this module.
+// Returns/Effects: Returns a defensive copy of the runtime statistics object.
 function cloneRuntimeStats(): TreeSitterRuntimeStats {
   return {
     totalParseCalls: runtimeStats.totalParseCalls,
@@ -255,6 +281,9 @@ function cloneRuntimeStats(): TreeSitterRuntimeStats {
   };
 }
 
+// Purpose: Dispose and clear cached parser instances across all loaded grammars.
+// Inputs: No direct inputs beyond the in-memory parser cache.
+// Returns/Effects: Deletes cached parser instances and empties the parser cache map.
 function resetParserCache(): void {
   for (const parser of parserCache.values()) {
     parser?.delete?.();
@@ -306,6 +335,9 @@ export function setTreeSitterParserFactoryForTests(
   resetParserCache();
 }
 
+// Purpose: Lazily initialize and cache the web-tree-sitter Parser class.
+// Inputs: No direct inputs beyond the module-level parser runtime state.
+// Returns/Effects: Returns the initialized Parser constructor for subsequent parsing.
 async function initParser(): Promise<typeof ParserClass> {
   if (ParserClass) return ParserClass;
 
@@ -316,6 +348,9 @@ async function initParser(): Promise<typeof ParserClass> {
   return Parser;
 }
 
+// Purpose: Load and cache one tree-sitter grammar wasm by grammar name.
+// Inputs: The grammar name whose wasm asset should be loaded.
+// Returns/Effects: Returns the loaded grammar or throws a typed grammar-load error.
 async function loadGrammar(grammarName: string): Promise<TSLanguage> {
   if (grammarCache.has(grammarName)) return grammarCache.get(grammarName)!;
 
@@ -329,10 +364,13 @@ async function loadGrammar(grammarName: string): Promise<TSLanguage> {
     return lang;
   } catch (error) {
     recordFailure(grammarName, "grammar-load", error);
-    throw new TreeSitterGrammarLoadError(grammarName, wasmPath, error);
+    throw createTreeSitterGrammarLoadError(grammarName, wasmPath, error);
   }
 }
 
+// Purpose: Reuse or create a parser instance configured for the requested grammar.
+// Inputs: The grammar name and loaded tree-sitter language object.
+// Returns/Effects: Returns a cached parser or throws a typed parse error when setup fails.
 async function getOrCreateParser(grammarName: string, lang: TSLanguage): Promise<TSParser> {
   const cachedParser = parserCache.get(grammarName);
   if (cachedParser) {
@@ -348,7 +386,7 @@ async function getOrCreateParser(grammarName: string, lang: TSLanguage): Promise
   } catch (error) {
     parser?.delete?.();
     recordFailure(grammarName, "parse", error);
-    throw new TreeSitterParseError(grammarName, error);
+    throw createTreeSitterParseError(grammarName, error);
   }
   parserCache.set(grammarName, parser);
   runtimeStats.totalParsersCreated++;
@@ -356,6 +394,9 @@ async function getOrCreateParser(grammarName: string, lang: TSLanguage): Promise
   return parser;
 }
 
+// Purpose: Extract the most relevant symbol name from one tree-sitter node.
+// Inputs: The node being inspected and its mapped kind label.
+// Returns/Effects: Returns a best-effort symbol name string for the node.
 function extractName(node: TSNode, _kind: string): string {
   const nameNode = node.childForFieldName("name")
     ?? node.childForFieldName("declarator")
@@ -382,12 +423,18 @@ function extractName(node: TSNode, _kind: string): string {
   return node.text.split(/[\s({]/)[0]?.trim() ?? "anonymous";
 }
 
+// Purpose: Build a short single-line signature preview from one syntax node.
+// Inputs: The syntax node whose leading text should become the signature string.
+// Returns/Effects: Returns the first trimmed line, truncated to 150 characters when needed.
 function extractSignature(node: TSNode): string {
   const lines = node.text.split("\n");
   const firstLine = lines[0].trim();
   return firstLine.length > 150 ? firstLine.substring(0, 150) + "..." : firstLine;
 }
 
+// Purpose: Map tree-sitter definition labels onto repository symbol kinds.
+// Inputs: The intermediate kind label derived from language-specific definition types.
+// Returns/Effects: Returns the normalized symbol kind used by parser consumers.
 function mapKind(typeStr: string): SymbolKind {
   const kinds: Record<string, string> = {
     function: "function", method: "method", class: "class",
@@ -398,9 +445,15 @@ function mapKind(typeStr: string): SymbolKind {
   return (kinds[typeStr] ?? "function") as SymbolKind;
 }
 
+// Purpose: Walk a syntax tree and collect nested symbols up to a bounded depth.
+// Inputs: The root node, language definition-type mapping, and optional max traversal depth.
+// Returns/Effects: Returns collected code symbols with nested children.
 function walkTree(rootNode: TSNode, defTypes: Record<string, string>, maxDepth: number = 3): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
 
+  // Purpose: Visit one syntax node and attach discovered symbols to the current parent.
+  // Inputs: The node to inspect, current traversal depth, and optional parent symbol.
+  // Returns/Effects: Mutates the enclosing symbol list or parent children as nodes are visited.
   function visit(node: TSNode, depth: number, parent: CodeSymbol | null): void {
     if (depth > maxDepth) return;
 
@@ -462,13 +515,13 @@ export async function withSyntaxTree<T>(
   visitor: (context: { rootNode: TSNode; grammarName: string }) => T,
 ): Promise<T> {
   const grammarName = getGrammarName(ext);
-  if (!grammarName) throw new TreeSitterUnsupportedLanguageError(ext);
+  if (!grammarName) throw createTreeSitterUnsupportedLanguageError(ext);
 
   const defTypes = DEFINITION_TYPES[grammarName];
   if (!defTypes) {
     const error = new Error(`No tree-sitter definition mapping configured for grammar "${grammarName}".`);
     recordFailure(grammarName, "parse", error);
-    throw new TreeSitterParseError(grammarName, error);
+    throw createTreeSitterParseError(grammarName, error);
   }
 
   const lang = await loadGrammar(grammarName);
@@ -481,9 +534,9 @@ export async function withSyntaxTree<T>(
     tree = parser.parse(content);
     return visitor({ rootNode: tree.rootNode, grammarName });
   } catch (error) {
-    if (error instanceof TreeSitterGrammarLoadError || error instanceof TreeSitterParseError) throw error;
+    if (error instanceof Error && (error.name === "TreeSitterGrammarLoadError" || error.name === "TreeSitterParseError")) throw error;
     recordFailure(grammarName, "parse", error);
-    throw new TreeSitterParseError(grammarName, error);
+    throw createTreeSitterParseError(grammarName, error);
   } finally {
     tree?.delete?.();
   }

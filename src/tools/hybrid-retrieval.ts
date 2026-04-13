@@ -149,30 +149,34 @@ export interface HybridSearchRuntimeStats {
   identifier: HybridSearchRuntimeSourceStats;
 }
 
-export class HybridVectorIntegrityError extends Error {
-  readonly rootDir: string;
-  readonly source: "chunk" | "identifier";
-  readonly retrievalMode: "semantic" | "keyword" | "both";
-  readonly diagnostics: HybridVectorCoverageDiagnostics;
+export interface HybridVectorIntegrityError extends Error {
+  rootDir: string;
+  source: "chunk" | "identifier";
+  retrievalMode: "semantic" | "keyword" | "both";
+  diagnostics: HybridVectorCoverageDiagnostics;
+}
 
-  constructor(
-    rootDir: string,
-    source: "chunk" | "identifier",
-    retrievalMode: "semantic" | "keyword" | "both",
-    diagnostics: HybridVectorCoverageDiagnostics,
-  ) {
-    const preview = diagnostics.missingVectorIds.slice(0, 5).join(", ");
-    super(
-      `Hybrid ${source} search cannot continue: missing ${diagnostics.missingVectorCount}/${diagnostics.requestedVectorCount} vectors ` +
-      `for retrievalMode=${retrievalMode}. Coverage=${diagnostics.coverageRatio.toFixed(2)}.` +
-      (preview ? ` Missing ids: ${preview}` : ""),
-    );
-    this.name = "HybridVectorIntegrityError";
-    this.rootDir = rootDir;
-    this.source = source;
-    this.retrievalMode = retrievalMode;
-    this.diagnostics = diagnostics;
-  }
+// Purpose: Construct the fatal error raised when hybrid retrieval is missing required embedding vectors.
+// Inputs: The repo root, hybrid source kind, active retrieval mode, and missing-vector diagnostics.
+// Returns/Effects: Returns a typed Error instance carrying hybrid vector coverage metadata.
+function createHybridVectorIntegrityError(
+  rootDir: string,
+  source: "chunk" | "identifier",
+  retrievalMode: "semantic" | "keyword" | "both",
+  diagnostics: HybridVectorCoverageDiagnostics,
+): HybridVectorIntegrityError {
+  const preview = diagnostics.missingVectorIds.slice(0, 5).join(", ");
+  const error = new Error(
+    `Hybrid ${source} search cannot continue: missing ${diagnostics.missingVectorCount}/${diagnostics.requestedVectorCount} vectors ` +
+    `for retrievalMode=${retrievalMode}. Coverage=${diagnostics.coverageRatio.toFixed(2)}.` +
+    (preview ? ` Missing ids: ${preview}` : ""),
+  ) as HybridVectorIntegrityError;
+  error.name = "HybridVectorIntegrityError";
+  error.rootDir = rootDir;
+  error.source = source;
+  error.retrievalMode = retrievalMode;
+  error.diagnostics = diagnostics;
+  return error;
 }
 
 let hybridSearchRuntimeStats: HybridSearchRuntimeStats = {
@@ -196,6 +200,9 @@ let hybridSearchRuntimeStats: HybridSearchRuntimeStats = {
   },
 };
 
+// Purpose: Snapshot the current aggregate runtime stats for hybrid chunk and identifier search.
+// Inputs: No direct inputs beyond the accumulated module-level runtime counters.
+// Returns/Effects: Returns a defensive copy of the hybrid search runtime stats object.
 export function getHybridSearchRuntimeStats(): HybridSearchRuntimeStats {
   return {
     chunk: { ...hybridSearchRuntimeStats.chunk },
@@ -203,6 +210,9 @@ export function getHybridSearchRuntimeStats(): HybridSearchRuntimeStats {
   };
 }
 
+// Purpose: Reset the aggregate hybrid search runtime counters back to an empty baseline.
+// Inputs: No direct inputs beyond the mutable module-level runtime stats container.
+// Returns/Effects: Replaces the stored runtime stats with a zeroed fresh object.
 export function resetHybridSearchRuntimeStats(): void {
   hybridSearchRuntimeStats = {
     chunk: {
@@ -226,6 +236,9 @@ export function resetHybridSearchRuntimeStats(): void {
   };
 }
 
+// Purpose: Accumulate one hybrid-search diagnostics sample into the in-memory runtime counters.
+// Inputs: The source kind being searched plus the diagnostics emitted for one search call.
+// Returns/Effects: Mutates the runtime counters for the selected source in place.
 function recordHybridSearchRuntimeStats(
   source: "chunk" | "identifier",
   diagnostics: HybridSearchDiagnostics,
@@ -240,6 +253,9 @@ function recordHybridSearchRuntimeStats(
   current.lastFinalResultCount = diagnostics.finalResultCount;
 }
 
+// Purpose: Clamp a numeric score into the inclusive [0, 1] range.
+// Inputs: The candidate numeric score to normalize.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
@@ -256,18 +272,27 @@ function normalizeTopK(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.floor(value));
 }
 
+// Purpose: Resolve whether a hybrid query should use semantic, keyword, or mixed retrieval.
+// Inputs: The effective semantic and lexical weights for the current search.
+// Returns/Effects: Returns the active retrieval mode inferred from those weights.
 function resolveHybridRetrievalMode(semanticWeight: number, lexicalWeight: number): "semantic" | "keyword" | "both" {
   if (semanticWeight > 0 && lexicalWeight > 0) return "both";
   if (semanticWeight > 0) return "semantic";
   return "keyword";
 }
 
+// Purpose: Build a compact deterministic fingerprint for lexical document text.
+// Inputs: The lexical text to fingerprint.
+// Returns/Effects: Returns a short stable hash string for reuse and change detection.
 function hashText(text: string): string {
   let hash = 0;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
   return `${text.length}:${hash}`;
 }
 
+// Purpose: Split free text into normalized lexical-search terms.
+// Inputs: Arbitrary text from a query or indexed document.
+// Returns/Effects: Returns lowercased searchable terms with short noise tokens removed.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -277,6 +302,9 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Count bounded lexical term frequencies for one hybrid retrieval document.
+// Inputs: The lexical document text to tokenize and count.
+// Returns/Effects: Returns a capped term-frequency map filtered for useful lexical terms.
 function buildTermFrequencies(text: string): Record<string, number> {
   const frequencies: Record<string, number> = {};
   for (const term of splitTerms(text)) {
@@ -293,6 +321,9 @@ function buildTermFrequencies(text: string): Record<string, number> {
   );
 }
 
+// Purpose: Compute cosine similarity between two dense embedding vectors.
+// Inputs: Two numeric vectors of equal dimensionality.
+// Returns/Effects: Returns their cosine similarity score or zero when one vector is empty.
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -306,6 +337,9 @@ function cosine(a: number[], b: number[]): number {
   return denominator === 0 ? 0 : dot / denominator;
 }
 
+// Purpose: Build the lexical text used to index one chunk artifact for hybrid retrieval.
+// Inputs: One persisted chunk artifact from the chunk search index.
+// Returns/Effects: Returns the combined lexical text used for hashing and term extraction.
 function buildChunkLexicalText(chunk: ChunkArtifact): string {
   if (chunk.chunkType === "file-fallback") {
     return [
@@ -326,6 +360,9 @@ function buildChunkLexicalText(chunk: ChunkArtifact): string {
   ].join(" ").trim();
 }
 
+// Purpose: Convert one chunk artifact into a persisted hybrid retrieval document.
+// Inputs: One chunk artifact from the prepared chunk search index.
+// Returns/Effects: Returns the hybrid retrieval document stored in the chunk hybrid index.
 function buildChunkHybridDocument(chunk: ChunkArtifact): HybridRetrievalDocument {
   const lexicalText = buildChunkLexicalText(chunk);
   return {
@@ -344,6 +381,9 @@ function buildChunkHybridDocument(chunk: ChunkArtifact): HybridRetrievalDocument
   };
 }
 
+// Purpose: Convert one persisted identifier document into a hybrid retrieval document.
+// Inputs: One identifier-search document record from the prepared identifier index.
+// Returns/Effects: Returns the hybrid retrieval document stored in the identifier hybrid index.
 function buildIdentifierHybridDocument(doc: PersistedIdentifierDoc): HybridRetrievalDocument {
   const lexicalText = [
     doc.path,
@@ -371,6 +411,9 @@ function buildIdentifierHybridDocument(doc: PersistedIdentifierDoc): HybridRetri
   };
 }
 
+// Purpose: Count the unique lexical terms present across all hybrid retrieval documents.
+// Inputs: The persisted hybrid document map for one source index.
+// Returns/Effects: Returns the number of distinct lexical terms across the document set.
 function countUniqueTerms(documents: Record<string, HybridRetrievalDocument>): number {
   const terms = new Set<string>();
   for (const document of Object.values(documents)) {
@@ -379,6 +422,9 @@ function countUniqueTerms(documents: Record<string, HybridRetrievalDocument>): n
   return terms.size;
 }
 
+// Purpose: Build the inverted lexical index for one hybrid retrieval document set.
+// Inputs: The persisted hybrid document map to index.
+// Returns/Effects: Returns the lexical postings map stored in the hybrid retrieval state.
 function buildLexicalIndex(documents: Record<string, HybridRetrievalDocument>): PersistedHybridLexicalIndex {
   const terms = new Map<string, HybridLexicalPosting[]>();
   for (const document of Object.values(documents)) {
@@ -400,6 +446,9 @@ function buildLexicalIndex(documents: Record<string, HybridRetrievalDocument>): 
   };
 }
 
+// Purpose: Load the persisted hybrid chunk retrieval index from durable artifacts.
+// Inputs: The repository root containing the prepared index artifacts.
+// Returns/Effects: Returns the chunk hybrid retrieval state, creating an empty default if absent.
 export async function loadHybridChunkIndexState(rootDir: string): Promise<PersistedHybridRetrievalState> {
   return loadIndexArtifact(rootDir, "hybrid-chunk-index", () => ({
     generatedAt: "",
@@ -415,6 +464,9 @@ export async function loadHybridChunkIndexState(rootDir: string): Promise<Persis
   }));
 }
 
+// Purpose: Load the persisted hybrid identifier retrieval index from durable artifacts.
+// Inputs: The repository root containing the prepared index artifacts.
+// Returns/Effects: Returns the identifier hybrid retrieval state, creating an empty default if absent.
 export async function loadHybridIdentifierIndexState(rootDir: string): Promise<PersistedHybridRetrievalState> {
   return loadIndexArtifact(rootDir, "hybrid-identifier-index", () => ({
     generatedAt: "",
@@ -430,6 +482,9 @@ export async function loadHybridIdentifierIndexState(rootDir: string): Promise<P
   }));
 }
 
+// Purpose: Rebuild the hybrid chunk retrieval index from the current prepared chunk artifacts.
+// Inputs: The repository root and an optional preloaded chunk index state.
+// Returns/Effects: Persists and returns the refreshed chunk hybrid retrieval state plus rebuild stats.
 export async function refreshHybridChunkIndex(rootDir: string, chunkState?: PersistedChunkIndexState): Promise<{ state: PersistedHybridRetrievalState; stats: HybridRetrievalStats }> {
   const previous = await loadHybridChunkIndexState(rootDir);
   const chunks = (chunkState ?? await loadIndexArtifact(rootDir, "chunk-search-index", () => {
@@ -470,6 +525,9 @@ export async function refreshHybridChunkIndex(rootDir: string, chunkState?: Pers
   };
 }
 
+// Purpose: Rebuild the hybrid identifier retrieval index from the current identifier artifacts.
+// Inputs: The repository root whose prepared identifier index should be converted.
+// Returns/Effects: Persists and returns the refreshed identifier hybrid retrieval state plus rebuild stats.
 export async function refreshHybridIdentifierIndex(rootDir: string): Promise<{ state: PersistedHybridRetrievalState; stats: HybridRetrievalStats }> {
   const previous = await loadHybridIdentifierIndexState(rootDir);
   const identifierState = await loadIndexArtifact<PersistedIdentifierIndexState>(rootDir, "identifier-search-index", () => {
@@ -510,6 +568,9 @@ export async function refreshHybridIdentifierIndex(rootDir: string): Promise<{ s
   };
 }
 
+// Purpose: Run one hybrid retrieval query against a prepared hybrid document state.
+// Inputs: The repo root, prepared hybrid state, embedding cache file name, query text, and optional search options.
+// Returns/Effects: Returns ranked matches and diagnostics or throws if required vectors are missing.
 async function searchHybridState(
   rootDir: string,
   state: PersistedHybridRetrievalState,
@@ -607,7 +668,7 @@ async function searchHybridState(
       missingVectorIds,
     };
   if (vectorCoverage.state === "missing-vectors") {
-    throw new HybridVectorIntegrityError(rootDir, state.source, retrievalMode, vectorCoverage);
+    throw createHybridVectorIntegrityError(rootDir, state.source, retrievalMode, vectorCoverage);
   }
 
   const ranked: HybridSearchMatch[] = [];
@@ -652,6 +713,9 @@ async function searchHybridState(
   };
 }
 
+// Purpose: Convert embedding-cache coverage data into hybrid vector coverage diagnostics.
+// Inputs: The embedding cache coverage summary for one hybrid source.
+// Returns/Effects: Returns the corresponding hybrid vector diagnostics object.
 function mapCoverageToDiagnostics(coverage: EmbeddingCacheCoverage): HybridVectorCoverageDiagnostics {
   return {
     state: coverage.missingEntryCount > 0 ? "missing-vectors" : "complete",
@@ -663,6 +727,9 @@ function mapCoverageToDiagnostics(coverage: EmbeddingCacheCoverage): HybridVecto
   };
 }
 
+// Purpose: Inspect hybrid vector coverage for one prepared hybrid retrieval state.
+// Inputs: The repo root, prepared hybrid state, and embedding cache file name for that source.
+// Returns/Effects: Returns the vector coverage summary for the selected hybrid source.
 async function inspectSingleHybridVectorCoverage(
   rootDir: string,
   state: PersistedHybridRetrievalState,
@@ -680,16 +747,25 @@ async function inspectSingleHybridVectorCoverage(
   };
 }
 
+// Purpose: Search the prepared hybrid chunk index for the given query.
+// Inputs: The repository root, query text, and optional hybrid search configuration.
+// Returns/Effects: Returns ranked hybrid chunk matches and search diagnostics.
 export async function searchHybridChunkIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchResult> {
   const state = await loadHybridChunkIndexState(rootDir);
   return searchHybridState(rootDir, state, "chunk-embeddings-cache.json", query, options);
 }
 
+// Purpose: Search the prepared hybrid identifier index for the given query.
+// Inputs: The repository root, query text, and optional hybrid search configuration.
+// Returns/Effects: Returns ranked hybrid identifier matches and search diagnostics.
 export async function searchHybridIdentifierIndex(rootDir: string, query: string, options?: HybridSearchOptions): Promise<HybridSearchResult> {
   const state = await loadHybridIdentifierIndexState(rootDir);
   return searchHybridState(rootDir, state, "identifier-embeddings-cache.json", query, options);
 }
 
+// Purpose: Inspect embedding vector coverage for both prepared hybrid retrieval indexes.
+// Inputs: The repository root whose hybrid indexes should be checked.
+// Returns/Effects: Returns chunk and identifier vector coverage summaries.
 export async function inspectHybridVectorCoverage(rootDir: string): Promise<{
   chunk: HybridVectorCoverageSummary;
   identifier: HybridVectorCoverageSummary;

@@ -103,6 +103,9 @@ const CALLSITE_CACHE_PREFIX = "callsite:";
 let cachedRootDir: string | null = null;
 let cachedIndex: IdentifierIndex | null = null;
 
+// Purpose: Split identifier queries and symbol text into normalized lexical terms.
+// Inputs: Arbitrary text that may contain camelCase, punctuation, or path segments.
+// Returns/Effects: Returns lowercase tokens longer than one character.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -112,6 +115,9 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Compute cosine similarity between two embedding vectors.
+// Inputs: Two numeric vectors representing semantic embeddings.
+// Returns/Effects: Returns a normalized similarity score between 0 and 1 when possible.
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -125,6 +131,9 @@ function cosine(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
+// Purpose: Clamp a numeric score into the inclusive `[0, 1]` range.
+// Inputs: Any numeric score produced by semantic or keyword ranking.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
@@ -144,6 +153,9 @@ function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Purpose: Measure keyword-term overlap between the query vocabulary and a candidate input string.
+// Inputs: The normalized query-term set and the candidate text to score.
+// Returns/Effects: Returns the fraction of query terms present in the candidate text.
 function getKeywordCoverage(queryTerms: Set<string>, input: string): number {
   if (queryTerms.size === 0) return 0;
   const docTerms = new Set(splitTerms(input));
@@ -154,6 +166,9 @@ function getKeywordCoverage(queryTerms: Set<string>, input: string): number {
   return matched / queryTerms.size;
 }
 
+// Purpose: Detect whether a source line looks like the symbol definition rather than a usage.
+// Inputs: One source line and the symbol name being inspected.
+// Returns/Effects: Returns true when the line matches common definition syntaxes.
 function isDefinitionLine(line: string, symbolName: string): boolean {
   const escaped = escapeRegex(symbolName);
   const patterns = [
@@ -163,6 +178,9 @@ function isDefinitionLine(line: string, symbolName: string): boolean {
   return patterns.some((pattern) => pattern.test(line));
 }
 
+// Purpose: Normalize optional kind filters into a lowercase lookup set.
+// Inputs: The optional array of requested identifier kinds from the search options.
+// Returns/Effects: Returns a lowercase kind set or null when no filter is active.
 function normalizeKinds(kinds?: string[]): Set<string> | null {
   if (!kinds || kinds.length === 0) return null;
   const normalized = kinds.map((k) => k.trim().toLowerCase()).filter(Boolean);
@@ -173,6 +191,9 @@ function shouldReportProgress(processedFiles: number, totalFiles: number): boole
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
 
+// Purpose: Remove cached definition and callsite embeddings for one source file.
+// Inputs: The embedding cache object and the relative file path whose entries should be deleted.
+// Returns/Effects: Deletes any identifier or callsite cache entries scoped to that file.
 function removeFileScopedCacheEntries(cache: EmbeddingCache, relativePath: string): void {
   const definitionPrefix = `id:${relativePath}:`;
   const callsitePrefix = `${CALLSITE_CACHE_PREFIX}${relativePath}:`;
@@ -191,6 +212,9 @@ async function savePersistedIdentifierIndexState(rootDir: string, state: Persist
   await saveIndexArtifact(rootDir, "identifier-search-index", state);
 }
 
+// Purpose: Build persisted identifier documents and source lines for one supported file.
+// Inputs: The repo root and the relative path of the file to analyze.
+// Returns/Effects: Returns the file entry or null when the file is unsupported or fails analysis.
 async function buildIdentifierDocsForFile(rootDir: string, relativePath: string): Promise<PersistedIdentifierFileEntry | null> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
@@ -221,6 +245,9 @@ async function buildIdentifierDocsForFile(rootDir: string, relativePath: string)
   }
 }
 
+// Purpose: Refresh the persisted identifier index state by reusing or rebuilding per-file docs.
+// Inputs: The repo root and an optional progress callback for scan-stage updates.
+// Returns/Effects: Persists refreshed identifier file entries and returns state with summary stats.
 async function refreshPersistedIdentifierIndexState(
   rootDir: string,
   onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,
@@ -285,6 +312,9 @@ async function refreshPersistedIdentifierIndexState(
   };
 }
 
+// Purpose: Build or reuse the in-memory identifier index and embedding vectors for a repo.
+// Inputs: The repo root and an optional progress callback for scan and embedding stages.
+// Returns/Effects: Returns the active identifier index with refresh and embedding statistics.
 async function buildIdentifierIndex(
   rootDir: string,
   onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,
@@ -409,6 +439,9 @@ async function buildIdentifierIndex(
   };
 }
 
+// Purpose: Rank likely call sites for one identifier using keyword and embedding similarity.
+// Inputs: The repo root, query terms, query embedding, target symbol, file lines, and result limit.
+// Returns/Effects: Returns the top call sites plus the total candidate count.
 async function rankCallSites(
   rootDir: string,
   queryTerms: Set<string>,
@@ -508,6 +541,9 @@ async function rankCallSites(
   };
 }
 
+// Purpose: Execute semantic identifier search over persisted definitions and ranked call sites.
+// Inputs: Search options describing the repo root, query, result limits, and kind filters.
+// Returns/Effects: Returns a formatted identifier search report.
 export async function semanticIdentifierSearch(options: SemanticIdentifierSearchOptions): Promise<string> {
   const topK = Math.max(1, Math.floor(options.topK ?? 5));
   const topCalls = Math.max(1, Math.floor(options.topCallsPerIdentifier ?? 10));
@@ -591,6 +627,9 @@ export function invalidateIdentifierSearchCache(): void {
   cachedIndex = null;
 }
 
+// Purpose: Refresh cached identifier embeddings for a targeted set of files.
+// Inputs: The repo root and the relative paths whose identifier embeddings should be rebuilt.
+// Returns/Effects: Rebuilds cache entries, invalidates the in-memory index, and returns the embedded count.
 export async function refreshIdentifierEmbeddings(options: { rootDir: string; relativePaths: string[] }): Promise<number> {
   const uniquePaths = Array.from(new Set(options.relativePaths.map(normalizeRelativePath).filter(Boolean)));
   if (uniquePaths.length === 0) return 0;
@@ -624,6 +663,9 @@ export async function refreshIdentifierEmbeddings(options: { rootDir: string; re
   return pending.length;
 }
 
+// Purpose: Ensure the identifier search index is available for semantic identifier queries.
+// Inputs: The repo root and an optional progress callback for index refresh stages.
+// Returns/Effects: Returns the active identifier index with refresh and embedding stats.
 export async function ensureIdentifierSearchIndex(
   rootDir: string,
   onProgress?: (progress: IdentifierIndexProgress) => Promise<void> | void,

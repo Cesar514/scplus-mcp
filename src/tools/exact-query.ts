@@ -252,6 +252,9 @@ function normalizeExactKey(value: string): string {
   return value.trim().toLowerCase();
 }
 
+// Purpose: Split free text into normalized exact-query lookup terms.
+// Inputs: Arbitrary lookup text from a user query or indexed content.
+// Returns/Effects: Returns lowercased searchable tokens with trivial terms removed.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -261,6 +264,9 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Normalize and trim a snippet for compact terminal rendering.
+// Inputs: The raw snippet text plus an optional maximum rendered length.
+// Returns/Effects: Returns a whitespace-normalized snippet capped to the requested length.
 function trimSnippet(value: string, maxLength: number = 120): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
@@ -271,6 +277,9 @@ function formatNameList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "none";
 }
 
+// Purpose: Format git diff hunk ranges into a compact human-readable summary.
+// Inputs: Optional parsed diff ranges for one file.
+// Returns/Effects: Returns a bounded textual summary of the change ranges.
 function formatChangeRanges(ranges?: ChangeRange[]): string {
   if (!ranges || ranges.length === 0) return "none";
   return ranges
@@ -279,6 +288,9 @@ function formatChangeRanges(ranges?: ChangeRange[]): string {
     .join(" | ");
 }
 
+// Purpose: Build the exact-query token set used for symbol, path, and word lookup.
+// Inputs: The raw text whose exact and split terms should be indexed.
+// Returns/Effects: Returns the deduplicated lookup token set for that text.
 function buildLookupTokens(text: string): Set<string> {
   const raw = text.trim().toLowerCase();
   const tokens = new Set<string>();
@@ -287,12 +299,18 @@ function buildLookupTokens(text: string): Set<string> {
   return tokens;
 }
 
+// Purpose: Append a file path to a keyed path list while preserving uniqueness.
+// Inputs: The mutable path map, lookup key, and candidate path to record.
+// Returns/Effects: Mutates the target map to include the unique path for that key.
 function pushUniquePath(map: Map<string, string[]>, key: string, path: string): void {
   const current = map.get(key) ?? [];
   if (!current.includes(path)) current.push(path);
   map.set(key, current);
 }
 
+// Purpose: Append a word-match hit to a keyed hit list while suppressing duplicates.
+// Inputs: The mutable hit map, lookup key, and candidate hit to record.
+// Returns/Effects: Mutates the target map to include the unique hit for that key.
 function pushWordHit(map: Map<string, WordMatchHit[]>, key: string, hit: WordMatchHit): void {
   const current = map.get(key) ?? [];
   const duplicate = current.find((entry) => (
@@ -305,6 +323,9 @@ function pushWordHit(map: Map<string, WordMatchHit[]>, key: string, hit: WordMat
   map.set(key, current);
 }
 
+// Purpose: Parse one `git status --porcelain` file line into a structured status record.
+// Inputs: One raw porcelain output line.
+// Returns/Effects: Returns the parsed status file entry or null for malformed lines.
 function parsePorcelainLine(line: string): RepoStatusFile | null {
   if (line.length < 4) return null;
   const index = line[0];
@@ -319,6 +340,9 @@ function parsePorcelainLine(line: string): RepoStatusFile | null {
   };
 }
 
+// Purpose: Parse the branch name from the porcelain status header line.
+// Inputs: The raw `git status --porcelain --branch` header line.
+// Returns/Effects: Returns the resolved branch name or `detached` when unavailable.
 function parsePorcelainBranch(line: string): string {
   const trimmed = line.trim();
   if (!trimmed.startsWith("##")) return "detached";
@@ -330,6 +354,9 @@ function parsePorcelainBranch(line: string): string {
   return branchSection;
 }
 
+// Purpose: Summarize porcelain status counters for the current repository state.
+// Inputs: The branch name, ahead/behind counts, and parsed file status entries.
+// Returns/Effects: Returns the aggregated repository status summary.
 function summarizeStatus(branch: string, ahead: number, behind: number, files: RepoStatusFile[]): RepoStatusSummary {
   const stagedCount = files.filter((file) => file.index !== " " && file.index !== "?").length;
   const unstagedCount = files.filter((file) => file.workingTree !== " " && file.workingTree !== "?").length;
@@ -360,6 +387,9 @@ function shouldIgnoreRepoStatusPath(filePath: string): boolean {
   return normalized === ".scplus" || normalized.startsWith(".scplus/");
 }
 
+// Purpose: Parse unified diff hunk headers into structured old/new line ranges.
+// Inputs: The raw unified diff text for one or more files.
+// Returns/Effects: Returns the extracted diff hunk ranges in encounter order.
 function parseDiffRanges(diffText: string): ChangeRange[] {
   const ranges: ChangeRange[] = [];
   for (const line of diffText.split("\n")) {
@@ -375,6 +405,9 @@ function parseDiffRanges(diffText: string): ChangeRange[] {
   return ranges;
 }
 
+// Purpose: Load the prepared artifacts required to build the exact-query substrate.
+// Inputs: The repository root whose prepared index state should be read.
+// Returns/Effects: Returns the required prepared artifacts plus a cache key for reuse.
 async function loadPreparedArtifacts(rootDir: string): Promise<{
   fileState: PersistedFileSearchState;
   identifierState: PersistedIdentifierIndexState;
@@ -411,6 +444,9 @@ async function loadPreparedArtifacts(rootDir: string): Promise<{
   };
 }
 
+// Purpose: Build the in-memory exact-query substrate from prepared index artifacts.
+// Inputs: The prepared file, identifier, and structure states plus their cache key.
+// Returns/Effects: Returns the fast exact-query state used by symbol, path, and word lookups.
 function buildFastQueryState(
   fileState: PersistedFileSearchState,
   identifierState: PersistedIdentifierIndexState,
@@ -576,6 +612,9 @@ function buildFastQueryState(
   };
 }
 
+// Purpose: Load or rebuild the cached fast exact-query substrate for one repository.
+// Inputs: The repository root whose prepared artifacts should back exact queries.
+// Returns/Effects: Returns the cached or freshly built fast-query state.
 async function getFastQueryState(rootDir: string): Promise<FastQueryState> {
   const normalizedRootDir = resolve(rootDir);
   const prepared = await loadPreparedArtifacts(normalizedRootDir);
@@ -586,6 +625,9 @@ async function getFastQueryState(rootDir: string): Promise<FastQueryState> {
   return nextState;
 }
 
+// Purpose: Load or rebuild the cached git status and diff state for one repository.
+// Inputs: The repository root whose git status and patch metadata should be queried.
+// Returns/Effects: Returns the cached or freshly built repository change state.
 async function getRepoState(rootDir: string): Promise<CachedRepoState> {
   const normalizedRootDir = resolve(rootDir);
   const git = simpleGit(normalizedRootDir);
@@ -675,6 +717,9 @@ async function getRepoState(rootDir: string): Promise<CachedRepoState> {
   return repoState;
 }
 
+// Purpose: Invalidate the cached exact-query and repo-change state for one repository or all repositories.
+// Inputs: An optional repository root whose cache entries should be removed.
+// Returns/Effects: Clears the selected in-memory cache entries.
 export function invalidateFastQueryCache(rootDir?: string): void {
   if (!rootDir) {
     stateCache.clear();
@@ -686,12 +731,18 @@ export function invalidateFastQueryCache(rootDir?: string): void {
   repoCache.delete(normalizedRootDir);
 }
 
+// Purpose: Look up exact symbol-name matches from the prepared exact-query substrate.
+// Inputs: The repository root, exact symbol query, and optional result limit.
+// Returns/Effects: Returns the bounded list of exact symbol hits.
 export async function lookupExactSymbol(rootDir: string, query: string, topK: number = 10): Promise<ExactSymbolHit[]> {
   const state = await getFastQueryState(rootDir);
   const hits = state.symbolLookup.get(normalizeExactKey(query)) ?? [];
   return hits.slice(0, Math.max(1, topK));
 }
 
+// Purpose: Look up exact and fuzzy path candidates from the prepared exact-query substrate.
+// Inputs: The repository root, path query text, and optional result limit.
+// Returns/Effects: Returns the bounded list of candidate indexed file paths.
 export async function lookupPathCandidates(rootDir: string, query: string, topK: number = 10): Promise<string[]> {
   const state = await getFastQueryState(rootDir);
   const normalizedQuery = normalizePath(query).toLowerCase();
@@ -704,6 +755,9 @@ export async function lookupPathCandidates(rootDir: string, query: string, topK:
   return Array.from(candidates).sort().slice(0, Math.max(1, topK));
 }
 
+// Purpose: Look up indexed word hits across paths, headers, symbols, and file content.
+// Inputs: The repository root, query text, and optional result limit.
+// Returns/Effects: Returns the bounded merged word-hit results ranked by score.
 export async function lookupWord(rootDir: string, query: string, topK: number = 10): Promise<WordMatchHit[]> {
   const state = await getFastQueryState(rootDir);
   const keys = Array.from(buildLookupTokens(query));
@@ -720,6 +774,9 @@ export async function lookupWord(rootDir: string, query: string, topK: number = 
     .slice(0, Math.max(1, topK));
 }
 
+// Purpose: Load the prepared outline for one indexed file path.
+// Inputs: The repository root and file path to resolve.
+// Returns/Effects: Returns the indexed file outline or throws if it is missing.
 export async function getOutline(rootDir: string, filePath: string): Promise<FileOutline> {
   const state = await getFastQueryState(rootDir);
   const normalizedPath = normalizePath(filePath);
@@ -730,6 +787,9 @@ export async function getOutline(rootDir: string, filePath: string): Promise<Fil
   return outline;
 }
 
+// Purpose: Resolve dependency information for one indexed file target.
+// Inputs: The repository root and dependency target query text.
+// Returns/Effects: Returns the dependency information for the best matching indexed file.
 export async function getDependencyInfo(rootDir: string, target: string): Promise<DependencyInfo> {
   const state = await getFastQueryState(rootDir);
   const candidates = await lookupPathCandidates(rootDir, target, 5);
@@ -744,11 +804,17 @@ export async function getDependencyInfo(rootDir: string, target: string): Promis
   return dependencyInfo;
 }
 
+// Purpose: Return the cached git status summary for the repository.
+// Inputs: The repository root whose git status should be summarized.
+// Returns/Effects: Returns the repository status summary.
 export async function getRepoStatus(rootDir: string): Promise<RepoStatusSummary> {
   const repoState = await getRepoState(rootDir);
   return repoState.status;
 }
 
+// Purpose: Return git change summaries for the repository or one specific changed path.
+// Inputs: The repository root plus optional path and result-limit options.
+// Returns/Effects: Returns the bounded repository change summary or one resolved file change summary.
 export async function getRepoChanges(rootDir: string, options?: { path?: string; limit?: number }): Promise<RepoChangesSummary> {
   const repoState = await getRepoState(rootDir);
   const limit = Math.max(1, Math.floor(options?.limit ?? 20));
@@ -779,6 +845,9 @@ export async function getRepoChanges(rootDir: string, options?: { path?: string;
   };
 }
 
+// Purpose: Load the exact content of one indexed file path from disk.
+// Inputs: The repository root and file path query to resolve.
+// Returns/Effects: Returns the UTF-8 content of the resolved indexed file.
 export async function lookupExactPathContent(rootDir: string, filePath: string): Promise<string> {
   const [resolvedPath] = await lookupPathCandidates(rootDir, filePath, 1);
   if (!resolvedPath) {
@@ -787,6 +856,9 @@ export async function lookupExactPathContent(rootDir: string, filePath: string):
   return readFile(resolve(rootDir, resolvedPath), "utf8");
 }
 
+// Purpose: Format exact symbol hits for terminal display.
+// Inputs: The original query text and the exact symbol hits to render.
+// Returns/Effects: Returns a human-readable exact symbol results block.
 export function formatExactSymbolResults(query: string, hits: ExactSymbolHit[]): string {
   const lines = [`Exact symbol matches for "${query}" (${hits.length})`];
   if (hits.length === 0) {
@@ -800,6 +872,9 @@ export function formatExactSymbolResults(query: string, hits: ExactSymbolHit[]):
   return lines.join("\n");
 }
 
+// Purpose: Format exact path candidates for terminal display.
+// Inputs: The original query text and the matching indexed paths to render.
+// Returns/Effects: Returns a human-readable exact path results block.
 export function formatPathCandidates(query: string, paths: string[]): string {
   const lines = [`Exact file path matches for "${query}" (${paths.length})`];
   if (paths.length === 0) {
@@ -812,6 +887,9 @@ export function formatPathCandidates(query: string, paths: string[]): string {
   return lines.join("\n");
 }
 
+// Purpose: Format indexed word matches for terminal display.
+// Inputs: The original query text and the word hits to render.
+// Returns/Effects: Returns a human-readable word-hit results block.
 export function formatWordMatches(query: string, hits: WordMatchHit[]): string {
   const lines = [`Word hits for "${query}" (${hits.length})`];
   if (hits.length === 0) {
@@ -825,6 +903,9 @@ export function formatWordMatches(query: string, hits: WordMatchHit[]): string {
   return lines.join("\n");
 }
 
+// Purpose: Format one prepared file outline for terminal display.
+// Inputs: The file outline to render.
+// Returns/Effects: Returns a human-readable outline block.
 export function formatOutline(outline: FileOutline): string {
   const lines = [
     `Outline: ${outline.path}`,
@@ -848,6 +929,9 @@ export function formatOutline(outline: FileOutline): string {
   return lines.join("\n");
 }
 
+// Purpose: Format one dependency info record for terminal display.
+// Inputs: The dependency info record to render.
+// Returns/Effects: Returns a human-readable dependency summary block.
 export function formatDependencyInfo(info: DependencyInfo): string {
   const lines = [
     `Dependencies: ${info.targetPath}`,
@@ -866,6 +950,9 @@ export function formatDependencyInfo(info: DependencyInfo): string {
   return lines.join("\n");
 }
 
+// Purpose: Format one repository status summary for terminal display.
+// Inputs: The status summary plus an optional file display limit.
+// Returns/Effects: Returns a human-readable git status block.
 export function formatRepoStatusSummary(status: RepoStatusSummary, limit?: number): string {
   const fileLimit = Math.max(1, Math.floor(limit ?? status.files.length));
   const files = status.files.slice(0, fileLimit);
@@ -883,6 +970,9 @@ export function formatRepoStatusSummary(status: RepoStatusSummary, limit?: numbe
   return lines.join("\n");
 }
 
+// Purpose: Format one repository change summary for terminal display.
+// Inputs: The repository change summary plus an optional file display limit.
+// Returns/Effects: Returns a human-readable git changes block.
 export function formatRepoChangesSummary(summary: RepoChangesSummary, limit?: number): string {
   const fileLimit = Math.max(1, Math.floor(limit ?? summary.files.length));
   const files = summary.files.slice(0, fileLimit);

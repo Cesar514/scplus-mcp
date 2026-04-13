@@ -154,6 +154,9 @@ let embeddingRuntimeStats: EmbeddingRuntimeStats = {
 type OllamaEmbedClient = { embed: (params: Record<string, unknown>) => Promise<{ embeddings: number[][] }> };
 let ollamaClient: OllamaEmbedClient | null = null;
 
+// Purpose: Lazily create and cache the Ollama embedding client.
+// Inputs: No direct inputs beyond the configured Ollama host environment.
+// Returns/Effects: Returns the cached Ollama embedding client instance.
 async function getOllamaClient(): Promise<OllamaEmbedClient> {
   if (!ollamaClient) {
     const { Ollama } = await import("ollama");
@@ -162,6 +165,9 @@ async function getOllamaClient(): Promise<OllamaEmbedClient> {
   return ollamaClient;
 }
 
+// Purpose: Request embeddings from the Ollama provider for a batch of inputs.
+// Inputs: The input texts to embed and the abort signal for the provider call.
+// Returns/Effects: Returns the embedding vectors produced by Ollama.
 async function callOllamaEmbed(input: string[], signal: AbortSignal): Promise<number[][]> {
   const client = await getOllamaClient();
   const options = getEmbedRuntimeOptions();
@@ -171,6 +177,9 @@ async function callOllamaEmbed(input: string[], signal: AbortSignal): Promise<nu
   return response.embeddings;
 }
 
+// Purpose: Request embeddings from the OpenAI embeddings endpoint for a batch of inputs.
+// Inputs: The input texts to embed and the abort signal for the HTTP request.
+// Returns/Effects: Returns the embedding vectors produced by the OpenAI provider.
 async function callOpenAIEmbed(input: string[], signal: AbortSignal): Promise<number[][]> {
   const url = `${OPENAI_BASE_URL.replace(/\/+$/, "")}/embeddings`;
   const response = await fetch(url, {
@@ -192,6 +201,9 @@ async function callOpenAIEmbed(input: string[], signal: AbortSignal): Promise<nu
   return data.data.map((item) => item.embedding);
 }
 
+// Purpose: Produce deterministic mock embeddings for tests and offline workflows.
+// Inputs: The input texts to embed.
+// Returns/Effects: Returns normalized mock embedding vectors for each input.
 function callMockEmbed(input: string[]): number[][] {
   return input.map((value) => {
     const vector = new Array<number>(64).fill(0);
@@ -203,6 +215,9 @@ function callMockEmbed(input: string[]): number[][] {
   });
 }
 
+// Purpose: Dispatch one embedding batch to the configured provider implementation.
+// Inputs: The input texts to embed and the abort signal for provider calls.
+// Returns/Effects: Returns the embedding vectors produced by the selected provider.
 async function callProviderEmbed(input: string[], signal: AbortSignal): Promise<number[][]> {
   if (EMBED_PROVIDER === "mock") {
     return callMockEmbed(input);
@@ -213,18 +228,27 @@ async function callProviderEmbed(input: string[], signal: AbortSignal): Promise<
   return callOllamaEmbed(input, signal);
 }
 
+// Purpose: Parse an integer environment variable with a fallback value.
+// Inputs: The raw environment value and the fallback integer to use when invalid.
+// Returns/Effects: Returns the parsed integer or the fallback when parsing fails.
 function toIntegerOr(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// Purpose: Parse an optional integer environment variable.
+// Inputs: The raw environment value to parse.
+// Returns/Effects: Returns the parsed integer or undefined when absent or invalid.
 function toOptionalInteger(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+// Purpose: Parse an optional boolean environment variable.
+// Inputs: The raw environment value to parse.
+// Returns/Effects: Returns the parsed boolean or undefined when absent or invalid.
 function toOptionalBoolean(value: string | undefined): boolean | undefined {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
@@ -233,6 +257,9 @@ function toOptionalBoolean(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
+// Purpose: Build provider runtime options from embedding-related environment variables.
+// Inputs: No direct inputs beyond the current process environment.
+// Returns/Effects: Returns the provider runtime options or undefined when none were set.
 function getEmbedRuntimeOptions(): EmbedRuntimeOptions | undefined {
   if (EMBED_PROVIDER === "openai") return undefined;
   const options: EmbedRuntimeOptions = {
@@ -263,6 +290,9 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+// Purpose: Detect whether an embedding error indicates the input exceeded context length.
+// Inputs: The unknown error value raised during embedding.
+// Returns/Effects: Returns whether the error message matches context-length failures.
 function isContextLengthError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return message.includes("input length exceeds context length")
@@ -270,6 +300,9 @@ function isContextLengthError(error: unknown): boolean {
     || message.includes("maximum context length");
 }
 
+// Purpose: Fetch fallback embeddings one item at a time when batch embedding cannot continue.
+// Inputs: The failed batch items plus an optional single-item embedding function.
+// Returns/Effects: Returns the successfully embedded fallback vectors keyed by original batch index.
 export async function fetchFallbackEmbeddings(
   batch: { idx: number; text: string; hash: string }[],
   fetchOne: (text: string) => Promise<number[]> = async (text) => {
@@ -305,6 +338,9 @@ export async function fetchFallbackEmbeddings(
   return fallbackVectors;
 }
 
+// Purpose: Shrink one embedding input after a context-length failure.
+// Inputs: The oversized embedding input text.
+// Returns/Effects: Returns the shortened input to retry with.
 function shrinkEmbeddingInput(input: string): string {
   if (input.length <= MIN_EMBED_INPUT_CHARS) return input;
   const nextLength = Math.max(MIN_EMBED_INPUT_CHARS, Math.floor(input.length * SINGLE_INPUT_SHRINK_FACTOR));
@@ -312,6 +348,9 @@ function shrinkEmbeddingInput(input: string): string {
   return input.slice(0, nextLength);
 }
 
+// Purpose: Embed one input with retries that progressively shrink oversized content.
+// Inputs: The raw input text to embed.
+// Returns/Effects: Returns the embedding vector or throws if retries still fail.
 async function embedSingleAdaptive(input: string): Promise<number[]> {
   let candidate = input;
 
@@ -333,6 +372,9 @@ async function embedSingleAdaptive(input: string): Promise<number[]> {
   throw new Error("Unable to embed oversized input after adaptive retries");
 }
 
+// Purpose: Embed a batch of inputs and recursively split or retry on context-length failures.
+// Inputs: The batch of input texts to embed.
+// Returns/Effects: Returns embedding vectors for every input in the original order.
 async function embedBatchAdaptive(batch: string[]): Promise<number[][]> {
   try {
     const timeoutCtrl = AbortSignal.timeout(EMBED_TIMEOUT_MS);
@@ -354,6 +396,9 @@ async function embedBatchAdaptive(batch: string[]): Promise<number[][]> {
   }
 }
 
+// Purpose: Split one embedding input into provider-sized text chunks.
+// Inputs: The raw input text to chunk.
+// Returns/Effects: Returns the ordered text chunks that should be embedded separately.
 function splitEmbeddingInput(input: string): string[] {
   const chunkChars = getEmbedChunkChars();
   if (input.length <= chunkChars) return [input];
@@ -364,6 +409,9 @@ function splitEmbeddingInput(input: string): string[] {
   return chunks;
 }
 
+// Purpose: Merge chunk-level embedding vectors back into one document embedding.
+// Inputs: The chunk embedding vectors and their relative chunk weights.
+// Returns/Effects: Returns the weighted merged embedding vector.
 function mergeEmbeddingVectors(vectors: number[][], weights: number[]): number[] {
   if (vectors.length === 0) throw new Error("Cannot merge empty embedding vectors");
   if (vectors.length === 1) return vectors[0];
@@ -387,6 +435,9 @@ function mergeEmbeddingVectors(vectors: number[][], weights: number[]): number[]
   return merged;
 }
 
+// Purpose: Fetch embeddings for one string or batch of strings using adaptive chunking.
+// Inputs: One input string or an array of input strings.
+// Returns/Effects: Returns embedding vectors aligned with the original input order.
 export async function fetchEmbedding(input: string | string[]): Promise<number[][]> {
   const inputs = Array.isArray(input) ? input : [input];
   if (inputs.length === 0) return [];
@@ -415,6 +466,9 @@ export async function fetchEmbedding(input: string | string[]): Promise<number[]
   return embeddings;
 }
 
+// Purpose: Build a compact hash for one raw embedding input string.
+// Inputs: The raw text to hash.
+// Returns/Effects: Returns the deterministic hash string used in embedding caches.
 function hashContent(text: string): string {
   let h = 0;
   for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
@@ -425,6 +479,9 @@ export function buildEmbeddingCacheHash(text: string): string {
   return hashContent(`${EMBED_PROVIDER}:${ACTIVE_EMBED_MODEL}:${text}`);
 }
 
+// Purpose: Compute cosine similarity between two embedding vectors.
+// Inputs: The left and right numeric vectors to compare.
+// Returns/Effects: Returns their cosine similarity score or zero when undefined.
 function cosine(a: number[], b: number[]): number {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
@@ -444,12 +501,18 @@ async function saveCache(rootDir: string, cache: EmbeddingCache): Promise<void> 
   await saveEmbeddingCache(rootDir, cache, CACHE_FILE);
 }
 
+// Purpose: Decide whether the current embedding write should force cache materialization.
+// Inputs: No direct inputs beyond the active generation context.
+// Returns/Effects: Returns whether writes target a non-serving generation that should be materialized.
 function shouldMaterializeCurrentGenerationWrite(): boolean {
   const generationContext = getIndexGenerationContext();
   return generationContext?.writeGeneration !== undefined
     && generationContext.writeGeneration !== generationContext.readGeneration;
 }
 
+// Purpose: Clone one embedding cache value before exposing it to callers.
+// Inputs: The cached embedding value to duplicate.
+// Returns/Effects: Returns a defensive copy of the embedding cache value.
 function cloneEmbeddingCacheValue(value: EmbeddingCacheValue): EmbeddingCacheValue {
   return {
     hash: value.hash,
@@ -461,6 +524,9 @@ export function getEmbeddingRuntimeStats(): EmbeddingRuntimeStats {
   return { ...embeddingRuntimeStats };
 }
 
+// Purpose: Reset the in-memory embedding runtime counters back to an empty baseline.
+// Inputs: No direct inputs beyond the mutable runtime stats container.
+// Returns/Effects: Replaces the stored embedding runtime stats with a zeroed object.
 export function resetEmbeddingRuntimeStats(): void {
   embeddingRuntimeStats = {
     processNamespaceHits: 0,
@@ -477,6 +543,9 @@ function buildProcessCacheKey(rootDir: string, generation: number, namespace: st
   return `${resolve(rootDir)}::${generation}::${namespace}`;
 }
 
+// Purpose: Invalidate stale process-cache namespaces when the active generation changes.
+// Inputs: The repository root and the latest active generation number.
+// Returns/Effects: Drops process-cache entries for outdated generations and updates runtime stats.
 function invalidateRootGenerationCache(rootDir: string, activeGeneration: number): void {
   const normalizedRootDir = resolve(rootDir);
   const previousGeneration = activeGenerationByRoot.get(normalizedRootDir);
@@ -490,6 +559,9 @@ function invalidateRootGenerationCache(rootDir: string, activeGeneration: number
   }
 }
 
+// Purpose: Resolve the read generation that embedding cache loads should use.
+// Inputs: The repository root whose serving generation should be consulted.
+// Returns/Effects: Returns the generation number for read operations and refreshes cache invalidation state.
 async function resolveReadGeneration(rootDir: string): Promise<number> {
   const generationContext = getIndexGenerationContext();
   if (generationContext?.readGeneration !== undefined) return generationContext.readGeneration;
@@ -498,6 +570,9 @@ async function resolveReadGeneration(rootDir: string): Promise<number> {
   return serving.activeGeneration;
 }
 
+// Purpose: Resolve the write generation that embedding cache writes should use.
+// Inputs: The repository root whose serving generation should be consulted.
+// Returns/Effects: Returns the generation number for write operations and refreshes cache invalidation state.
 async function resolveWriteGeneration(rootDir: string): Promise<number> {
   const generationContext = getIndexGenerationContext();
   if (generationContext?.writeGeneration !== undefined) return generationContext.writeGeneration;
@@ -506,6 +581,9 @@ async function resolveWriteGeneration(rootDir: string): Promise<number> {
   return serving.activeGeneration;
 }
 
+// Purpose: Load embedding cache entries for one namespace from process cache and sqlite.
+// Inputs: The repository root, logical namespace, and optional entry ids to restrict the load.
+// Returns/Effects: Returns the selected embedding cache entries as a defensive map copy.
 async function loadEmbeddingNamespaceEntries(
   rootDir: string,
   namespace: string,
@@ -564,6 +642,9 @@ async function loadEmbeddingNamespaceEntries(
   return selectedEntries;
 }
 
+// Purpose: Merge freshly written vector entries into the in-memory embedding process cache.
+// Inputs: The repository root, generation, namespace, written entries, and merge mode.
+// Returns/Effects: Updates the process cache for the selected namespace in place.
 function mergeEntriesIntoProcessCache(
   rootDir: string,
   generation: number,
@@ -600,6 +681,9 @@ export async function ensureEmbeddingCacheDir(rootDir: string): Promise<void> {
   await loadEmbeddingCache(rootDir, CACHE_FILE);
 }
 
+// Purpose: Resolve the vector namespaces associated with one embedding cache file name.
+// Inputs: The logical embedding cache file name.
+// Returns/Effects: Returns the primary and optional secondary vector namespaces.
 function resolveEmbeddingNamespaces(fileName: string): { primary: string; secondary?: string } {
   if (fileName === CACHE_FILE) return { primary: FILE_SEARCH_VECTOR_NAMESPACE };
   if (fileName === "identifier-embeddings-cache.json") {
@@ -612,6 +696,9 @@ function resolveEmbeddingNamespaces(fileName: string): { primary: string; second
   throw new Error(`Unsupported embedding cache namespace for "${fileName}".`);
 }
 
+// Purpose: Load the full embedding cache represented by one logical cache file.
+// Inputs: The repository root and logical embedding cache file name.
+// Returns/Effects: Returns the merged embedding cache for the corresponding namespaces.
 export async function loadEmbeddingCache(rootDir: string, fileName: string): Promise<EmbeddingCache> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
   const cache: EmbeddingCache = {};
@@ -628,6 +715,9 @@ export async function loadEmbeddingCache(rootDir: string, fileName: string): Pro
   return cache;
 }
 
+// Purpose: Load selected embedding cache entries represented by one logical cache file.
+// Inputs: The repository root, logical cache file name, and requested entry ids.
+// Returns/Effects: Returns the subset of embedding cache entries found for those ids.
 export async function loadEmbeddingCacheEntries(
   rootDir: string,
   fileName: string,
@@ -650,6 +740,9 @@ export async function loadEmbeddingCacheEntries(
   return cache;
 }
 
+// Purpose: Inspect vector coverage for selected embedding cache entry ids.
+// Inputs: The repository root, logical cache file name, and requested entry ids.
+// Returns/Effects: Returns the embedding cache coverage summary for those ids.
 export async function inspectEmbeddingCacheCoverage(
   rootDir: string,
   fileName: string,
@@ -690,6 +783,9 @@ export async function inspectEmbeddingCacheCoverage(
   };
 }
 
+// Purpose: Upsert selected embedding cache entries into the backing vector namespaces.
+// Inputs: The repository root, logical embedding cache object, and logical cache file name.
+// Returns/Effects: Persists the supplied entries and updates the in-memory process cache.
 export async function upsertEmbeddingCacheEntries(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
   const generation = await resolveWriteGeneration(rootDir);
@@ -724,6 +820,9 @@ export async function upsertEmbeddingCacheEntries(rootDir: string, cache: Embedd
   }
 }
 
+// Purpose: Replace the persisted embedding cache contents for one logical cache file.
+// Inputs: The repository root, logical embedding cache object, and logical cache file name.
+// Returns/Effects: Persists the full cache and refreshes the in-memory process cache.
 export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache, fileName: string): Promise<void> {
   const namespaces = resolveEmbeddingNamespaces(fileName);
   const generation = await resolveWriteGeneration(rootDir);
@@ -764,6 +863,9 @@ export async function saveEmbeddingCache(rootDir: string, cache: EmbeddingCache,
   }
 }
 
+// Purpose: Persist one namespace worth of embedding vectors by diffing current and next entries.
+// Inputs: The repository root, logical namespace, next entries, and target generation.
+// Returns/Effects: Upserts changed vectors and deletes stale vectors for that namespace.
 async function saveEmbeddingNamespace(
   rootDir: string,
   namespace: string,
@@ -797,6 +899,9 @@ async function saveEmbeddingNamespace(
   await deleteVectorEntries(rootDir, namespace, entryIdsToDelete, { generation });
 }
 
+// Purpose: Compare two embedding vectors for exact element-wise equality.
+// Inputs: The left and right vectors to compare.
+// Returns/Effects: Returns whether the vectors have identical dimensions and values.
 function vectorsEqual(left: number[], right: number[]): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index++) {
@@ -805,11 +910,17 @@ function vectorsEqual(left: number[], right: number[]): boolean {
   return true;
 }
 
+// Purpose: Materialize one logical embedding cache through its backing vector namespaces.
+// Inputs: The repository root and logical cache file name to materialize.
+// Returns/Effects: Reloads and fully rewrites the corresponding embedding cache.
 export async function materializeEmbeddingCache(rootDir: string, fileName: string): Promise<void> {
   const cache = await loadEmbeddingCache(rootDir, fileName);
   await saveEmbeddingCache(rootDir, cache, fileName);
 }
 
+// Purpose: Materialize the default file-search embedding cache through sqlite vector storage.
+// Inputs: The repository root whose file-search embedding cache should be materialized.
+// Returns/Effects: Reloads and fully rewrites the default file-search embedding cache.
 export async function materializeFileSearchEmbeddingCache(rootDir: string): Promise<void> {
   await materializeEmbeddingCache(rootDir, CACHE_FILE);
 }
@@ -824,116 +935,136 @@ function getMatchedSymbolEntries(symbols: SymbolSearchEntry[], queryTerms: Set<s
   return symbols.filter((symbol) => splitCamelCase(symbol.name).some((term) => queryTerms.has(term)));
 }
 
-export class SearchIndex {
-  private documents: SearchDocument[] = [];
-  private vectors: number[][] = [];
-  async index(docs: SearchDocument[], rootDir: string): Promise<SearchIndexBuildStats> {
-    this.documents = docs;
-    const cache = await loadCache(rootDir);
-    const uncached: { idx: number; text: string; hash: string }[] = [];
-    let reusedDocuments = 0;
+// Purpose: Build and persist the search-index vectors for a document set.
+// Inputs: The search-index instance, source documents, and repository root for cache access.
+// Returns/Effects: Updates the instance documents and vectors and returns build stats.
+async function buildSearchIndexVectors(index: SearchIndex, docs: SearchDocument[], rootDir: string): Promise<SearchIndexBuildStats> {
+  index.documents = docs;
+  const cache = await loadCache(rootDir);
+  const uncached: { idx: number; text: string; hash: string }[] = [];
+  let reusedDocuments = 0;
 
-    this.vectors = new Array(docs.length);
+  index.vectors = new Array(docs.length);
 
-    for (let i = 0; i < docs.length; i++) {
-      const doc = docs[i];
-      const rawText = `${doc.header} ${doc.symbols.join(" ")} ${doc.content}`;
-      const hash = buildEmbeddingCacheHash(rawText);
+  for (let i = 0; i < docs.length; i++) {
+    const doc = docs[i];
+    const rawText = `${doc.header} ${doc.symbols.join(" ")} ${doc.content}`;
+    const hash = buildEmbeddingCacheHash(rawText);
 
-      if (cache[doc.path]?.hash === hash) {
-        this.vectors[i] = cache[doc.path].vector;
-        reusedDocuments++;
-      } else {
-        uncached.push({ idx: i, text: rawText, hash });
-      }
+    if (cache[doc.path]?.hash === hash) {
+      index.vectors[i] = cache[doc.path].vector;
+      reusedDocuments++;
+    } else {
+      uncached.push({ idx: i, text: rawText, hash });
     }
+  }
 
-    if (uncached.length > 0) {
-      const batchSize = getEmbeddingBatchSize();
-      for (let b = 0; b < uncached.length; b += batchSize) {
-        const batch = uncached.slice(b, b + batchSize);
-        try {
-          const embeddings = await fetchEmbedding(batch.map((u) => u.text));
-          for (let j = 0; j < batch.length; j++) {
-            this.vectors[batch[j].idx] = embeddings[j];
-            cache[docs[batch[j].idx].path] = { hash: batch[j].hash, vector: embeddings[j] };
+  if (uncached.length > 0) {
+    const batchSize = getEmbeddingBatchSize();
+    for (let b = 0; b < uncached.length; b += batchSize) {
+      const batch = uncached.slice(b, b + batchSize);
+      try {
+        const embeddings = await fetchEmbedding(batch.map((u) => u.text));
+        for (let j = 0; j < batch.length; j++) {
+          index.vectors[batch[j].idx] = embeddings[j];
+          cache[docs[batch[j].idx].path] = { hash: batch[j].hash, vector: embeddings[j] };
+        }
+      } catch (error) {
+        if (!isContextLengthError(error)) throw error;
+        const fallbackVectors = await fetchFallbackEmbeddings(batch);
+        for (const item of batch) {
+          const vector = fallbackVectors.get(item.idx);
+          if (!vector) {
+            delete cache[docs[item.idx].path];
+            continue;
           }
-        } catch (error) {
-          if (!isContextLengthError(error)) throw error;
-          const fallbackVectors = await fetchFallbackEmbeddings(batch);
-          for (const item of batch) {
-            const vector = fallbackVectors.get(item.idx);
-            if (!vector) {
-              delete cache[docs[item.idx].path];
-              continue;
-            }
-            this.vectors[item.idx] = vector;
-            cache[docs[item.idx].path] = { hash: item.hash, vector };
-          }
+          index.vectors[item.idx] = vector;
+          cache[docs[item.idx].path] = { hash: item.hash, vector };
         }
       }
     }
-
-    if (uncached.length > 0 || shouldMaterializeCurrentGenerationWrite()) {
-      await saveCache(rootDir, cache);
-    }
-
-    return {
-      documents: docs.length,
-      embeddedDocuments: uncached.length,
-      reusedDocuments,
-    };
   }
 
+  if (uncached.length > 0 || shouldMaterializeCurrentGenerationWrite()) {
+    await saveCache(rootDir, cache);
+  }
+
+  return {
+    documents: docs.length,
+    embeddedDocuments: uncached.length,
+    reusedDocuments,
+  };
+}
+
+// Purpose: Search the indexed document vectors for the best matches to a query.
+// Inputs: The search-index instance, query text, and optional search options.
+// Returns/Effects: Returns the bounded ranked search results for the current index contents.
+async function searchSearchIndex(index: SearchIndex, query: string, optionsOrTopK?: number | SearchQueryOptions): Promise<SearchResult[]> {
+  const options = resolveSearchOptions(optionsOrTopK);
+  const queryVec = options.queryVector ?? (await fetchEmbedding(query))[0];
+  const queryTerms = new Set(splitCamelCase(query));
+  const scores: {
+    idx: number;
+    score: number;
+    semanticScore: number;
+    keywordScore: number;
+    matchedSymbols: string[];
+    matchedSymbolLocations: string[];
+  }[] = [];
+
+  for (let i = 0; i < index.vectors.length; i++) {
+    if (!index.vectors[i]) continue;
+    const doc = index.documents[i];
+    const semanticScore = cosine(queryVec, index.vectors[i]);
+    const matchedEntries = doc.symbolEntries ? getMatchedSymbolEntries(doc.symbolEntries, queryTerms) : [];
+    const matchedSymbols = matchedEntries.length > 0
+      ? matchedEntries.map((entry) => entry.name)
+      : getMatchedSymbols(doc.symbols, queryTerms);
+    const matchedSymbolLocations = matchedEntries.map((entry) => `${entry.name}@${formatLineRange(entry.line, entry.endLine)}`);
+    const keywordScore = computeKeywordScore(query, queryTerms, doc, matchedSymbols);
+    const score = computeCombinedScore(semanticScore, keywordScore, options);
+
+    if (options.requireSemanticMatch && semanticScore <= 0) continue;
+    if (options.requireKeywordMatch && keywordScore <= 0) continue;
+    if (Math.max(semanticScore, 0) < options.minSemanticScore) continue;
+    if (keywordScore < options.minKeywordScore) continue;
+    if (score < options.minCombinedScore) continue;
+
+    scores.push({ idx: i, score, semanticScore, keywordScore, matchedSymbols, matchedSymbolLocations });
+  }
+
+  return scores
+    .sort((a, b) => b.score - a.score || b.keywordScore - a.keywordScore || b.semanticScore - a.semanticScore)
+    .slice(0, options.topK)
+    .map(({ idx, score, semanticScore, keywordScore, matchedSymbols, matchedSymbolLocations }) => {
+      const doc = index.documents[idx];
+      return {
+        path: doc.path,
+        score: Math.round(score * 1000) / 10,
+        semanticScore: Math.round(Math.max(semanticScore, 0) * 1000) / 10,
+        keywordScore: Math.round(keywordScore * 1000) / 10,
+        header: doc.header,
+        matchedSymbols,
+        matchedSymbolLocations,
+      };
+    });
+}
+
+export class SearchIndex {
+  documents: SearchDocument[] = [];
+  vectors: number[][] = [];
+  // Purpose: Build and persist the search-index vectors for a document set.
+  // Inputs: The source documents to index and the repository root for cache access.
+  // Returns/Effects: Updates the instance documents and vectors and returns build stats.
+  async index(docs: SearchDocument[], rootDir: string): Promise<SearchIndexBuildStats> {
+    return buildSearchIndexVectors(this, docs, rootDir);
+  }
+
+  // Purpose: Search the indexed document vectors for the best matches to a query.
+  // Inputs: The query text and optional search options.
+  // Returns/Effects: Returns the bounded ranked search results for the current index contents.
   async search(query: string, optionsOrTopK?: number | SearchQueryOptions): Promise<SearchResult[]> {
-    const options = resolveSearchOptions(optionsOrTopK);
-    const queryVec = options.queryVector ?? (await fetchEmbedding(query))[0];
-    const queryTerms = new Set(splitCamelCase(query));
-    const scores: {
-      idx: number;
-      score: number;
-      semanticScore: number;
-      keywordScore: number;
-      matchedSymbols: string[];
-      matchedSymbolLocations: string[];
-    }[] = [];
-
-    for (let i = 0; i < this.vectors.length; i++) {
-      if (!this.vectors[i]) continue;
-      const doc = this.documents[i];
-      const semanticScore = cosine(queryVec, this.vectors[i]);
-      const matchedEntries = doc.symbolEntries ? getMatchedSymbolEntries(doc.symbolEntries, queryTerms) : [];
-      const matchedSymbols = matchedEntries.length > 0
-        ? matchedEntries.map((entry) => entry.name)
-        : getMatchedSymbols(doc.symbols, queryTerms);
-      const matchedSymbolLocations = matchedEntries.map((entry) => `${entry.name}@${formatLineRange(entry.line, entry.endLine)}`);
-      const keywordScore = computeKeywordScore(query, queryTerms, doc, matchedSymbols);
-      const score = computeCombinedScore(semanticScore, keywordScore, options);
-
-      if (options.requireSemanticMatch && semanticScore <= 0) continue;
-      if (options.requireKeywordMatch && keywordScore <= 0) continue;
-      if (Math.max(semanticScore, 0) < options.minSemanticScore) continue;
-      if (keywordScore < options.minKeywordScore) continue;
-      if (score < options.minCombinedScore) continue;
-
-      scores.push({ idx: i, score, semanticScore, keywordScore, matchedSymbols, matchedSymbolLocations });
-    }
-
-    return scores
-      .sort((a, b) => b.score - a.score || b.keywordScore - a.keywordScore || b.semanticScore - a.semanticScore)
-      .slice(0, options.topK)
-      .map(({ idx, score, semanticScore, keywordScore, matchedSymbols, matchedSymbolLocations }) => {
-        const doc = this.documents[idx];
-        return {
-          path: doc.path,
-          score: Math.round(score * 1000) / 10,
-          semanticScore: Math.round(Math.max(semanticScore, 0) * 1000) / 10,
-          keywordScore: Math.round(keywordScore * 1000) / 10,
-          header: doc.header,
-          matchedSymbols,
-          matchedSymbolLocations,
-        };
-      });
+    return searchSearchIndex(this, query, optionsOrTopK);
   }
 
   getDocumentCount(): number {

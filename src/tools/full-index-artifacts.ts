@@ -165,6 +165,9 @@ function shouldReportProgress(processedFiles: number, totalFiles: number): boole
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
 
+// Purpose: Infer a normalized language label from a source file extension.
+// Inputs: The file path whose extension determines the language bucket.
+// Returns/Effects: Returns a lowercase language identifier or `unknown` when unmapped.
 function detectLanguage(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   if (ext === ".ts" || ext === ".tsx") return "typescript";
@@ -186,6 +189,9 @@ function getStructureSymbolId(filePath: string, symbol: { name: string; line: nu
   return `${filePath}:${symbol.parentName ?? "root"}:${symbol.name}:${symbol.line}`;
 }
 
+// Purpose: Check whether a persisted structure entry is complete enough to reuse.
+// Inputs: An optional cached file entry from the previous structure index state.
+// Returns/Effects: Returns true only when the entry contains the required reuse fields.
 function canReuseStructureEntry(entry: PersistedStructureFileEntry | undefined): boolean {
   if (!entry) return false;
   return typeof entry.contentHash === "string"
@@ -194,6 +200,9 @@ function canReuseStructureEntry(entry: PersistedStructureFileEntry | undefined):
     && Array.isArray(entry.artifact?.dependencyPaths);
 }
 
+// Purpose: Load the persisted structure index or initialize an empty full-mode baseline.
+// Inputs: The repository root that owns the code-structure artifact.
+// Returns/Effects: Returns the current structure index state from artifact storage.
 async function loadStructureIndexState(rootDir: string): Promise<PersistedStructureIndexState> {
   return loadIndexArtifact(rootDir, "code-structure-index", () => ({
     generatedAt: "",
@@ -213,6 +222,9 @@ async function saveStructureIndexState(rootDir: string, state: PersistedStructur
   await saveIndexArtifact(rootDir, "code-structure-index", state);
 }
 
+// Purpose: Extract normalized import records from raw file lines across supported languages.
+// Inputs: File content split into lines plus the detected language identifier.
+// Returns/Effects: Returns import source, imported names, and line metadata.
 function extractImports(lines: string[], language: string): ImportInfo[] {
   const imports: ImportInfo[] = [];
   if (language === "typescript" || language === "javascript") {
@@ -284,6 +296,9 @@ function extractImports(lines: string[], language: string): ImportInfo[] {
   return imports;
 }
 
+// Purpose: Extract exported symbol declarations from raw file lines across supported languages.
+// Inputs: File content split into lines plus the detected language identifier.
+// Returns/Effects: Returns export names, declaration kinds, and source line metadata.
 function extractExports(lines: string[], language: string): ExportInfo[] {
   const exports: ExportInfo[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -314,6 +329,9 @@ function extractExports(lines: string[], language: string): ExportInfo[] {
   return exports;
 }
 
+// Purpose: Extract lightweight caller-to-callee edges from raw file lines.
+// Inputs: File content split into lines plus the detected language identifier.
+// Returns/Effects: Returns a bounded list of call relationships with line numbers.
 function extractCalls(lines: string[], language: string): CallInfo[] {
   const calls: CallInfo[] = [];
   let current = "module";
@@ -341,6 +359,9 @@ function extractCalls(lines: string[], language: string): CallInfo[] {
   return calls.slice(0, 100);
 }
 
+// Purpose: Build one structure artifact entry from parsed file content and local dependencies.
+// Inputs: The repo root, relative file path, and set of in-repo dependency paths.
+// Returns/Effects: Returns a structure artifact for supported files or null on parse failure.
 async function buildStructureArtifactForFile(
   rootDir: string,
   relativePath: string,
@@ -384,6 +405,9 @@ async function buildStructureArtifactForFile(
   }
 }
 
+// Purpose: Refresh the persisted structure index by reusing or rebuilding per-file artifacts.
+// Inputs: The repo root and an optional progress callback for structure scan updates.
+// Returns/Effects: Persists the updated structure state and returns it with summary stats.
 export async function refreshStructureIndexState(
   rootDir: string,
   onProgress?: (progress: FullIndexProgress) => Promise<void> | void,
@@ -571,6 +595,9 @@ export async function refreshStructureIndexState(
   };
 }
 
+// Purpose: Build or refresh all full-mode artifacts needed for retrieval and structure features.
+// Inputs: Full-index options containing the repo root plus an optional progress callback.
+// Returns/Effects: Persists all full artifacts and returns the manifest with per-stage stats.
 export async function ensureFullIndexArtifacts(
   options: FullIndexArtifactOptions,
   onProgress?: (progress: FullIndexProgress) => Promise<void> | void,

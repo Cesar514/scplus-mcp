@@ -34,18 +34,29 @@ export interface RepoRuntimeLockHandle {
   release(): Promise<void>;
 }
 
-export class RepoRuntimeLockBusyError extends Error {
-  constructor(
-    readonly rootDir: string,
-    readonly kind: RepoRuntimeLockKind,
-    readonly owner: RepoRuntimeLockOwner,
-  ) {
-    super(
-      `scplus ${kind} lock for ${rootDir} is already held by pid ${owner.pid} ` +
-      `(${owner.holder}, started ${owner.startedAt}). Close the competing runtime or wait for it to finish.`,
-    );
-    this.name = "RepoRuntimeLockBusyError";
-  }
+export interface RepoRuntimeLockBusyError extends Error {
+  rootDir: string;
+  kind: RepoRuntimeLockKind;
+  owner: RepoRuntimeLockOwner;
+}
+
+// Purpose: Build a typed runtime-lock contention error with current owner context.
+// Inputs: The repo root, lock kind, and validated owner metadata from the lock file.
+// Returns/Effects: Returns an `Error` carrying the lock owner details for callers.
+export function createRepoRuntimeLockBusyError(
+  rootDir: string,
+  kind: RepoRuntimeLockKind,
+  owner: RepoRuntimeLockOwner,
+): RepoRuntimeLockBusyError {
+  const error = new Error(
+    `scplus ${kind} lock for ${rootDir} is already held by pid ${owner.pid} ` +
+    `(${owner.holder}, started ${owner.startedAt}). Close the competing runtime or wait for it to finish.`,
+  ) as RepoRuntimeLockBusyError;
+  error.name = "RepoRuntimeLockBusyError";
+  error.rootDir = rootDir;
+  error.kind = kind;
+  error.owner = owner;
+  return error;
 }
 
 const DEFAULT_POLL_MS = 100;
@@ -56,12 +67,18 @@ function runtimeLockPath(rootDir: string, kind: RepoRuntimeLockKind): string {
   return join(resolve(rootDir), ".scplus", "locks", `${kind}.lock`);
 }
 
+// Purpose: Pause lock polling or takeover loops for a fixed delay.
+// Inputs: The number of milliseconds to wait before resolving.
+// Returns/Effects: Resolves asynchronously after the timer completes.
 function sleep(ms: number): Promise<void> {
   return new Promise((resolveCurrent) => {
     setTimeout(resolveCurrent, ms);
   });
 }
 
+// Purpose: Check whether a process id still refers to a live process.
+// Inputs: A process id recorded in the runtime lock owner metadata.
+// Returns/Effects: Returns false only when the process is confirmed absent.
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -73,6 +90,9 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+// Purpose: Read and validate the runtime lock owner payload from disk.
+// Inputs: The absolute path to the lock file that stores owner metadata.
+// Returns/Effects: Returns a validated owner record or throws on invalid content.
 async function readLockOwner(lockPath: string): Promise<RepoRuntimeLockOwner> {
   const raw = await readFile(lockPath, "utf8");
   const parsed = JSON.parse(raw) as Partial<RepoRuntimeLockOwner>;
@@ -89,6 +109,9 @@ async function readLockOwner(lockPath: string): Promise<RepoRuntimeLockOwner> {
   return parsed as RepoRuntimeLockOwner;
 }
 
+// Purpose: Inspect the command line for a lock-owning process.
+// Inputs: The process id from the runtime lock owner record.
+// Returns/Effects: Returns the command line text from `/proc` or `ps`.
 async function processCommandLine(pid: number): Promise<string> {
   try {
     const raw = await readFile(`/proc/${pid}/cmdline`, "utf8");
@@ -99,6 +122,9 @@ async function processCommandLine(pid: number): Promise<string> {
   }
 }
 
+// Purpose: Verify that a current lock owner looks like an scplus runtime process.
+// Inputs: The parsed owner record containing the process id to inspect.
+// Returns/Effects: Returns true when the command line matches known scplus entrypoints.
 async function isVerifiedScplusOwnerProcess(owner: RepoRuntimeLockOwner): Promise<boolean> {
   const commandLine = await processCommandLine(owner.pid).catch(() => "");
   const mentionsScplus =
@@ -109,6 +135,9 @@ async function isVerifiedScplusOwnerProcess(owner: RepoRuntimeLockOwner): Promis
   return mentionsScplus;
 }
 
+// Purpose: Terminate a competing verified scplus process during takeover.
+// Inputs: The current lock owner record for the process to stop.
+// Returns/Effects: Sends termination signals and throws if the process does not exit.
 async function terminateProcessForTakeover(owner: RepoRuntimeLockOwner): Promise<void> {
   try {
     process.kill(owner.pid, "SIGTERM");
@@ -137,6 +166,35 @@ async function terminateProcessForTakeover(owner: RepoRuntimeLockOwner): Promise
   throw new Error(`Timed out terminating competing scplus process ${owner.pid} for ${owner.rootDir}.`);
 }
 
+// Purpose: Release a runtime lock after verifying that the caller still owns the lock file.
+// Inputs: The lock path, expected owner token, lock kind, normalized root dir, and release state accessors.
+// Returns/Effects: Removes the lock file or throws if ownership changed unexpectedly.
+async function releaseRuntimeLock(args: {
+  lockPath: string;
+  owner: RepoRuntimeLockOwner;
+  kind: RepoRuntimeLockKind;
+  normalizedRootDir: string;
+  isReleased: () => boolean;
+  markReleased: () => void;
+}): Promise<void> {
+  if (args.isReleased()) return;
+  args.markReleased();
+  try {
+    const currentOwner = await readLockOwner(args.lockPath);
+    if (currentOwner.token !== args.owner.token) {
+      throw new Error(`Runtime ${args.kind} lock ownership changed unexpectedly for ${args.normalizedRootDir}.`);
+    }
+    await rm(args.lockPath, { force: true });
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOENT") return;
+    throw error;
+  }
+}
+
+// Purpose: Acquire an exclusive repo runtime lock for mutation or watcher work.
+// Inputs: The repo root, desired lock kind, and acquisition callbacks and timing options.
+// Returns/Effects: Creates the lock file and returns a release handle or throws on contention.
 export async function acquireRepoRuntimeLock(
   rootDir: string,
   kind: RepoRuntimeLockKind,
@@ -169,20 +227,17 @@ export async function acquireRepoRuntimeLock(
       }
       let released = false;
       return {
-        async release(): Promise<void> {
-          if (released) return;
-          released = true;
-          try {
-            const currentOwner = await readLockOwner(lockPath);
-            if (currentOwner.token !== owner.token) {
-              throw new Error(`Runtime ${kind} lock ownership changed unexpectedly for ${normalizedRootDir}.`);
-            }
-            await rm(lockPath, { force: true });
-          } catch (error) {
-            const nodeError = error as NodeJS.ErrnoException;
-            if (nodeError.code === "ENOENT") return;
-            throw error;
-          }
+        release: async (): Promise<void> => {
+          await releaseRuntimeLock({
+            lockPath,
+            owner,
+            kind,
+            normalizedRootDir,
+            isReleased: () => released,
+            markReleased: () => {
+              released = true;
+            },
+          });
         },
       };
     } catch (error) {
@@ -204,7 +259,7 @@ export async function acquireRepoRuntimeLock(
         continue;
       }
       if (Date.now() > deadline) {
-        throw new RepoRuntimeLockBusyError(normalizedRootDir, kind, currentOwner);
+        throw createRepoRuntimeLockBusyError(normalizedRootDir, kind, currentOwner);
       }
       if (!notifiedBusy) {
         notifiedBusy = true;

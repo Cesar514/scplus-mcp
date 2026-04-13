@@ -168,6 +168,9 @@ function buildCheck(name: string, passed: boolean, details: string): EvaluationC
   return { name, passed, details };
 }
 
+// Purpose: Summarize a set of evaluation checks into passed and total counts.
+// Inputs: The evaluation checks produced for one benchmark category.
+// Returns/Effects: Returns the aggregated evaluation category summary.
 function summarizeChecks(checks: EvaluationCheck[]): EvaluationCategory {
   const passed = checks.filter((check) => check.passed).length;
   return {
@@ -181,6 +184,9 @@ function formatCheckResult(check: EvaluationCheck): string {
   return `${check.passed ? "PASS" : "FAIL"} | ${check.name} | ${check.details}`;
 }
 
+// Purpose: Select one percentile value from a sorted latency sample list.
+// Inputs: The sorted latency values and the percentile fraction to sample.
+// Returns/Effects: Returns the requested percentile rounded to two decimal places.
 function percentile(sortedValues: number[], fraction: number): number {
   if (sortedValues.length === 0) {
     throw new Error("Latency distribution requires at least one sample.");
@@ -189,6 +195,9 @@ function percentile(sortedValues: number[], fraction: number): number {
   return Number(sortedValues[position].toFixed(2));
 }
 
+// Purpose: Build p50, p95, p99, and max latency metrics from raw samples.
+// Inputs: The latency samples collected for one benchmark dimension.
+// Returns/Effects: Returns the aggregated latency distribution summary.
 function buildLatencyDistribution(samples: number[]): LatencyDistribution {
   if (samples.length === 0) {
     throw new Error("Latency distribution requires at least one sample.");
@@ -203,6 +212,9 @@ function buildLatencyDistribution(samples: number[]): LatencyDistribution {
   };
 }
 
+// Purpose: Build deterministic synthetic vectors for the clustering benchmark.
+// Inputs: The total vector count and optional number of semantic groups.
+// Returns/Effects: Returns benchmark vectors with lightly perturbed group structure.
 function buildClusterBenchmarkVectors(vectorCount: number, groupCount: number = 8): number[][] {
   return Array.from({ length: vectorCount }, (_, index) => {
     const group = index % groupCount;
@@ -214,12 +226,18 @@ function buildClusterBenchmarkVectors(vectorCount: number, groupCount: number = 
   });
 }
 
+// Purpose: Measure the wall-clock duration of one asynchronous benchmark operation.
+// Inputs: The asynchronous operation to run and time.
+// Returns/Effects: Returns the operation result together with its duration in milliseconds.
 async function timeOperation<T>(operation: () => Promise<T>): Promise<{ durationMs: number; value: T }> {
   const started = performance.now();
   const value = await operation();
   return { durationMs: Number((performance.now() - started).toFixed(2)), value };
 }
 
+// Purpose: Run one clustering benchmark sample at the requested scale.
+// Inputs: The vector count to cluster and the maximum number of clusters.
+// Returns/Effects: Returns the clustering benchmark sample with duration and cluster count.
 async function runClusteringBenchmark(vectorCount: number, maxClusters: number): Promise<ClusteringBenchmarkSample> {
   const vectors = buildClusterBenchmarkVectors(vectorCount);
   const timed = await timeOperation(async () => clusterVectors(vectors, maxClusters));
@@ -230,6 +248,9 @@ async function runClusteringBenchmark(vectorCount: number, maxClusters: number):
   };
 }
 
+// Purpose: Infer a coarse language label from a repository file path.
+// Inputs: The repository-relative file path to classify.
+// Returns/Effects: Returns the normalized language label used in scenario summaries.
 function estimateLanguage(filePath: string): string {
   const extension = extname(filePath).toLowerCase();
   if (extension === ".ts" || extension === ".tsx" || extension === ".js" || extension === ".jsx") return "typescript";
@@ -246,6 +267,9 @@ function buildFile(prefix: string, description: string, feature: string, body: s
 
 const REPO_WRITE_BATCH_SIZE = 64;
 
+// Purpose: Write a batch of repository fixture files for one evaluation scenario.
+// Inputs: The root directory to populate and the relative-path to content map.
+// Returns/Effects: Creates parent directories as needed and writes all requested files.
 async function writeRepoFiles(rootDir: string, files: Record<string, string>): Promise<void> {
   const entries = Object.entries(files);
   for (let index = 0; index < entries.length; index += REPO_WRITE_BATCH_SIZE) {
@@ -260,6 +284,9 @@ async function writeRepoFiles(rootDir: string, files: Record<string, string>): P
   }
 }
 
+// Purpose: Populate the small smoke-test repository fixture for evaluation.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the minimal multi-file smoke benchmark repository.
 async function writeSmallSmokeRepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, {
     "src/auth/jwt.ts": buildFile("//", "JWT verification helpers for the smoke benchmark", "Authentication", [
@@ -300,6 +327,9 @@ async function writeSmallSmokeRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Populate the medium-sized TypeScript repository fixture for evaluation.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the medium benchmark repository with multiple feature areas.
 async function writeMediumRepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, {
     "src/auth/jwt.ts": buildFile("//", "Auth token verification for the medium benchmark", "Authentication", [
@@ -354,6 +384,9 @@ async function writeMediumRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Populate the large monorepo fixture used by the evaluation suite.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the synthetic multi-app monorepo benchmark repository.
 async function writeLargeMonorepo(rootDir: string): Promise<void> {
   const files: Record<string, string> = {
     "apps/web/src/auth/login.ts": buildFile("//", "Web login flow for the monorepo benchmark", "Authentication", [
@@ -444,6 +477,9 @@ async function writeLargeMonorepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, files);
 }
 
+// Purpose: Populate the polyglot repository fixture used by the evaluation suite.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the mixed-language benchmark repository.
 async function writePolyglotRepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, {
     "src/web/auth.ts": buildFile("//", "TypeScript auth facade for the polyglot benchmark", "Authentication", [
@@ -477,6 +513,9 @@ async function writePolyglotRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Populate the ignored-generated repository fixture for evaluation.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes a repo with generated files that should remain ignored.
 async function writeIgnoredGeneratedRepo(rootDir: string): Promise<void> {
   const generatedNoise = Array.from({ length: 200 }, (_, index) => `export const GENERATED_${index} = "generated-${index}";`).join("\n");
   await writeRepoFiles(rootDir, {
@@ -505,6 +544,9 @@ async function writeIgnoredGeneratedRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Populate the broken-state repository fixture before corrupting prepared artifacts.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the baseline repository used for broken-state validation checks.
 async function writeBrokenBaseRepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, {
     "src/auth/login.ts": buildFile("//", "Auth login flow for broken-state benchmark", "Authentication", [
@@ -522,6 +564,9 @@ async function writeBrokenBaseRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Populate the rename-freshness repository fixture before mutation tests.
+// Inputs: The scenario root directory to populate.
+// Returns/Effects: Writes the baseline repository used for freshness and restore checks.
 async function writeRenameFreshnessRepo(rootDir: string): Promise<void> {
   await writeRepoFiles(rootDir, {
     "src/billing/invoice.ts": buildFile("//", "Invoice helpers for freshness benchmark", "Billing", [
@@ -539,6 +584,9 @@ async function writeRenameFreshnessRepo(rootDir: string): Promise<void> {
   });
 }
 
+// Purpose: Index one scenario repository and capture its validation summary.
+// Inputs: The scenario root, scenario name and kind, and optional notes.
+// Returns/Effects: Runs indexing, validates the prepared index, and returns the scenario summary.
 async function indexScenario(
   rootDir: string,
   name: ScenarioSummary["name"],
@@ -574,6 +622,9 @@ function hasExpectedExactSymbol(hits: ExactSymbolHit[], expectedPath: string, ex
   return hits.find((hit) => hit.path === expectedPath && (expectedTitle === undefined || hit.name === expectedTitle));
 }
 
+// Purpose: Evaluate exact-query goldens against the prepared exact search substrate.
+// Inputs: The exact-query goldens to run and a latency sample array to append to.
+// Returns/Effects: Returns the aggregated evaluation category for exact lookups.
 async function evaluateExactGoldens(goldens: ExactGolden[], latencySamples: number[]): Promise<EvaluationCategory> {
   const checks: EvaluationCheck[] = [];
   for (const golden of goldens) {
@@ -602,6 +653,9 @@ async function evaluateExactGoldens(goldens: ExactGolden[], latencySamples: numb
   return summarizeChecks(checks);
 }
 
+// Purpose: Evaluate related-search goldens against the prepared related search substrate.
+// Inputs: The related-search goldens to run and a latency sample array to append to.
+// Returns/Effects: Returns the aggregated evaluation category for related searches.
 async function evaluateRelatedGoldens(goldens: RelatedGolden[], latencySamples: number[]): Promise<EvaluationCategory> {
   const checks: EvaluationCheck[] = [];
   for (const golden of goldens) {
@@ -628,6 +682,9 @@ async function evaluateRelatedGoldens(goldens: RelatedGolden[], latencySamples: 
   return summarizeChecks(checks);
 }
 
+// Purpose: Evaluate dependency graph goldens against the exact dependency substrate.
+// Inputs: The dependency goldens to validate.
+// Returns/Effects: Returns the aggregated evaluation category for dependency checks.
 async function evaluateDependencyGoldens(goldens: DependencyGolden[]): Promise<EvaluationCategory> {
   const checks: EvaluationCheck[] = [];
   for (const golden of goldens) {
@@ -651,6 +708,9 @@ function formatDependencySummary(info: DependencyInfo): string {
   return `direct=${info.directDependencies.join(", ") || "none"} | reverse=${info.reverseDependencies.join(", ") || "none"}`;
 }
 
+// Purpose: Evaluate feature hub goldens against manual and suggested hub outputs.
+// Inputs: The hub goldens to validate.
+// Returns/Effects: Returns the aggregated evaluation category for hub quality checks.
 async function evaluateHubGoldens(goldens: HubGolden[]): Promise<EvaluationCategory> {
   const checks: EvaluationCheck[] = [];
   for (const golden of goldens) {
@@ -669,6 +729,9 @@ async function evaluateHubGoldens(goldens: HubGolden[]): Promise<EvaluationCateg
   return summarizeChecks(checks);
 }
 
+// Purpose: Evaluate research-report goldens against the broad research substrate.
+// Inputs: The research goldens to run and a latency sample array to append to.
+// Returns/Effects: Returns the aggregated evaluation category for research quality.
 async function evaluateResearchGoldens(goldens: ResearchGolden[], latencySamples: number[]): Promise<EvaluationCategory> {
   const checks: EvaluationCheck[] = [];
   for (const golden of goldens) {
@@ -696,6 +759,9 @@ async function evaluateResearchGoldens(goldens: ResearchGolden[], latencySamples
   return summarizeChecks(checks);
 }
 
+// Purpose: Summarize validation observations into false-positive and false-negative metrics.
+// Inputs: The validation observations collected across evaluation scenarios.
+// Returns/Effects: Returns the aggregated validation-quality summary and checks.
 function buildValidationQuality(observations: ValidationObservation[]): ValidationQuality {
   const checks: EvaluationCheck[] = [];
   let truePositives = 0;
@@ -733,6 +799,9 @@ function buildValidationQuality(observations: ValidationObservation[]): Validati
   };
 }
 
+// Purpose: Summarize freshness and restore reliability metrics for the benchmark suite.
+// Inputs: The freshness checks plus write and restore attempt counters.
+// Returns/Effects: Returns the aggregated freshness reliability summary.
 function buildFreshnessReliability(
   checks: EvaluationCheck[],
   staleAfterWriteAttempts: number,
@@ -751,6 +820,9 @@ function buildFreshnessReliability(
   };
 }
 
+// Purpose: Verify that every required benchmark scenario appears in the final report.
+// Inputs: The collected scenario summaries from the evaluation suite.
+// Returns/Effects: Returns the aggregated scenario-coverage evaluation category.
 function buildScenarioCoverage(scenarios: ScenarioSummary[]): EvaluationCategory {
   const lookup = new Map(scenarios.map((scenario) => [scenario.kind, scenario]));
   const requiredKinds: ScenarioSummary["kind"][] = [
@@ -773,6 +845,9 @@ function buildScenarioCoverage(scenarios: ScenarioSummary[]): EvaluationCategory
   return summarizeChecks(checks);
 }
 
+// Purpose: Build smoke-test checks for the smallest synthetic benchmark repository.
+// Inputs: The indexed small smoke scenario result.
+// Returns/Effects: Returns the aggregated smoke-test evaluation category.
 function buildSmokeChecks(smoke: ScenarioIndexResult): EvaluationCategory {
   const checks = [
     buildCheck("small smoke repo validates", smoke.validation.ok, `issues=${smoke.validation.issues.length}`),
@@ -782,6 +857,9 @@ function buildSmokeChecks(smoke: ScenarioIndexResult): EvaluationCategory {
   return summarizeChecks(checks);
 }
 
+// Purpose: Build the broken-state benchmark scenario by invalidating a required artifact.
+// Inputs: The scenario root directory to populate and mutate.
+// Returns/Effects: Returns the broken-state summary, validation observations, and failure checks.
 async function buildBrokenScenario(rootDir: string): Promise<{
   summary: ScenarioSummary;
   validation: IndexValidationReport;
@@ -824,6 +902,9 @@ async function buildBrokenScenario(rootDir: string): Promise<{
   };
 }
 
+// Purpose: Run the rename-and-restore freshness benchmark scenario end to end.
+// Inputs: The scenario root directory to populate and mutate.
+// Returns/Effects: Returns the freshness summary, validation observations, and reliability metrics.
 async function runRenameFreshnessScenario(rootDir: string): Promise<{
   summary: ScenarioSummary;
   validation: IndexValidationReport;
@@ -1036,6 +1117,9 @@ async function runRenameFreshnessScenario(rootDir: string): Promise<{
   };
 }
 
+// Purpose: Decide whether every evaluation category and reliability metric passed.
+// Inputs: The full evaluation report to inspect.
+// Returns/Effects: Returns whether the report satisfies every suite success condition.
 function buildReportOk(report: EvaluationReport): boolean {
   return report.scenarioCoverage.passed === report.scenarioCoverage.total
     && report.smokeTest.passed === report.smokeTest.total
@@ -1051,6 +1135,9 @@ function buildReportOk(report: EvaluationReport): boolean {
     && report.validationQuality.falseNegativeRate === 0;
 }
 
+// Purpose: Run the full real benchmark harness and assemble the final evaluation report.
+// Inputs: No direct inputs beyond the current workspace and benchmark fixture generators.
+// Returns/Effects: Creates benchmark repos, evaluates them, and returns the aggregated report.
 export async function runEvaluationSuite(): Promise<EvaluationReport> {
   const roots: string[] = [];
   const exactLatencySamples: number[] = [];
@@ -1387,6 +1474,9 @@ export async function runEvaluationSuite(): Promise<EvaluationReport> {
   }
 }
 
+// Purpose: Format one evaluation category and its checks into the report output buffer.
+// Inputs: The mutable output line buffer, category title, and category summary.
+// Returns/Effects: Appends the formatted category lines to the provided output buffer.
 function formatCategory(lines: string[], title: string, category: EvaluationCategory): void {
   lines.push(`${title}: ${category.passed}/${category.total}`);
   for (const check of category.checks) {
@@ -1399,6 +1489,9 @@ function formatLatencyDistribution(label: string, distribution: LatencyDistribut
   return `${label}: samples=${distribution.sampleCount} | p50=${distribution.p50Ms.toFixed(2)}ms | p95=${distribution.p95Ms.toFixed(2)}ms | p99=${distribution.p99Ms.toFixed(2)}ms | max=${distribution.maxMs.toFixed(2)}ms`;
 }
 
+// Purpose: Format the full evaluation report for terminal display.
+// Inputs: The aggregated evaluation report to render.
+// Returns/Effects: Returns the human-readable report string.
 export function formatEvaluationReport(report: EvaluationReport): string {
   const lines = [
     `Evaluation suite: ${report.suite}`,

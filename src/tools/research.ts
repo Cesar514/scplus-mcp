@@ -79,6 +79,9 @@ export interface ResearchReport {
   semanticSummary: ResearchSemanticSummary;
 }
 
+// Purpose: Split free-form research queries into normalized search terms.
+// Inputs: Arbitrary query text that may contain mixed case and punctuation.
+// Returns/Effects: Returns lowercase tokens longer than one character.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -88,6 +91,9 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Clamp a numeric score into the inclusive `[0, 1]` range.
+// Inputs: Any numeric value produced by report scoring heuristics.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
   if (value >= 1) return 1;
@@ -99,6 +105,9 @@ function normalizeTopK(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.floor(value));
 }
 
+// Purpose: Measure how much of the query vocabulary appears in a candidate text block.
+// Inputs: Query terms and the text to score for lexical coverage.
+// Returns/Effects: Returns the coverage ratio and the matched terms.
 function computeCoverageScore(queryTerms: string[], text: string): { score: number; matchedTerms: string[] } {
   const lower = text.toLowerCase();
   const uniqueTerms = Array.from(new Set(queryTerms));
@@ -110,6 +119,9 @@ function computeCoverageScore(queryTerms: string[], text: string): { score: numb
   };
 }
 
+// Purpose: Collect secondary related-file hits from explanation cards for the top code results.
+// Inputs: Ranked code hits, persisted explanation state, and the maximum related hit count.
+// Returns/Effects: Returns deduplicated related-file hits sorted by descending score.
 function collectRelatedHits(
   codeHits: UnifiedRankedHit[],
   explanationState: PersistedQueryExplanationState,
@@ -138,6 +150,9 @@ function collectRelatedHits(
     .slice(0, maxRelated);
 }
 
+// Purpose: Collect file explanation cards that correspond to the ranked code hits.
+// Inputs: Ranked code hits and the persisted query explanation state.
+// Returns/Effects: Returns file-card hits with stable deduplication by file path.
 function collectFileCardHits(codeHits: UnifiedRankedHit[], explanationState: PersistedQueryExplanationState): ResearchFileCardHit[] {
   const seen = new Set<string>();
   const hits: ResearchFileCardHit[] = [];
@@ -155,6 +170,9 @@ function collectFileCardHits(codeHits: UnifiedRankedHit[], explanationState: Per
   return hits;
 }
 
+// Purpose: Promote matched file-card hits into scored module-card hits.
+// Inputs: File-card hits and the persisted query explanation state.
+// Returns/Effects: Returns module-card hits sorted by descending module score.
 function collectModuleCardHits(
   fileCards: ResearchFileCardHit[],
   explanationState: PersistedQueryExplanationState,
@@ -173,6 +191,9 @@ function collectModuleCardHits(
     .sort((left, right) => right.score - left.score || left.modulePath.localeCompare(right.modulePath));
 }
 
+// Purpose: Score one subsystem explanation card against the current research query and top files.
+// Inputs: Query terms, the top matched file paths, and one subsystem explanation card.
+// Returns/Effects: Returns a scored subsystem hit or null when the card has no signal.
 function scoreSubsystem(
   queryTerms: string[],
   topPaths: Set<string>,
@@ -196,6 +217,9 @@ function scoreSubsystem(
   return { card, score };
 }
 
+// Purpose: Score one hub explanation card against the current research query and top files.
+// Inputs: Query terms, the top matched file paths, and one hub explanation card.
+// Returns/Effects: Returns a scored hub hit or null when the card has no signal.
 function scoreHub(
   queryTerms: string[],
   topPaths: Set<string>,
@@ -219,6 +243,9 @@ function scoreHub(
   return { card, score };
 }
 
+// Purpose: Dedupe hub hits so the same hub path appears only once with its best score.
+// Inputs: Ranked hub hits that may contain duplicates for the same hub identity.
+// Returns/Effects: Returns the highest-scoring hit per hub key.
 function dedupeHubHits(hits: ResearchHubHit[]): ResearchHubHit[] {
   const deduped = new Map<string, ResearchHubHit>();
   for (const hit of hits) {
@@ -235,6 +262,9 @@ interface ResearchSemanticSummaryResponse {
   recommendedFiles: string[];
 }
 
+// Purpose: Describe the JSON schema expected from the research-summary chat response.
+// Inputs: No arguments beyond the fixed response contract for research summaries.
+// Returns/Effects: Returns a JSON-schema object for structured chat validation.
 function buildResearchSemanticSummarySchema(): object {
   return {
     type: "object",
@@ -254,6 +284,9 @@ function buildResearchSemanticSummarySchema(): object {
   };
 }
 
+// Purpose: Build a deterministic fallback research summary for mock provider usage.
+// Inputs: The partially assembled research report without the semantic summary field.
+// Returns/Effects: Returns a grounded summary derived from the ranked report evidence.
 function buildMockResearchSemanticSummary(report: Omit<ResearchReport, "semanticSummary">): ResearchSemanticSummary {
   const leadPaths = Array.from(new Set(report.codeHits.slice(0, 3).map((hit) => hit.path)));
   const subsystemLabel = report.subsystemHits.find((hit) => hit.card.label !== "Project")?.card.label ?? report.subsystemHits[0]?.card.label;
@@ -273,6 +306,9 @@ function buildMockResearchSemanticSummary(report: Omit<ResearchReport, "semantic
   };
 }
 
+// Purpose: Validate and normalize the structured research-summary chat response payload.
+// Inputs: The raw structured response object returned by the chat provider.
+// Returns/Effects: Returns a normalized semantic summary or throws on missing answer text.
 function normalizeResearchSemanticSummary(value: ResearchSemanticSummaryResponse): ResearchSemanticSummary {
   const answer = value.answer?.trim();
   if (!answer) throw new Error("Research chat summary is missing answer.");
@@ -289,6 +325,9 @@ function normalizeResearchSemanticSummary(value: ResearchSemanticSummaryResponse
   };
 }
 
+// Purpose: Ask the chat model to synthesize a grounded semantic research summary.
+// Inputs: The partially assembled research report without the semantic summary field.
+// Returns/Effects: Returns a normalized semantic summary grounded in ranked evidence.
 async function buildSemanticResearchSummary(report: Omit<ResearchReport, "semanticSummary">): Promise<ResearchSemanticSummary> {
   const response = await generateStructuredChat<ResearchSemanticSummaryResponse>({
     system: [
@@ -345,6 +384,9 @@ async function buildSemanticResearchSummary(report: Omit<ResearchReport, "semant
   return normalizeResearchSemanticSummary(response);
 }
 
+// Purpose: Build the complete layered research report from ranked search and explanation artifacts.
+// Inputs: Research options describing the repo root, query, and result limits.
+// Returns/Effects: Returns the full research report with semantic summary and supporting context.
 export async function buildResearchReport(options: ResearchOptions): Promise<ResearchReport> {
   await assertValidPreparedIndex({
     rootDir: options.rootDir,
@@ -402,6 +444,9 @@ export async function buildResearchReport(options: ResearchOptions): Promise<Res
   };
 }
 
+// Purpose: Format a structured research report into the user-facing markdown-like text output.
+// Inputs: The fully assembled research report with semantic summary and supporting evidence.
+// Returns/Effects: Returns a printable research report string.
 export function formatResearchReport(report: ResearchReport): string {
   const lines = [
     `Research: "${report.query}"`,

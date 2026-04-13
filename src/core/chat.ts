@@ -35,6 +35,9 @@ export function cancelAllChats(): void {
   chatAbortController = new AbortController();
 }
 
+// Purpose: Lazily create and cache the Ollama client for chat generation.
+// Inputs: No direct arguments; reads host configuration from environment variables.
+// Returns/Effects: Returns the singleton Ollama generate client instance.
 async function getOllamaClient(): Promise<OllamaGenerateClient> {
   if (!ollamaClient) {
     const { Ollama } = await import("ollama");
@@ -43,6 +46,9 @@ async function getOllamaClient(): Promise<OllamaGenerateClient> {
   return ollamaClient;
 }
 
+// Purpose: Extract the JSON payload from model output that may include wrappers.
+// Inputs: Raw chat provider text that may contain fences or explanatory text.
+// Returns/Effects: Returns the trimmed JSON substring or throws when no JSON exists.
 function extractJsonPayload(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) throw new Error("Chat model returned an empty response.");
@@ -82,12 +88,18 @@ function isJsonParseFailure(error: unknown): boolean {
   return error instanceof SyntaxError || formatChatError(error).includes("JSON");
 }
 
+// Purpose: Parse the byte offset reported by a JSON parse error.
+// Inputs: An unknown thrown error from a JSON parsing attempt.
+// Returns/Effects: Returns the numeric position when present or null otherwise.
 function parseErrorPosition(error: unknown): number | null {
   const match = formatChatError(error).match(/position (\d+)/);
   if (!match) return null;
   return Number.parseInt(match[1] ?? "", 10);
 }
 
+// Purpose: Repair invalid JSON by inserting a missing comma at the parse failure point.
+// Inputs: The invalid payload and the parse error that describes the failure location.
+// Returns/Effects: Returns a repaired payload candidate or null when the heuristic does not apply.
 function repairMissingCommaPayload(payload: string, error: unknown): string | null {
   const position = parseErrorPosition(error);
   if (position === null || position < 0 || position > payload.length) return null;
@@ -96,6 +108,9 @@ function repairMissingCommaPayload(payload: string, error: unknown): string | nu
   return `${payload.slice(0, position)},${payload.slice(position)}`;
 }
 
+// Purpose: Repair truncated JSON by closing unterminated strings and containers.
+// Inputs: The invalid payload and the parse error from the failed parse attempt.
+// Returns/Effects: Returns a repaired payload candidate or null when truncation is not detected.
 function repairTruncatedPayload(payload: string, error: unknown): string | null {
   if (!formatChatError(error).includes("Unexpected end of JSON input")) return null;
   let repaired = payload.trimEnd();
@@ -138,6 +153,9 @@ function repairTruncatedPayload(payload: string, error: unknown): string | null 
   return repaired === payload ? null : repaired;
 }
 
+// Purpose: Parse structured JSON while retrying local repair heuristics first.
+// Inputs: Raw provider output that should contain a JSON object or array payload.
+// Returns/Effects: Returns parsed structured data or throws the final parse failure.
 function parseStructuredResponseWithRepair<T>(raw: string): T {
   let payload = extractJsonPayload(raw);
   let lastError: unknown = null;
@@ -155,6 +173,9 @@ function parseStructuredResponseWithRepair<T>(raw: string): T {
   throw lastError instanceof Error ? lastError : new Error("Chat model returned invalid JSON after local repair attempts.");
 }
 
+// Purpose: Ask the model to repair an invalid JSON response when local repair fails.
+// Inputs: The original options, invalid raw output, parse error, and request callback.
+// Returns/Effects: Returns repaired structured data or throws with diagnostic previews.
 async function repairStructuredResponse<T>(
   options: StructuredChatOptions<T>,
   raw: string,
@@ -189,6 +210,9 @@ async function repairStructuredResponse<T>(
   }
 }
 
+// Purpose: Request structured JSON output from the configured Ollama model.
+// Inputs: Chat request options and the abort signal for cancellation.
+// Returns/Effects: Returns the raw text response from Ollama's generate API.
 async function callOllamaJson(options: StructuredChatOptions<unknown>, signal: AbortSignal): Promise<string> {
   const client = await getOllamaClient();
   const response = await client.generate({
@@ -206,6 +230,9 @@ async function callOllamaJson(options: StructuredChatOptions<unknown>, signal: A
   return response.response;
 }
 
+// Purpose: Request structured JSON output from the OpenAI chat completions API.
+// Inputs: Chat request options and the abort signal for cancellation.
+// Returns/Effects: Returns the raw assistant content or throws on API failure.
 async function callOpenAIJson(options: StructuredChatOptions<unknown>, signal: AbortSignal): Promise<string> {
   if (!OPENAI_API_KEY) throw new Error("SCPLUS_OPENAI_API_KEY or OPENAI_API_KEY is required for OpenAI chat generation.");
   const response = await fetch(`${OPENAI_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
@@ -245,6 +272,9 @@ async function callOpenAIJson(options: StructuredChatOptions<unknown>, signal: A
   throw new Error("OpenAI chat API returned no message content.");
 }
 
+// Purpose: Generate structured chat output with provider retries and JSON repair.
+// Inputs: Prompt, system instructions, schema hints, and a mock generator for tests.
+// Returns/Effects: Returns parsed structured output or throws the final provider error.
 export async function generateStructuredChat<T>(options: StructuredChatOptions<T>): Promise<T> {
   if (CHAT_PROVIDER === "mock") {
     return options.mock();

@@ -55,8 +55,19 @@ export interface IndexProgressPersistenceControllerOptions {
   minIntervalMs?: number;
 }
 
+interface IndexProgressPersistenceState {
+  lastPersistedAt: number;
+  lastPersistedPhase: string;
+  minIntervalMs: number;
+  now: () => number;
+  persist: () => Promise<void> | void;
+}
+
 const DEFAULT_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 
+// Purpose: Start recording phase timings for one indexing stage execution.
+// Inputs: The stage start timestamp in milliseconds.
+// Returns/Effects: Returns a fresh mutable recorder for phase timing aggregation.
 function createStageTimingRecorder(startedAtMs: number): StageTimingRecorder {
   return {
     phaseDurationsMs: {},
@@ -64,6 +75,9 @@ function createStageTimingRecorder(startedAtMs: number): StageTimingRecorder {
   };
 }
 
+// Purpose: Advance the active phase in a stage timing recorder and accumulate elapsed time.
+// Inputs: The mutable recorder, next phase name, and optional current timestamp.
+// Returns/Effects: Updates the recorder's per-phase durations in place.
 function noteStagePhase(recorder: StageTimingRecorder, phase: IndexCodebaseProgressEvent["phase"], nowMs: number = Date.now()): void {
   if (recorder.currentPhase === phase) return;
   if (recorder.currentPhase && recorder.phaseStartedAtMs !== undefined) {
@@ -73,6 +87,9 @@ function noteStagePhase(recorder: StageTimingRecorder, phase: IndexCodebaseProgr
   recorder.phaseStartedAtMs = nowMs;
 }
 
+// Purpose: Finalize one stage timing recorder into immutable duration summaries.
+// Inputs: The mutable recorder and an optional current timestamp.
+// Returns/Effects: Returns total duration and per-phase duration snapshots.
 function finalizeStageTiming(recorder: StageTimingRecorder, nowMs: number = Date.now()): {
   durationMs: number;
   phaseDurationsMs: Partial<Record<IndexCodebaseProgressEvent["phase"], number>>;
@@ -92,6 +109,9 @@ function ratePerSecond(count: number | undefined, durationMs: number | undefined
   return Number(((count / durationMs) * 1000).toFixed(2));
 }
 
+// Purpose: Convert stage timing and index status into persisted observability counters.
+// Inputs: The stage name, finalized timing snapshot, and current index status object.
+// Returns/Effects: Returns the observability payload for the selected stage.
 function buildStageObservabilityStatus(
   stage: "bootstrap" | "file-search" | "identifier-search" | "full-artifacts",
   timing: ReturnType<typeof finalizeStageTiming>,
@@ -140,28 +160,42 @@ function buildStageObservabilityStatus(
   };
 }
 
+// Purpose: Ensure the mutable observability section exists on the current index status.
+// Inputs: The current index status object being updated during an index run.
+// Returns/Effects: Returns the existing or newly attached observability object.
 function ensureObservabilityStatus(status: IndexStatus): IndexObservabilityStatus {
   const existing = status.observability ?? { stages: {} };
   status.observability = existing;
   return existing;
 }
 
+// Purpose: Persist one index-progress update when its phase changes or the throttle interval has elapsed.
+// Inputs: The mutable persistence state plus the current progress phase name.
+// Returns/Effects: Persists status as needed, updates throttle state, and returns whether a write occurred.
+async function persistIndexProgress(state: IndexProgressPersistenceState, phase: string): Promise<boolean> {
+  const persistedAt = state.now();
+  if (phase === state.lastPersistedPhase && persistedAt - state.lastPersistedAt < state.minIntervalMs) return false;
+  await state.persist();
+  state.lastPersistedAt = persistedAt;
+  state.lastPersistedPhase = phase;
+  return true;
+}
+
+// Purpose: Create a throttled controller that persists index-progress updates at a bounded cadence.
+// Inputs: Persistence callback plus optional clock and minimum-interval overrides.
+// Returns/Effects: Returns a controller with an async `persist` method for progress throttling.
 export function createIndexProgressPersistenceController(options: IndexProgressPersistenceControllerOptions): {
   persist(phase: string): Promise<boolean>;
 } {
-  const now = options.now ?? Date.now;
-  const minIntervalMs = options.minIntervalMs ?? DEFAULT_PROGRESS_PERSIST_INTERVAL_MS;
-  let lastPersistedAt = Number.NEGATIVE_INFINITY;
-  let lastPersistedPhase = "";
+  const state: IndexProgressPersistenceState = {
+    lastPersistedAt: Number.NEGATIVE_INFINITY,
+    lastPersistedPhase: "",
+    minIntervalMs: options.minIntervalMs ?? DEFAULT_PROGRESS_PERSIST_INTERVAL_MS,
+    now: options.now ?? Date.now,
+    persist: options.persist,
+  };
   return {
-    async persist(phase: string): Promise<boolean> {
-      const persistedAt = now();
-      if (phase === lastPersistedPhase && persistedAt - lastPersistedAt < minIntervalMs) return false;
-      await options.persist();
-      lastPersistedAt = persistedAt;
-      lastPersistedPhase = phase;
-      return true;
-    },
+    persist: persistIndexProgress.bind(null, state),
   };
 }
 
@@ -169,12 +203,18 @@ function formatProgressPrefix(startedAtMs: number): string {
   return `[${((Date.now() - startedAtMs) / 1000).toFixed(1)}s]`;
 }
 
+// Purpose: Convert processed and total counts into a bounded percentage when possible.
+// Inputs: Optional processed and total item counts for the current progress event.
+// Returns/Effects: Returns a percentage between 0 and 100 or undefined when progress is unknown.
 function calculatePercentComplete(processedItems: number | undefined, totalItems: number | undefined): number | undefined {
   if (processedItems === undefined || totalItems === undefined || totalItems <= 0) return undefined;
   const raw = Math.round((processedItems / totalItems) * 100);
   return Math.max(0, Math.min(100, raw));
 }
 
+// Purpose: Format file-search progress into one concise status line.
+// Inputs: The current file-search progress payload.
+// Returns/Effects: Returns a human-readable progress string.
 function formatFileProgress(progress: FileSearchIndexProgress): string {
   return [
     progress.phase,
@@ -185,6 +225,9 @@ function formatFileProgress(progress: FileSearchIndexProgress): string {
   ].join(" | ");
 }
 
+// Purpose: Format identifier-search progress into one concise status line.
+// Inputs: The current identifier-search progress payload.
+// Returns/Effects: Returns a human-readable progress string.
 function formatIdentifierProgress(progress: IdentifierIndexProgress): string {
   return [
     progress.phase,
@@ -195,6 +238,9 @@ function formatIdentifierProgress(progress: IdentifierIndexProgress): string {
   ].join(" | ");
 }
 
+// Purpose: Format full-index artifact progress into one concise status line.
+// Inputs: The current full-index progress payload.
+// Returns/Effects: Returns a human-readable progress string.
 function formatFullProgress(progress: FullIndexProgress): string {
   const unit = progress.phase === "chunk-embeddings"
     ? "chunks"
@@ -223,6 +269,9 @@ interface StageExecutionContext {
   appendProgress: (message: string, progress?: Partial<Pick<IndexCodebaseProgressEvent, "processedItems" | "totalItems" | "currentFile">>) => void;
 }
 
+// Purpose: Execute the bootstrap stage and persist its observability summary.
+// Inputs: Stage execution context with runtime, status, and persistence callbacks.
+// Returns/Effects: Runs bootstrap artifacts and updates persisted bootstrap observability.
 async function runBootstrapStage(ctx: StageExecutionContext): Promise<void> {
   const { runtime, status, stageState, persistStatusImmediately, appendProgress } = ctx;
   const bootstrapTiming = createStageTimingRecorder(Date.now());
@@ -245,6 +294,9 @@ async function runBootstrapStage(ctx: StageExecutionContext): Promise<void> {
   await persistStatusImmediately();
 }
 
+// Purpose: Execute the file-search stage and persist its observability summary.
+// Inputs: Stage execution context with runtime, status, and persistence callbacks.
+// Returns/Effects: Runs file-search indexing and updates persisted file-search observability.
 async function runFileSearchStage(ctx: StageExecutionContext): Promise<void> {
   const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
   const fileSearchTiming = createStageTimingRecorder(Date.now());
@@ -286,6 +338,9 @@ async function runFileSearchStage(ctx: StageExecutionContext): Promise<void> {
   await persistStatusImmediately();
 }
 
+// Purpose: Execute the identifier-search stage and persist its observability summary.
+// Inputs: Stage execution context with runtime, status, and persistence callbacks.
+// Returns/Effects: Runs identifier indexing and updates persisted identifier observability.
 async function runIdentifierSearchStage(ctx: StageExecutionContext): Promise<void> {
   const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
   const identifierTiming = createStageTimingRecorder(Date.now());
@@ -326,6 +381,9 @@ async function runIdentifierSearchStage(ctx: StageExecutionContext): Promise<voi
   status.observability!.stages["identifier-search"] = buildStageObservabilityStatus("identifier-search", finalizeStageTiming(identifierTiming), status);
 }
 
+// Purpose: Execute the full-artifacts stage and persist its observability summary.
+// Inputs: Stage execution context with runtime, status, and persistence callbacks.
+// Returns/Effects: Runs full artifact generation and updates persisted observability.
 async function runFullArtifactsStage(ctx: StageExecutionContext): Promise<void> {
   const { runtime, status, stageState, persistStatusImmediately, progressPersistence, appendProgress } = ctx;
   const fullArtifactsTiming = createStageTimingRecorder(Date.now());
@@ -393,6 +451,9 @@ async function runFullArtifactsStage(ctx: StageExecutionContext): Promise<void> 
   status.observability!.stages["full-artifacts"] = buildStageObservabilityStatus("full-artifacts", finalizeStageTiming(fullArtifactsTiming), status);
 }
 
+// Purpose: Run the full durable indexing pipeline for one repository root.
+// Inputs: Indexing options describing the repo root, mode, progress callback, and lock behavior.
+// Returns/Effects: Persists fresh index artifacts and returns a human-readable summary report.
 export async function indexCodebase(options: IndexCodebaseOptions): Promise<string> {
   const rootDir = options.rootDir;
   const mode = options.mode ?? DEFAULT_INDEX_MODE;

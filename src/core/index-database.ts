@@ -100,6 +100,9 @@ export interface IndexDatabaseInspection {
   vectorNamespaces: string[];
 }
 
+// Purpose: Resolve the generation-qualified vector namespace for one database operation.
+// Inputs: The open index database, logical namespace, and optional artifact options.
+// Returns/Effects: Returns the stored namespace qualified for the selected generation.
 function resolveStoredVectorNamespace(
   db: DatabaseSync,
   namespace: string,
@@ -110,6 +113,9 @@ function resolveStoredVectorNamespace(
   return qualifyVectorNamespace(namespace, options?.generation ?? context?.readGeneration ?? serving.activeGeneration);
 }
 
+// Purpose: Resolve which artifact generation should be used for one read or write operation.
+// Inputs: The artifact key, optional artifact options, active generation, and operation mode.
+// Returns/Effects: Returns the selected generation number or null for global artifacts.
 function resolveArtifactGeneration(
   artifactKey: IndexArtifactKey,
   options: IndexArtifactOptions | undefined,
@@ -132,6 +138,9 @@ function qualifyVectorNamespace(namespace: string, generation: number): string {
   return `${GENERATION_KEY_PREFIX}${generation}:${namespace}`;
 }
 
+// Purpose: Decode a stored artifact key back into its logical key and generation.
+// Inputs: The raw stored artifact key from sqlite.
+// Returns/Effects: Returns the decoded generation and logical artifact key.
 function decodeStoredArtifactKey(storedKey: string): { generation: number | null; artifactKey: string } {
   if (storedKey.startsWith(GENERATION_KEY_PREFIX)) {
     const rest = storedKey.slice(GENERATION_KEY_PREFIX.length);
@@ -150,6 +159,9 @@ function decodeStoredArtifactKey(storedKey: string): { generation: number | null
   };
 }
 
+// Purpose: Decode a stored vector namespace back into its logical namespace and generation.
+// Inputs: The raw stored namespace from sqlite.
+// Returns/Effects: Returns the decoded generation and logical vector namespace.
 function decodeStoredVectorNamespace(storedNamespace: string): { generation: number; namespace: string } {
   if (storedNamespace.startsWith(GENERATION_KEY_PREFIX)) {
     const rest = storedNamespace.slice(GENERATION_KEY_PREFIX.length);
@@ -165,6 +177,9 @@ function decodeStoredVectorNamespace(storedNamespace: string): { generation: num
   return { generation: 0, namespace: storedNamespace };
 }
 
+// Purpose: Read the current serving-generation state from the index database metadata table.
+// Inputs: The open index database connection.
+// Returns/Effects: Returns the current active, pending, and freshness serving state.
 function readServingStateFromDb(db: DatabaseSync): IndexServingState {
   const rows = db.prepare(`
     SELECT meta_key, meta_value
@@ -195,6 +210,9 @@ function readServingStateFromDb(db: DatabaseSync): IndexServingState {
   };
 }
 
+// Purpose: Persist the serving-generation state into the index database metadata table.
+// Inputs: The open index database connection and the next serving state to store.
+// Returns/Effects: Updates the serving-generation metadata rows in sqlite.
 function writeServingStateToDb(db: DatabaseSync, state: IndexServingState): void {
   const statement = db.prepare(`
     INSERT INTO index_db_meta (meta_key, meta_value)
@@ -221,6 +239,9 @@ function writeServingStateToDb(db: DatabaseSync, state: IndexServingState): void
   }
 }
 
+// Purpose: Initialize the sqlite schema and required metadata for the index database.
+// Inputs: The open index database connection to initialize.
+// Returns/Effects: Creates required tables, migrates vector storage, and seeds metadata rows.
 function initializeIndexDatabase(db: DatabaseSync): void {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -270,6 +291,9 @@ function initializeIndexDatabase(db: DatabaseSync): void {
   db.prepare(`INSERT OR IGNORE INTO index_db_meta (meta_key, meta_value) VALUES (?, ?)`).run(META_ACTIVE_GENERATION_FRESHNESS, "fresh");
 }
 
+// Purpose: Open the repository index database and ensure its schema is initialized.
+// Inputs: The repository root whose durable index database should be opened.
+// Returns/Effects: Returns an initialized sqlite database connection.
 function openIndexDatabase(rootDir: string): DatabaseSync {
   const dbPath = join(resolve(rootDir), SCPLUS_INDEX_DB_FILE);
   const db = new DatabaseSync(dbPath);
@@ -282,6 +306,9 @@ export async function getIndexDatabasePath(rootDir: string): Promise<string> {
   return join(layout.state, "index.sqlite");
 }
 
+// Purpose: Load the current serving-generation state for one repository.
+// Inputs: The repository root whose index database should be inspected.
+// Returns/Effects: Returns the persisted active, pending, and freshness state.
 export async function loadIndexServingState(rootDir: string): Promise<IndexServingState> {
   await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
@@ -292,6 +319,9 @@ export async function loadIndexServingState(rootDir: string): Promise<IndexServi
   }
 }
 
+// Purpose: Reserve the next pending generation number for a new index build.
+// Inputs: The repository root whose serving state should be updated.
+// Returns/Effects: Persists and returns the reserved pending generation number.
 export async function reservePendingIndexGeneration(rootDir: string): Promise<number> {
   await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
@@ -314,6 +344,9 @@ export async function reservePendingIndexGeneration(rootDir: string): Promise<nu
   }
 }
 
+// Purpose: Promote one validated generation to become the active serving generation.
+// Inputs: The repository root, validated generation number, and validation timestamp.
+// Returns/Effects: Persists and returns the new serving state with that active generation.
 export async function activateIndexGeneration(
   rootDir: string,
   generation: number,
@@ -343,6 +376,9 @@ export async function activateIndexGeneration(
   }
 }
 
+// Purpose: Clear the pending generation marker after a build completes or fails.
+// Inputs: The repository root and optional pending generation expected to be cleared.
+// Returns/Effects: Persists and returns the serving state after clearing the pending generation.
 export async function clearPendingIndexGeneration(rootDir: string, pendingGeneration?: number): Promise<IndexServingState> {
   await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
@@ -363,6 +399,9 @@ export async function clearPendingIndexGeneration(rootDir: string, pendingGenera
   }
 }
 
+// Purpose: Update the freshness state for the active serving generation.
+// Inputs: The repository root, new freshness value, and optional blocked reason.
+// Returns/Effects: Persists and returns the updated serving state.
 export async function updateIndexServingFreshness(
   rootDir: string,
   freshness: IndexGenerationFreshness,
@@ -389,6 +428,9 @@ export async function updateIndexServingFreshness(
   }
 }
 
+// Purpose: Run an async operation with an explicit read/write generation context.
+// Inputs: The generation context to apply and the async operation to execute.
+// Returns/Effects: Runs the operation within AsyncLocalStorage and returns its result.
 export async function runWithIndexGenerationContext<T>(
   context: { readGeneration?: number; writeGeneration?: number },
   operation: () => Promise<T>,
@@ -400,6 +442,9 @@ export function getIndexGenerationContext(): { readGeneration?: number; writeGen
   return indexGenerationContext.getStore();
 }
 
+// Purpose: Save one JSON index artifact into the durable sqlite artifact store.
+// Inputs: The repository root, artifact key, JSON value, and optional generation options.
+// Returns/Effects: Persists the artifact payload under its generation-qualified key.
 export async function saveIndexArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -426,6 +471,9 @@ export async function saveIndexArtifact<T>(
   }
 }
 
+// Purpose: Load one JSON index artifact from the durable sqlite artifact store.
+// Inputs: The repository root, artifact key, empty-value factory, and optional generation options.
+// Returns/Effects: Returns the stored artifact payload or the provided empty value when absent.
 export async function loadIndexArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -461,6 +509,9 @@ export async function loadIndexArtifact<T>(
   }
 }
 
+// Purpose: Save one text index artifact into the durable sqlite text-artifact store.
+// Inputs: The repository root, artifact key, text value, and optional generation options.
+// Returns/Effects: Persists the text artifact under its generation-qualified key.
 export async function saveIndexTextArtifact(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -487,6 +538,9 @@ export async function saveIndexTextArtifact(
   }
 }
 
+// Purpose: Load one text index artifact from the durable sqlite text-artifact store.
+// Inputs: The repository root, artifact key, empty-value factory, and optional generation options.
+// Returns/Effects: Returns the stored text artifact or the provided empty value when absent.
 export async function loadIndexTextArtifact(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -512,6 +566,9 @@ export async function loadIndexTextArtifact(
   }
 }
 
+// Purpose: Persist one restore-point file backup into the durable sqlite backup store.
+// Inputs: The repository root, restore point id, file path, and backed-up file content.
+// Returns/Effects: Upserts the restore-point backup record for that file.
 export async function saveRestorePointBackup(
   rootDir: string,
   pointId: string,
@@ -533,6 +590,9 @@ export async function saveRestorePointBackup(
   }
 }
 
+// Purpose: Load one restore-point file backup from the durable sqlite backup store.
+// Inputs: The repository root, restore point id, and file path to restore.
+// Returns/Effects: Returns the stored backup content or null when it is absent.
 export async function loadRestorePointBackup(
   rootDir: string,
   pointId: string,
@@ -552,6 +612,9 @@ export async function loadRestorePointBackup(
   }
 }
 
+// Purpose: Delete restore-point backups that are no longer referenced.
+// Inputs: The repository root and the point ids that should be kept.
+// Returns/Effects: Removes backup rows for restore points outside the keep set.
 export async function pruneRestorePointBackups(
   rootDir: string,
   keepPointIds: string[],
@@ -574,6 +637,9 @@ export async function pruneRestorePointBackups(
   }
 }
 
+// Purpose: Delete every backup row associated with one restore point.
+// Inputs: The repository root and restore point id to purge.
+// Returns/Effects: Removes all restore-point backup rows for that point id.
 export async function deleteRestorePointBackups(
   rootDir: string,
   pointId: string,
@@ -590,6 +656,9 @@ export async function deleteRestorePointBackups(
   }
 }
 
+// Purpose: Delete legacy on-disk artifacts that have been replaced by sqlite storage.
+// Inputs: The legacy filesystem paths to remove.
+// Returns/Effects: Removes those files or directories in bounded concurrent batches.
 export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
   const batchSize = 32;
   for (let index = 0; index < paths.length; index += batchSize) {
@@ -600,6 +669,9 @@ export async function deleteLegacyArtifacts(paths: string[]): Promise<void> {
   }
 }
 
+// Purpose: Inspect the durable index database contents for one generation.
+// Inputs: The repository root and optional generation-selection options.
+// Returns/Effects: Returns the decoded database inspection summary for that generation.
 export async function inspectIndexDatabase(rootDir: string, options?: IndexArtifactOptions): Promise<IndexDatabaseInspection> {
   await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);
@@ -656,6 +728,9 @@ export async function inspectIndexDatabase(rootDir: string, options?: IndexArtif
   }
 }
 
+// Purpose: Delete one stored JSON or text artifact from the durable sqlite store.
+// Inputs: The repository root, artifact key, artifact kind, and optional generation options.
+// Returns/Effects: Removes the selected generation-qualified artifact row.
 export async function deleteIndexArtifact(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -680,6 +755,9 @@ export async function deleteIndexArtifact(
   }
 }
 
+// Purpose: Load every vector entry from one generation-qualified vector namespace.
+// Inputs: The repository root, logical namespace, and optional generation options.
+// Returns/Effects: Returns the decoded vector entries stored in that namespace.
 export async function loadVectorCollection<TMetadata = unknown>(
   rootDir: string,
   namespace: string,
@@ -701,6 +779,9 @@ export async function loadVectorCollection<TMetadata = unknown>(
   }
 }
 
+// Purpose: Load selected vector entries by id from one generation-qualified namespace.
+// Inputs: The repository root, logical namespace, entry ids, and optional generation options.
+// Returns/Effects: Returns the decoded vector entries found for those ids.
 export async function loadVectorEntriesById<TMetadata = unknown>(
   rootDir: string,
   namespace: string,
@@ -726,6 +807,9 @@ export async function loadVectorEntriesById<TMetadata = unknown>(
   }
 }
 
+// Purpose: Check which requested vector entry ids are present in one namespace.
+// Inputs: The repository root, logical namespace, candidate entry ids, and optional generation options.
+// Returns/Effects: Returns the subset of entry ids currently present in sqlite.
 export async function loadPresentVectorEntryIds(
   rootDir: string,
   namespace: string,
@@ -757,6 +841,9 @@ export async function loadPresentVectorEntryIds(
   }
 }
 
+// Purpose: Load one vector namespace and index it by entry id.
+// Inputs: The repository root, logical namespace, and optional generation options.
+// Returns/Effects: Returns the vector entries as a map keyed by entry id.
 export async function loadVectorCollectionMap<TMetadata = unknown>(
   rootDir: string,
   namespace: string,
@@ -766,6 +853,9 @@ export async function loadVectorCollectionMap<TMetadata = unknown>(
   return new Map(entries.map((entry) => [entry.id, entry]));
 }
 
+// Purpose: Replace the entire contents of one generation-qualified vector namespace.
+// Inputs: The repository root, logical namespace, next entries, and optional generation options.
+// Returns/Effects: Rewrites the namespace rows and updates its collection metadata.
 export async function replaceVectorCollection<TMetadata = unknown>(
   rootDir: string,
   namespace: string,
@@ -821,6 +911,9 @@ export async function replaceVectorCollection<TMetadata = unknown>(
   }
 }
 
+// Purpose: Upsert selected vector entries into one generation-qualified namespace.
+// Inputs: The repository root, logical namespace, entries to upsert, and optional generation options.
+// Returns/Effects: Inserts or updates the entries and refreshes the namespace metadata.
 export async function upsertVectorEntries<TMetadata = unknown>(
   rootDir: string,
   namespace: string,
@@ -894,6 +987,9 @@ export async function upsertVectorEntries<TMetadata = unknown>(
   }
 }
 
+// Purpose: Delete selected vector entries from one generation-qualified namespace.
+// Inputs: The repository root, logical namespace, entry ids, and optional generation options.
+// Returns/Effects: Removes the selected entries and refreshes the namespace metadata.
 export async function deleteVectorEntries(rootDir: string, namespace: string, entryIds: string[], options?: IndexArtifactOptions): Promise<void> {
   await ensureScplusLayout(resolve(rootDir));
   if (entryIds.length === 0) return;
@@ -927,6 +1023,9 @@ export async function deleteVectorEntries(rootDir: string, namespace: string, en
   }
 }
 
+// Purpose: Delete an entire generation-qualified vector namespace and its entries.
+// Inputs: The repository root, logical namespace, and optional generation options.
+// Returns/Effects: Removes the namespace metadata row and all contained vector entries.
 export async function deleteVectorCollection(rootDir: string, namespace: string, options?: IndexArtifactOptions): Promise<void> {
   await ensureScplusLayout(resolve(rootDir));
   const db = openIndexDatabase(rootDir);

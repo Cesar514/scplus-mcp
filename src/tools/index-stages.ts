@@ -159,6 +159,9 @@ export interface RerunIndexStageResult {
   stageState: PersistedIndexStageState;
 }
 
+// Purpose: Build the persisted project config for one indexing generation.
+// Inputs: The repo root, selected index mode, and generation number.
+// Returns/Effects: Returns the project config payload written into durable state.
 function buildProjectConfig(rootDir: string, mode: IndexMode, generation: number): ProjectIndexConfig {
   return {
     indexedAt: new Date().toISOString(),
@@ -172,12 +175,18 @@ function buildProjectConfig(rootDir: string, mode: IndexMode, generation: number
   };
 }
 
+// Purpose: Build the filesystem runtime paths used by the sqlite-backed index pipeline.
+// Inputs: The resolved `.scplus` layout for the current repository.
+// Returns/Effects: Returns derived runtime paths such as the sqlite database file.
 function buildRuntimePaths(layout: ScplusLayout): IndexRuntimePaths {
   return {
     databasePath: join(layout.state, "index.sqlite"),
   };
 }
 
+// Purpose: Build the initial persisted stage-state graph for one generation.
+// Inputs: The selected index mode and generation number.
+// Returns/Effects: Returns the baseline stage-state document for durable storage.
 function buildStageState(mode: IndexMode, generation: number): PersistedIndexStageState {
   const definitions = getStageDefinitions();
   const stages = Object.fromEntries(
@@ -205,6 +214,9 @@ function buildStageState(mode: IndexMode, generation: number): PersistedIndexSta
   };
 }
 
+// Purpose: Build the persisted index status payload for one runtime and stage-state snapshot.
+// Inputs: The active runtime, stage start timestamp, and current stage-state object.
+// Returns/Effects: Returns the mutable status document used during indexing.
 function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageState: PersistedIndexStageState): IndexStatus {
   return {
     state: "running",
@@ -231,6 +243,9 @@ function buildIndexStatus(runtime: IndexStageRuntime, startedAt: string, stageSt
   };
 }
 
+// Purpose: Remove legacy JSON artifacts that were replaced by sqlite-backed durable storage.
+// Inputs: The resolved `.scplus` layout for the current repository.
+// Returns/Effects: Deletes obsolete artifact files and directories when present.
 async function cleanupLegacyArtifacts(layout: ScplusLayout): Promise<void> {
   const embeddingEntries = await readdir(layout.embeddings, { withFileTypes: true }).catch(() => []);
   const checkpointEntries = await readdir(layout.checkpoints, { withFileTypes: true }).catch(() => []);
@@ -262,6 +277,9 @@ async function cleanupLegacyArtifacts(layout: ScplusLayout): Promise<void> {
   ]);
 }
 
+// Purpose: Load legacy JSON if it exists so bootstrap can migrate older state forward.
+// Inputs: The file path to an optional legacy JSON artifact.
+// Returns/Effects: Returns parsed JSON, null for missing files, or throws on malformed content.
 async function loadLegacyJsonIfPresent<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
@@ -276,6 +294,9 @@ async function loadLegacyJsonIfPresent<T>(path: string): Promise<T | null> {
   }
 }
 
+// Purpose: Mark one stage record as running before execution begins.
+// Inputs: The persisted stage record to update.
+// Returns/Effects: Returns a copied stage record with running status and incremented run count.
 function touchRunningStage(record: PersistedIndexStageRecord): PersistedIndexStageRecord {
   return {
     ...record,
@@ -286,6 +307,9 @@ function touchRunningStage(record: PersistedIndexStageRecord): PersistedIndexSta
   };
 }
 
+// Purpose: Mark one stage record as completed after successful execution.
+// Inputs: The persisted stage record to update.
+// Returns/Effects: Returns a copied stage record with completed status metadata.
 function touchCompletedStage(record: PersistedIndexStageRecord): PersistedIndexStageRecord {
   return {
     ...record,
@@ -295,6 +319,9 @@ function touchCompletedStage(record: PersistedIndexStageRecord): PersistedIndexS
   };
 }
 
+// Purpose: Mark one stage record as failed after an execution error.
+// Inputs: The persisted stage record to update and the thrown error value.
+// Returns/Effects: Returns a copied stage record with failure metadata attached.
 function touchFailedStage(record: PersistedIndexStageRecord, error: unknown): PersistedIndexStageRecord {
   return {
     ...record,
@@ -303,6 +330,9 @@ function touchFailedStage(record: PersistedIndexStageRecord, error: unknown): Pe
   };
 }
 
+// Purpose: Assert that a stage is valid for the current mode and that dependencies are complete.
+// Inputs: The current stage state, requested stage name, and selected index mode.
+// Returns/Effects: Throws when the stage cannot be executed in the current context.
 function assertStageCanRun(stageState: PersistedIndexStageState, stage: IndexStageName, mode: IndexMode): void {
   const record = stageState.stages[stage];
   if (!record.modes.includes(mode)) {
@@ -315,6 +345,9 @@ function assertStageCanRun(stageState: PersistedIndexStageState, stage: IndexSta
   }
 }
 
+// Purpose: Persist bootstrap artifacts and seed bootstrap status counters.
+// Inputs: The current stage runtime and mutable index status object.
+// Returns/Effects: Writes bootstrap artifacts and updates bootstrap file and directory counts.
 async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: IndexStatus): Promise<void> {
   const legacyRestorePoints = await loadLegacyJsonIfPresent<unknown[]>(
     join(runtime.layout.checkpoints, "restore-points.json"),
@@ -351,6 +384,9 @@ async function persistBootstrapArtifacts(runtime: IndexStageRuntime, status: Ind
   };
 }
 
+// Purpose: Create the stage runtime wrapper for one repo, mode, and generation.
+// Inputs: Runtime options containing the repo root plus optional mode and generation.
+// Returns/Effects: Returns the resolved index runtime with layout, serving state, and paths.
 export async function createIndexRuntime(options: { rootDir: string; mode?: IndexMode; generation?: number }): Promise<IndexStageRuntime> {
   const rootDir = resolve(options.rootDir);
   const mode = options.mode ?? DEFAULT_INDEX_MODE;
@@ -368,6 +404,9 @@ export async function createIndexRuntime(options: { rootDir: string; mode?: Inde
   };
 }
 
+// Purpose: Persist the mutable index status document for the current runtime.
+// Inputs: The runtime, current status object, and run start timestamp in milliseconds.
+// Returns/Effects: Updates timing fields and saves the index status artifact.
 export async function saveIndexStatus(runtime: IndexStageRuntime, status: IndexStatus, startedAtMs: number): Promise<void> {
   status.lastUpdatedAt = new Date().toISOString();
   status.elapsedMs = Date.now() - startedAtMs;
@@ -379,6 +418,9 @@ export async function saveIndexStageState(runtime: IndexStageRuntime, stageState
   await saveIndexArtifact(runtime.rootDir, "index-stage-state", stageState, { generation: runtime.generation });
 }
 
+// Purpose: Load and normalize the persisted stage-state artifact for the current generation.
+// Inputs: The current index runtime whose stage state should be loaded.
+// Returns/Effects: Returns normalized stage-state data merged with the current contract.
 export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<PersistedIndexStageState> {
   const persisted = await loadIndexArtifact(
     runtime.rootDir,
@@ -405,6 +447,9 @@ export async function loadIndexStageState(runtime: IndexStageRuntime): Promise<P
   return current;
 }
 
+// Purpose: Load and normalize the persisted index status for the current runtime.
+// Inputs: The current index runtime and the start timestamp to use for defaults.
+// Returns/Effects: Returns normalized status data merged with current runtime metadata.
 export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: string): Promise<IndexStatus> {
   const persisted = await loadIndexArtifact(
     runtime.rootDir,
@@ -432,6 +477,9 @@ export async function loadIndexStatus(runtime: IndexStageRuntime, startedAt: str
   };
 }
 
+// Purpose: Execute one index stage and persist its stage-state transitions.
+// Inputs: The runtime, mutable status, stage state, target stage, and optional progress callbacks.
+// Returns/Effects: Runs the requested stage, updates status, and persists success or failure state.
 export async function executeIndexStage(options: ExecuteIndexStageOptions): Promise<void> {
   const { runtime, status, stageState, stage, onFileProgress, onIdentifierProgress, onFullProgress, persist } = options;
   assertStageCanRun(stageState, stage, runtime.mode);
@@ -468,6 +516,9 @@ export async function executeIndexStage(options: ExecuteIndexStageOptions): Prom
   }
 }
 
+// Purpose: Rerun one specific index stage against the current repository state.
+// Inputs: The repo root, target stage name, and optional index mode override.
+// Returns/Effects: Returns the runtime, status, and stage state after the rerun completes.
 export async function rerunIndexStage(options: RerunIndexStageOptions): Promise<RerunIndexStageResult> {
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();

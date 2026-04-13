@@ -113,19 +113,29 @@ let fileSearchRuntimeStats: FileSearchRuntimeStats = {
   refreshFailedFiles: 0,
 };
 
-export class FileSearchRefreshError extends Error {
-  readonly rootDir: string;
-  readonly failures: FileSearchRefreshFailure[];
-
-  constructor(rootDir: string, failures: FileSearchRefreshFailure[]) {
-    const detail = failures.map((failure) => `${failure.path}: ${failure.reason}`).join("; ");
-    super(`File search refresh blocked for ${rootDir}: ${detail}`);
-    this.name = "FileSearchRefreshError";
-    this.rootDir = rootDir;
-    this.failures = failures;
-  }
+export interface FileSearchRefreshError extends Error {
+  rootDir: string;
+  failures: FileSearchRefreshFailure[];
 }
 
+// Purpose: Build a typed refresh failure error that preserves every failed file detail.
+// Inputs: The repo root and the list of refresh failures encountered while rebuilding the index.
+// Returns/Effects: Returns an `Error` object augmented with refresh failure metadata.
+export function createFileSearchRefreshError(
+  rootDir: string,
+  failures: FileSearchRefreshFailure[],
+): FileSearchRefreshError {
+  const detail = failures.map((failure) => `${failure.path}: ${failure.reason}`).join("; ");
+  const error = new Error(`File search refresh blocked for ${rootDir}: ${detail}`) as FileSearchRefreshError;
+  error.name = "FileSearchRefreshError";
+  error.rootDir = rootDir;
+  error.failures = failures;
+  return error;
+}
+
+// Purpose: Read the current in-memory file-search refresh counters without exposing mutable state.
+// Inputs: No arguments; reads the shared runtime stats snapshot.
+// Returns/Effects: Returns a defensive copy of the current runtime refresh statistics.
 export function getFileSearchRuntimeStats(): FileSearchRuntimeStats {
   return {
     refreshFailures: fileSearchRuntimeStats.refreshFailures,
@@ -139,6 +149,9 @@ export function getFileSearchRuntimeStats(): FileSearchRuntimeStats {
   };
 }
 
+// Purpose: Reset the in-memory file-search refresh counters after inspection or tests.
+// Inputs: No arguments; resets the shared runtime stats object to its baseline values.
+// Returns/Effects: Clears tracked refresh failures and the last failure payload.
 export function resetFileSearchRuntimeStats(): void {
   fileSearchRuntimeStats = {
     refreshFailures: 0,
@@ -150,6 +163,9 @@ function isTextIndexCandidate(filePath: string): boolean {
   return TEXT_INDEX_EXTENSIONS.has(extname(filePath).toLowerCase());
 }
 
+// Purpose: Parse an integer environment value while preserving a numeric fallback.
+// Inputs: The raw string environment value and the fallback to use when parsing fails.
+// Returns/Effects: Returns a finite integer or the provided fallback value.
 function toIntegerOr(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -170,6 +186,9 @@ function normalizeCtimeMs(value: number): number {
   return Math.trunc(value);
 }
 
+// Purpose: Build a short plain-text header preview from the first non-empty lines of a file.
+// Inputs: Raw file content whose leading non-empty lines should become a preview header.
+// Returns/Effects: Returns up to two trimmed header lines joined into one preview string.
 function extractPlainTextHeader(content: string): string {
   const lines = content.split("\n");
   const headerLines: string[] = [];
@@ -198,6 +217,9 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// Purpose: Build a file-search document for a text or supported source file on disk.
+// Inputs: The repo root and the relative path of the file that may be indexed.
+// Returns/Effects: Returns an indexed, ignored, or failed build result for that file.
 async function buildSearchDocumentForFile(rootDir: string, relativePath: string): Promise<SearchDocumentBuildResult> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
@@ -265,6 +287,9 @@ async function buildSearchDocumentForFile(rootDir: string, relativePath: string)
   }
 }
 
+// Purpose: Refresh the persisted file-search state by reusing or rebuilding per-file documents.
+// Inputs: The repo root and an optional progress callback for scan-stage updates.
+// Returns/Effects: Persists the refreshed state or throws a typed refresh error on failures.
 async function refreshPersistedFileSearchState(
   rootDir: string,
   onProgress?: (progress: FileSearchIndexProgress) => Promise<void> | void,
@@ -358,7 +383,7 @@ async function refreshPersistedFileSearchState(
       paths: failures.map((failure) => failure.path),
       at: new Date().toISOString(),
     };
-    throw new FileSearchRefreshError(rootDir, failures);
+    throw createFileSearchRefreshError(rootDir, failures);
   }
 
   const removedFiles = Object.keys(previous.files).filter((path) => !seen.has(path)).length;
@@ -381,6 +406,9 @@ async function refreshPersistedFileSearchState(
   };
 }
 
+// Purpose: Ensure the semantic file-search index is fresh and return the active search index.
+// Inputs: The repo root and an optional progress callback for scan and embedding stages.
+// Returns/Effects: Reuses or rebuilds the search index and returns it with refresh statistics.
 export async function ensureFileSearchIndex(
   rootDir: string,
   onProgress?: (progress: FileSearchIndexProgress) => Promise<void> | void,
@@ -450,6 +478,9 @@ export async function ensureFileSearchIndex(
   };
 }
 
+// Purpose: Execute semantic file search against the prepared file-search index.
+// Inputs: Search options describing the repo root, query text, and ranking thresholds.
+// Returns/Effects: Returns a formatted ranked-search report for the requested query.
 export async function semanticCodeSearch(options: SemanticSearchOptions): Promise<string> {
   const { index, stats } = await ensureFileSearchIndex(options.rootDir);
   const searchOptions: SearchQueryOptions = {
@@ -489,6 +520,9 @@ export function invalidateSearchCache(): void {
   cachedRootDir = null;
 }
 
+// Purpose: Refresh embeddings for a targeted set of file-search documents.
+// Inputs: The repo root and the list of relative paths whose embeddings should be rebuilt.
+// Returns/Effects: Re-embeds valid documents, invalidates cache, or throws on file failures.
 export async function refreshFileSearchEmbeddings(options: { rootDir: string; relativePaths: string[] }): Promise<number> {
   const uniquePaths = Array.from(new Set(options.relativePaths.map(normalizeRelativePath).filter(Boolean)));
   if (uniquePaths.length === 0) return 0;
@@ -527,7 +561,7 @@ export async function refreshFileSearchEmbeddings(options: { rootDir: string; re
       paths: failures.map((failure) => failure.path),
       at: new Date().toISOString(),
     };
-    throw new FileSearchRefreshError(options.rootDir, failures);
+    throw createFileSearchRefreshError(options.rootDir, failures);
   }
 
   invalidateSearchCache();

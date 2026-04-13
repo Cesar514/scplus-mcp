@@ -35,6 +35,9 @@ interface RankedHubCandidate {
   matchedTerms: string[];
 }
 
+// Purpose: Check whether a hub-related file exists on disk before resolving it.
+// Inputs: The filesystem path to probe with `stat`.
+// Returns/Effects: Returns true when the path exists and false when lookup fails.
 async function fileExists(p: string): Promise<boolean> {
   try {
     await stat(p);
@@ -44,6 +47,9 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+// Purpose: Resolve a manual hub path by exact or partial name match.
+// Inputs: The repo root and the user-provided hub or feature name.
+// Returns/Effects: Returns the matching manual hub path or null when none matches.
 async function findHubByName(rootDir: string, name: string): Promise<string | null> {
   const hubs = await discoverHubs(rootDir);
   const lower = name.toLowerCase();
@@ -55,6 +61,9 @@ async function findHubByName(rootDir: string, name: string): Promise<string | nu
   return partial ?? null;
 }
 
+// Purpose: Resolve a suggested hub path by matching suggestion labels, slugs, or feature tags.
+// Inputs: The repo root and the user-provided feature or hub name.
+// Returns/Effects: Returns the matching suggested hub markdown path or null when absent.
 async function findSuggestedHubByName(rootDir: string, name: string): Promise<string | null> {
   const suggestions = await loadHubSuggestionState(rootDir);
   const lower = name.toLowerCase();
@@ -71,6 +80,9 @@ function normalizeRankingMode(value: FeatureHubOptions["rankingMode"]): "keyword
   return value ?? "both";
 }
 
+// Purpose: Split free-form query text into normalized searchable terms.
+// Inputs: Arbitrary query or title text that may contain mixed case and punctuation.
+// Returns/Effects: Returns lowercase search tokens longer than one character.
 function splitTerms(text: string): string[] {
   return text
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -80,12 +92,18 @@ function splitTerms(text: string): string[] {
     .filter((token) => token.length > 1);
 }
 
+// Purpose: Clamp a numeric score into the inclusive `[0, 1]` range.
+// Inputs: Any numeric value produced by semantic or keyword scoring.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
 }
 
+// Purpose: Compute cosine similarity between two embedding vectors.
+// Inputs: Two numeric vectors of equal length representing semantic embeddings.
+// Returns/Effects: Returns a normalized similarity score between 0 and 1 when possible.
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -99,6 +117,9 @@ function cosine(a: number[], b: number[]): number {
   return denominator === 0 ? 0 : dot / denominator;
 }
 
+// Purpose: Score keyword coverage between a user query and a candidate hub text blob.
+// Inputs: The raw query text and the searchable candidate text.
+// Returns/Effects: Returns a bounded keyword score and the matched query terms.
 function scoreKeywordCoverage(query: string, text: string): { score: number; matchedTerms: string[] } {
   const queryTerms = Array.from(new Set(splitTerms(query)));
   if (queryTerms.length === 0) return { score: 0, matchedTerms: [] };
@@ -112,6 +133,9 @@ function scoreKeywordCoverage(query: string, text: string): { score: number; mat
   };
 }
 
+// Purpose: Build ranked-candidate records for manual hub markdown files in the repo.
+// Inputs: The repo root whose existing hub markdown files should be enumerated.
+// Returns/Effects: Returns manual hub candidates enriched with searchable summary text.
 async function buildManualHubCandidates(rootDir: string): Promise<RankedHubCandidate[]> {
   const hubs = await discoverHubs(rootDir);
   const candidates: RankedHubCandidate[] = [];
@@ -140,6 +164,9 @@ async function buildManualHubCandidates(rootDir: string): Promise<RankedHubCandi
   return candidates;
 }
 
+// Purpose: Convert a persisted hub suggestion into a ranked candidate entry.
+// Inputs: One generated hub suggestion with labels, files, and rationale metadata.
+// Returns/Effects: Returns a candidate record ready for keyword and semantic scoring.
 function buildSuggestedHubCandidate(suggestion: HubSuggestion): RankedHubCandidate {
   return {
     hubPath: suggestion.markdownPath,
@@ -165,6 +192,9 @@ function buildSuggestedHubCandidate(suggestion: HubSuggestion): RankedHubCandida
   };
 }
 
+// Purpose: Rank manual and suggested hubs against a query using keyword and semantic signals.
+// Inputs: The repo root, query text, ranking mode, and whether suggested hubs should be included.
+// Returns/Effects: Returns scored hub candidates sorted by descending relevance.
 async function rankHubCandidates(
   rootDir: string,
   query: string,
@@ -209,6 +239,9 @@ async function rankHubCandidates(
       || left.hubPath.localeCompare(right.hubPath));
 }
 
+// Purpose: Format a ranked hub-candidate list into the user-facing report text.
+// Inputs: The original query, ranking mode, and sorted candidate list.
+// Returns/Effects: Returns a printable summary of ranked hub matches.
 function formatRankedHubCandidates(query: string, rankingMode: "keyword" | "semantic" | "both", candidates: RankedHubCandidate[]): string {
   if (candidates.length === 0) {
     return [
@@ -239,6 +272,9 @@ function formatRankedHubCandidates(query: string, rankingMode: "keyword" | "sema
   return lines.join("\n").trimEnd();
 }
 
+// Purpose: Resolve or rank feature hubs and expand a selected hub into bundled file context.
+// Inputs: Feature hub options describing the repo root and one of hub path, feature name, query, or orphan mode.
+// Returns/Effects: Returns formatted hub listings, ranked matches, orphan reports, or expanded hub content.
 export async function getFeatureHub(options: FeatureHubOptions): Promise<string> {
   const { rootDir, showOrphans } = options;
   const out: string[] = [];

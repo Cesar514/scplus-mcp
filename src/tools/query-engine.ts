@@ -170,18 +170,27 @@ export interface QueryExplanationStats {
   hubCardCount: number;
 }
 
+// Purpose: Format a bounded comma-separated list for explanation cards.
+// Inputs: The values to render plus the maximum number of items to show directly.
+// Returns/Effects: Returns a human-readable list string with overflow summarized.
 function formatList(values: string[], maxItems: number = 3): string {
   if (values.length === 0) return "none";
   if (values.length <= maxItems) return values.join(", ");
   return `${values.slice(0, maxItems).join(", ")}, +${values.length - maxItems} more`;
 }
 
+// Purpose: Clamp a numeric score into the inclusive [0, 1] range.
+// Inputs: The score candidate to normalize.
+// Returns/Effects: Returns the bounded score value.
 function clamp01(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
 }
 
+// Purpose: Build the persisted contract metadata that describes the query engine layers.
+// Inputs: No direct inputs beyond the current prepared query-engine design.
+// Returns/Effects: Returns the static query engine contract object stored in the artifact.
 function buildQueryEngineContract(): QueryEngineContract {
   return {
     exact: {
@@ -208,30 +217,45 @@ function buildQueryEngineContract(): QueryEngineContract {
   };
 }
 
+// Purpose: Load the prepared structure index required for query explanations.
+// Inputs: The repository root containing prepared artifacts.
+// Returns/Effects: Returns the persisted structure index state or throws if it is missing.
 async function loadStructureState(rootDir: string): Promise<PersistedStructureIndexState> {
   return loadIndexArtifact(rootDir, "code-structure-index", () => {
     throw new Error("code-structure-index is required to build query explanations.");
   });
 }
 
+// Purpose: Load the prepared semantic cluster state required for explanation cards.
+// Inputs: The repository root containing prepared artifacts.
+// Returns/Effects: Returns the persisted semantic cluster state or throws if it is missing.
 async function loadClusterState(rootDir: string): Promise<PersistedSemanticClusterState> {
   return loadIndexArtifact(rootDir, "semantic-cluster-index", () => {
     throw new Error("semantic-cluster-index is required to build query explanations.");
   });
 }
 
+// Purpose: Load the prepared hub suggestion state required for explanation cards.
+// Inputs: The repository root containing prepared artifacts.
+// Returns/Effects: Returns the persisted hub suggestion state or throws if it is missing.
 async function loadHubSuggestionState(rootDir: string): Promise<PersistedHubSuggestionState> {
   return loadIndexArtifact(rootDir, "hub-suggestion-index", () => {
     throw new Error("hub-suggestion-index is required to build query explanations.");
   });
 }
 
+// Purpose: Load the persisted query explanation artifact from durable storage.
+// Inputs: The repository root containing prepared artifacts.
+// Returns/Effects: Returns the query explanation state or throws if it is missing.
 export async function loadQueryExplanationState(rootDir: string): Promise<PersistedQueryExplanationState> {
   return loadIndexArtifact(rootDir, "query-explanation-index", () => {
     throw new Error("query-explanation-index is required for explanation-backed research.");
   });
 }
 
+// Purpose: Build a reverse dependency map from each file to the files that import it.
+// Inputs: The prepared structure state for the repository.
+// Returns/Effects: Returns a sorted reverse dependency map keyed by file path.
 function buildReverseDependencies(structureState: PersistedStructureIndexState): Map<string, string[]> {
   const reverseDependencies = new Map<string, string[]>();
   for (const [filePath, entry] of Object.entries(structureState.files)) {
@@ -245,6 +269,9 @@ function buildReverseDependencies(structureState: PersistedStructureIndexState):
   return reverseDependencies;
 }
 
+// Purpose: Build the peer-file list for every file within its module boundary.
+// Inputs: The prepared structure state for the repository.
+// Returns/Effects: Returns a map from each file path to its sibling module peers.
 function buildModulePeers(structureState: PersistedStructureIndexState): Map<string, string[]> {
   const peers = new Map<string, string[]>();
   for (const [filePath, entry] of Object.entries(structureState.files)) {
@@ -254,12 +281,18 @@ function buildModulePeers(structureState: PersistedStructureIndexState): Map<str
   return peers;
 }
 
+// Purpose: Summarize the public API surface of one file artifact.
+// Inputs: The prepared structure artifact for one file.
+// Returns/Effects: Returns a human-readable public API summary string.
 function buildPublicApiCard(artifact: StructureArtifact): string {
   if (artifact.exports.length === 0) return "Public API: no exported symbols.";
   const entries = artifact.exports.map((entry) => `${entry.name} (${entry.kind})`);
   return `Public API: ${formatList(entries, 4)}.`;
 }
 
+// Purpose: Summarize the direct and reverse dependency neighborhood of one file.
+// Inputs: The file artifact and its reverse dependency paths.
+// Returns/Effects: Returns a human-readable dependency neighborhood summary.
 function buildDependencyNeighborhoodSummary(
   artifact: StructureArtifact,
   reverseDependencies: string[],
@@ -271,6 +304,9 @@ function buildDependencyNeighborhoodSummary(
   ].join(" ");
 }
 
+// Purpose: Summarize the hot-path behavior for one file artifact.
+// Inputs: The file artifact and its reverse dependency paths.
+// Returns/Effects: Returns a short narrative about downstream use or internal call fan-out.
 function buildHotPathSummary(artifact: StructureArtifact, reverseDependencies: string[]): string {
   if (reverseDependencies.length > 0) {
     return `Hot path: imported by ${reverseDependencies.length} file(s), led by ${formatList(reverseDependencies)}.`;
@@ -286,6 +322,9 @@ function buildOwnershipSummary(artifact: StructureArtifact): string {
   return `Ownership: module ${artifact.modulePath} owns this file and ${artifact.symbols.length} symbol(s).`;
 }
 
+// Purpose: Estimate the change risk for one file artifact from its dependency footprint.
+// Inputs: The file artifact and its reverse dependency paths.
+// Returns/Effects: Returns a human-readable change-risk summary string.
 function buildChangeRiskNote(artifact: StructureArtifact, reverseDependencies: string[]): string {
   const exportCount = artifact.exports.length;
   const dependencyCount = artifact.dependencyPaths.length;
@@ -298,6 +337,9 @@ function buildChangeRiskNote(artifact: StructureArtifact, reverseDependencies: s
   return `Change risk: ${risk}; exports=${exportCount}, direct dependencies=${dependencyCount}, reverse dependencies=${reverseCount}.`;
 }
 
+// Purpose: Deduplicate related-context cards while keeping the strongest score per path.
+// Inputs: The candidate related-context cards gathered from multiple sources.
+// Returns/Effects: Returns a bounded sorted list of unique related-context cards.
 function dedupeRelatedContexts(cards: RelatedContextCard[]): RelatedContextCard[] {
   const related = new Map<string, RelatedContextCard>();
   for (const card of cards) {
@@ -309,6 +351,9 @@ function dedupeRelatedContexts(cards: RelatedContextCard[]): RelatedContextCard[
     .slice(0, 8);
 }
 
+// Purpose: Build the related-context cards for one file explanation.
+// Inputs: The file path plus cluster, dependency, reverse dependency, and module-peer relationships.
+// Returns/Effects: Returns the deduplicated related-context cards for that file.
 function buildFileRelatedContexts(
   filePath: string,
   clusterEdges: RelatedFileEdge[],
@@ -344,6 +389,9 @@ function buildFileRelatedContexts(
   ]);
 }
 
+// Purpose: Summarize the high-level purpose of one module from its constituent file headers.
+// Inputs: The module path, its module summary, and the prepared structure state.
+// Returns/Effects: Returns a concise purpose summary for the module explanation card.
 function buildModulePurposeSummary(
   modulePath: string,
   moduleSummary: ModuleStructureArtifact,
@@ -359,6 +407,9 @@ function buildModulePurposeSummary(
   return `Module ${modulePath} groups ${moduleSummary.filePaths.length} file(s) around ${headers.join(" / ")}.`;
 }
 
+// Purpose: Summarize the public API of one module from its exported symbols.
+// Inputs: The module summary and the prepared structure state.
+// Returns/Effects: Returns a human-readable module public API summary string.
 function buildModulePublicApiCard(
   moduleSummary: ModuleStructureArtifact,
   structureState: PersistedStructureIndexState,
@@ -371,6 +422,9 @@ function buildModulePublicApiCard(
   return `Public API: ${formatList(exportedSymbols, 5)}.`;
 }
 
+// Purpose: Summarize the dependency neighborhood around one module.
+// Inputs: The module path, module summary, and prepared structure state.
+// Returns/Effects: Returns a human-readable module dependency summary string.
 function buildModuleDependencyNeighborhoodSummary(
   modulePath: string,
   moduleSummary: ModuleStructureArtifact,
@@ -391,6 +445,9 @@ function buildModuleDependencyNeighborhoodSummary(
   ].join(" ");
 }
 
+// Purpose: Summarize the hot-path role of one module from cross-module import edges.
+// Inputs: The module path and the prepared structure state.
+// Returns/Effects: Returns a short narrative about module fan-in or fan-out.
 function buildModuleHotPathSummary(modulePath: string, structureState: PersistedStructureIndexState): string {
   const incoming = structureState.moduleImportEdges.filter((edge) => edge.toModule === modulePath).length;
   const outgoing = structureState.moduleImportEdges.filter((edge) => edge.fromModule === modulePath).length;
@@ -407,6 +464,9 @@ function buildModuleOwnershipSummary(moduleSummary: ModuleStructureArtifact): st
   return `Ownership: owns ${moduleSummary.filePaths.length} file(s) and ${moduleSummary.symbolIds.length} symbol(s).`;
 }
 
+// Purpose: Estimate the change risk of one module from size and inbound dependency counts.
+// Inputs: The module summary and the prepared structure state.
+// Returns/Effects: Returns a human-readable module change-risk summary string.
 function buildModuleChangeRiskNote(moduleSummary: ModuleStructureArtifact, structureState: PersistedStructureIndexState): string {
   const incoming = structureState.moduleImportEdges.filter((edge) => edge.toModule === moduleSummary.modulePath).length;
   const risk = incoming >= 3 || moduleSummary.exportedSymbolIds.length >= 4 || moduleSummary.filePaths.length >= 5
@@ -417,6 +477,9 @@ function buildModuleChangeRiskNote(moduleSummary: ModuleStructureArtifact, struc
   return `Change risk: ${risk}; files=${moduleSummary.filePaths.length}, exported symbols=${moduleSummary.exportedSymbolIds.length}, incoming module imports=${incoming}.`;
 }
 
+// Purpose: Convert one subsystem summary into its persisted explanation card representation.
+// Inputs: The subsystem summary and the prepared structure state.
+// Returns/Effects: Returns the subsystem explanation card stored in the explanation artifact.
 function buildSubsystemCard(
   subsystem: SubsystemSummary,
   structureState: PersistedStructureIndexState,
@@ -437,6 +500,9 @@ function buildSubsystemCard(
   };
 }
 
+// Purpose: Build explanation cards for manually authored hub files.
+// Inputs: The repository root and the prepared structure state.
+// Returns/Effects: Returns persisted hub explanation cards keyed by manual hub identifier.
 async function buildManualHubCards(rootDir: string, structureState: PersistedStructureIndexState): Promise<Record<string, HubExplanationCard>> {
   const cards: Record<string, HubExplanationCard> = {};
   const hubs = await discoverHubs(rootDir);
@@ -466,6 +532,9 @@ async function buildManualHubCards(rootDir: string, structureState: PersistedStr
   return cards;
 }
 
+// Purpose: Build explanation cards for suggested hubs from the prepared suggestion state.
+// Inputs: The prepared structure state and hub suggestion state.
+// Returns/Effects: Returns persisted hub explanation cards keyed by suggested hub identifier.
 function buildSuggestedHubCards(
   structureState: PersistedStructureIndexState,
   hubSuggestionState: PersistedHubSuggestionState,
@@ -493,6 +562,9 @@ function buildSuggestedHubCards(
   return cards;
 }
 
+// Purpose: Rebuild the persisted query explanation artifact from prepared repository state.
+// Inputs: The repository root whose prepared artifacts should be summarized.
+// Returns/Effects: Persists and returns the refreshed query explanation state plus card counts.
 export async function refreshQueryExplanationState(
   rootDir: string,
 ): Promise<{ state: PersistedQueryExplanationState; stats: QueryExplanationStats }> {

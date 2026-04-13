@@ -117,6 +117,9 @@ function isNavigableSourcePath(filePath: string): boolean {
   return !NON_CODE_NAVIGATE_EXTENSIONS.has(extname(filePath).toLowerCase());
 }
 
+// Purpose: Compute cosine similarity between two file embedding vectors.
+// Inputs: Two numeric vectors representing file embeddings.
+// Returns/Effects: Returns a normalized similarity score between 0 and 1 when possible.
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -130,12 +133,18 @@ function cosine(a: number[], b: number[]): number {
   return denominator === 0 ? 0 : dot / denominator;
 }
 
+// Purpose: Summarize a set of files into one short cluster description fallback.
+// Inputs: The file-info list assigned to the current cluster.
+// Returns/Effects: Returns a short textual summary naming the cluster scope.
 function summarizeFiles(files: FileInfo[]): string {
   const pathPattern = findPathPattern(files.map((file) => file.relativePath));
   const filesLabel = pathPattern ?? files[0]?.relativePath ?? "files";
   return `${files.length} files around ${filesLabel}`;
 }
 
+// Purpose: Derive a deterministic fallback cluster descriptor from file paths and headers.
+// Inputs: The clustered files, optional path pattern, and cluster index.
+// Returns/Effects: Returns a fallback semantic descriptor for one cluster.
 function deriveClusterDescriptor(files: FileInfo[], pathPattern: string | null, index: number): ClusterDescriptor {
   const samplePath = pathPattern ?? files[0]?.relativePath ?? `cluster-${index + 1}`;
   const dominantSegment = samplePath.split("/").find(Boolean) ?? `cluster-${index + 1}`;
@@ -152,6 +161,9 @@ function deriveClusterDescriptor(files: FileInfo[], pathPattern: string | null, 
   };
 }
 
+// Purpose: Build mock cluster descriptors for tests or mock chat providers.
+// Inputs: Cluster file groups paired with optional shared path patterns.
+// Returns/Effects: Returns deterministic semantic descriptors for every cluster.
 function buildMockClusterDescriptorResponse(
   clusters: { files: FileInfo[]; pathPattern: string | null }[],
 ): ClusterDescriptorResponse {
@@ -167,6 +179,9 @@ function buildMockClusterDescriptorResponse(
   };
 }
 
+// Purpose: Build the structured response schema expected from the cluster-descriptor chat call.
+// Inputs: The exact number of cluster descriptors that must be returned.
+// Returns/Effects: Returns a JSON-schema object for the structured chat response.
 function buildClusterDescriptorSchema(clusterCount: number): object {
   return {
     type: "object",
@@ -196,6 +211,9 @@ function getClusterDescriptorMaxTokens(clusterCount: number): number {
   return Math.max(900, Math.min(4096, clusterCount * 160));
 }
 
+// Purpose: Validate and normalize one cluster descriptor returned by structured chat.
+// Inputs: The raw cluster descriptor object and its ordinal position.
+// Returns/Effects: Returns a normalized descriptor or throws on missing required fields.
 function normalizeClusterDescriptor(value: ClusterDescriptor, index: number): ClusterDescriptor {
   const label = value.label?.trim();
   const overarchingTheme = value.overarchingTheme?.trim();
@@ -210,6 +228,9 @@ function normalizeClusterDescriptor(value: ClusterDescriptor, index: number): Cl
   };
 }
 
+// Purpose: Ask the chat model to describe semantic clusters in order.
+// Inputs: Cluster file groups paired with optional shared path patterns.
+// Returns/Effects: Returns normalized semantic descriptors for the supplied clusters.
 async function describeClusters(clusters: { files: FileInfo[]; pathPattern: string | null }[]): Promise<ClusterDescriptor[]> {
   if (clusters.length === 0) return [];
   const response = await generateStructuredChat<ClusterDescriptorResponse>({
@@ -257,6 +278,9 @@ async function describeClusters(clusters: { files: FileInfo[]; pathPattern: stri
   return response.clusters.map((descriptor, index) => normalizeClusterDescriptor(descriptor, index));
 }
 
+// Purpose: Convert persisted file-search documents into semantic-clustering file inputs.
+// Inputs: The persisted file-search state for the current repository generation.
+// Returns/Effects: Returns navigable file info entries suitable for semantic clustering.
 function buildFileInfoList(state: PersistedFileSearchState): FileInfo[] {
   return Object.values(state.files)
     .map((entry) => entry.doc)
@@ -269,6 +293,9 @@ function buildFileInfoList(state: PersistedFileSearchState): FileInfo[] {
     }));
 }
 
+// Purpose: Group files by shallow module path to seed top-level cluster splits.
+// Inputs: The file info entries that should be partitioned by module neighborhood.
+// Returns/Effects: Returns non-empty file groups keyed by the first one or two path segments.
 function groupFilesByModule(files: FileInfo[]): FileInfo[][] {
   const groups = new Map<string, FileInfo[]>();
   for (const file of files) {
@@ -280,6 +307,9 @@ function groupFilesByModule(files: FileInfo[]): FileInfo[][] {
   return Array.from(groups.values()).filter((group) => group.length > 0);
 }
 
+// Purpose: Build the semantic-cluster hierarchy recursively from files and embeddings.
+// Inputs: Files, their vectors, cluster limits, current depth, and maximum recursion depth.
+// Returns/Effects: Returns a semantic cluster tree rooted at the current file set.
 async function buildHierarchy(files: FileInfo[], vectors: number[][], maxClusters: number, depth: number, maxDepth: number): Promise<SemanticClusterArtifactNode> {
   if (files.length === 0) {
     return {
@@ -368,12 +398,18 @@ async function buildHierarchy(files: FileInfo[], vectors: number[][], maxCluster
   };
 }
 
+// Purpose: Flatten a semantic cluster tree into a depth-first node list.
+// Inputs: The current cluster node and an optional accumulator array.
+// Returns/Effects: Returns the accumulator populated with every cluster node.
 function flattenClusters(node: SemanticClusterArtifactNode, acc: SemanticClusterArtifactNode[] = []): SemanticClusterArtifactNode[] {
   acc.push(node);
   for (const child of node.children) flattenClusters(child, acc);
   return acc;
 }
 
+// Purpose: Build subsystem summaries from every non-root semantic cluster.
+// Inputs: The root semantic cluster node for the current repository.
+// Returns/Effects: Returns subsystem summaries keyed by cluster id.
 function buildSubsystemSummaries(node: SemanticClusterArtifactNode): Record<string, SubsystemSummary> {
   const summaries: Record<string, SubsystemSummary> = {};
   for (const cluster of flattenClusters(node)) {
@@ -396,6 +432,9 @@ function buildSubsystemSummaries(node: SemanticClusterArtifactNode): Record<stri
   return summaries;
 }
 
+// Purpose: Build a semantic related-file graph from file embeddings.
+// Inputs: The clustered files and their embedding vectors.
+// Returns/Effects: Returns top related-file edges for each file path.
 function buildRelatedFileGraph(files: FileInfo[], vectors: number[][]): Record<string, RelatedFileEdge[]> {
   const result: Record<string, RelatedFileEdge[]> = {};
   for (let i = 0; i < files.length; i++) {
@@ -417,6 +456,9 @@ function buildRelatedFileGraph(files: FileInfo[], vectors: number[][]): Record<s
   return result;
 }
 
+// Purpose: Load the persisted semantic cluster artifact state from durable storage.
+// Inputs: The repo root whose semantic-cluster artifact should be read.
+// Returns/Effects: Returns the persisted cluster state or an empty baseline.
 export async function loadSemanticClusterState(rootDir: string): Promise<PersistedSemanticClusterState> {
   return loadIndexArtifact(rootDir, "semantic-cluster-index", () => ({
     generatedAt: "",
@@ -437,6 +479,9 @@ export async function loadSemanticClusterState(rootDir: string): Promise<Persist
   }));
 }
 
+// Purpose: Regenerate semantic clusters, related files, and subsystem summaries from file-search state.
+// Inputs: The repo root plus optional render-oriented depth and cluster limits.
+// Returns/Effects: Persists and returns the refreshed semantic cluster state with summary stats.
 export async function refreshSemanticClusterState(rootDir: string, options?: SemanticClusterRenderOptions): Promise<{ state: PersistedSemanticClusterState; stats: SemanticClusterStats }> {
   const fileState = await loadIndexArtifact<PersistedFileSearchState>(rootDir, "file-search-index", () => {
     throw new Error("File search index is required before building semantic cluster artifacts.");
@@ -485,6 +530,9 @@ export async function refreshSemanticClusterState(rootDir: string, options?: Sem
   };
 }
 
+// Purpose: Render one semantic cluster node and its descendants into display lines.
+// Inputs: The current node, render depth, maximum depth, and maximum cluster count.
+// Returns/Effects: Returns formatted output lines for the rendered subtree.
 function renderNode(node: SemanticClusterArtifactNode, depth: number, maxDepth: number, maxClusters: number): string[] {
   const pad = "  ".repeat(depth);
   const lines: string[] = [];
@@ -514,6 +562,9 @@ function renderNode(node: SemanticClusterArtifactNode, depth: number, maxDepth: 
   return lines;
 }
 
+// Purpose: Render the persisted semantic cluster state into the user-facing navigator text.
+// Inputs: The persisted semantic cluster state plus optional render depth and cluster limits.
+// Returns/Effects: Returns a formatted semantic navigator string.
 export function renderSemanticClusterState(state: PersistedSemanticClusterState, options?: SemanticClusterRenderOptions): string {
   if (state.clusterCount === 0 && state.root.filePaths.length === 0) {
     return "No persisted semantic cluster artifacts are available. Run `index` in full mode first.";
