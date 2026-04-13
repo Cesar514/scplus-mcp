@@ -852,13 +852,13 @@ describe("static-analysis", async () => {
       );
     });
 
-    it("reports long lines and bare except blocks", async () => {
+    it("reports long lines and broad generic catch handlers", async () => {
       await writeFile(
         join(FIXTURE_DIR, "strict.py"),
         [
           "# summary: Strict static analysis python fixture",
           "# FEATURE: Static Analysis Tests",
-          "# inputs: bare except and a long assignment",
+          "# inputs: broad catch handlers and a long assignment",
           "# outputs: lint rule findings",
           "",
           "def strict_mode():",
@@ -870,15 +870,254 @@ describe("static-analysis", async () => {
           "",
         ].join("\n"),
       );
-      const report = await buildStaticAnalysisReport({
+      const genericCatchFixtures = [
+        {
+          name: "generic-catch.ts",
+          content: [
+            "// summary: TypeScript generic catch fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: broad catch handler",
+            "// outputs: generic catch lint finding",
+            "",
+            "export function genericCatchTs(): number {",
+            "  try {",
+            "    return 1;",
+            "  } catch (error) {",
+            "    return 2;",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "GenericCatch.java",
+          content: [
+            "// summary: Java generic catch fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: broad catch handler",
+            "// outputs: generic catch lint finding",
+            "",
+            "class GenericCatchJava {",
+            "  int genericCatchJava() {",
+            "    try {",
+            "      return 1;",
+            "    } catch (Exception error) {",
+            "      return 2;",
+            "    }",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "GenericCatch.cs",
+          content: [
+            "// summary: Csharp generic catch fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: broad catch handler",
+            "// outputs: generic catch lint finding",
+            "",
+            "class GenericCatchCs {",
+            "  public int GenericCatchCsMethod() {",
+            "    try {",
+            "      return 1;",
+            "    } catch (Exception error) {",
+            "      return 2;",
+            "    }",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "generic_catch.cpp",
+          content: [
+            "// summary: Cpp generic catch fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: broad catch handler",
+            "// outputs: generic catch lint finding",
+            "",
+            "int generic_catch_cpp() {",
+            "  try {",
+            "    return 1;",
+            "  } catch (...) {",
+            "    return 2;",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+      ];
+
+      const pythonReport = await buildStaticAnalysisReport({
         rootDir: FIXTURE_DIR,
         targetPath: "strict.py",
       });
       assert.ok(
-        report.ruleFindings.some((finding) => finding.rule === "line-length"),
+        pythonReport.ruleFindings.some((finding) => finding.rule === "line-length"),
       );
       assert.ok(
-        report.ruleFindings.some((finding) => finding.rule === "no-generic-catch"),
+        pythonReport.ruleFindings.some((finding) => finding.rule === "no-generic-catch"),
+      );
+
+      for (const fixture of genericCatchFixtures) {
+        await writeFile(join(FIXTURE_DIR, fixture.name), fixture.content);
+        const report = await buildStaticAnalysisReport({
+          rootDir: FIXTURE_DIR,
+          targetPath: fixture.name,
+        });
+        assert.ok(
+          report.ruleFindings.some((finding) => finding.rule === "no-generic-catch"),
+          `expected generic catch finding for ${fixture.name}`,
+        );
+      }
+    });
+
+    it("accepts broad catch handlers that rethrow", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "generic-catch-rethrow.ts"),
+        [
+          "// summary: TypeScript generic catch rethrow fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: broad catch handler that rethrows",
+          "// outputs: no generic catch lint finding",
+          "",
+          "export function genericCatchRethrowTs(): number {",
+          "  try {",
+          "    return 1;",
+          "  } catch (error) {",
+          "    throw error;",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "generic-catch-rethrow.ts",
+      });
+      assert.ok(
+        !report.ruleFindings.some((finding) => finding.rule === "no-generic-catch"),
+      );
+    });
+
+    it("reports global mutable state across supported languages", async () => {
+      const fixtures = [
+        {
+          name: "mutable-state.ts",
+          content: [
+            "// summary: Typescript mutable state fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: top-level mutable runtime state",
+            "// outputs: global mutable state finding",
+            "",
+            "let currentCount = 0;",
+            "const cache = new Map<string, number>();",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "mutable_state.py",
+          content: [
+            "# summary: Python mutable state fixture module",
+            "# FEATURE: Static Analysis Tests",
+            "# inputs: top-level mutable runtime state",
+            "# outputs: global mutable state finding",
+            "",
+            "current_job = None",
+            "active_clients = {}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "mutableState.go",
+          content: [
+            "// summary: Go mutable state fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: package-level mutable runtime state",
+            "// outputs: global mutable state finding",
+            "",
+            "package fixtures",
+            "",
+            "var currentMode string",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "mutable_state.rs",
+          content: [
+            "// summary: Rust mutable state fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: top-level mutable runtime state",
+            "// outputs: global mutable state finding",
+            "",
+            "static mut COUNT: i32 = 0;",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "MutableState.java",
+          content: [
+            "// summary: Java mutable state fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: static mutable runtime state",
+            "// outputs: global mutable state finding",
+            "",
+            "class MutableStateJava {",
+            "  static int count = 0;",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "MutableState.cs",
+          content: [
+            "// summary: Csharp mutable state fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: static mutable runtime state",
+            "// outputs: global mutable state finding",
+            "",
+            "class MutableStateCs {",
+            "  static int Count = 0;",
+            "}",
+            "",
+          ].join("\n"),
+        },
+      ];
+
+      for (const fixture of fixtures) {
+        await writeFile(join(FIXTURE_DIR, fixture.name), fixture.content);
+        const report = await buildStaticAnalysisReport({
+          rootDir: FIXTURE_DIR,
+          targetPath: fixture.name,
+        });
+        assert.ok(
+          report.ruleFindings.some((finding) => finding.rule === "no-global-mutable-state"),
+          `expected global mutable state finding for ${fixture.name}`,
+        );
+      }
+    });
+
+    it("accepts constant top-level state declarations", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "constant-state.ts"),
+        [
+          "// summary: Constant state fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: constant top-level declarations",
+          "// outputs: no global mutable state finding",
+          "",
+          "const READY = 1;",
+          "const NAME = 'ok';",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "constant-state.ts",
+      });
+      assert.ok(
+        !report.ruleFindings.some((finding) => finding.rule === "no-global-mutable-state"),
       );
     });
   });

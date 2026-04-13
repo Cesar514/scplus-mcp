@@ -710,6 +710,254 @@ function validateTypedPublicInterface(
   }];
 }
 
+function isLikelyMutableTopLevelInitializer(node: any, grammarName: string): boolean {
+  if (!node) return false;
+  const mutableNodeTypes = new Set([
+    "array",
+    "array_expression",
+    "array_literal",
+    "dictionary",
+    "list",
+    "map_literal",
+    "new_expression",
+    "object",
+    "object_pattern",
+    "object_type",
+    "object_creation_expression",
+    "object_creation_expr",
+    "set",
+    "set_or_dict",
+    "vector_expression",
+  ]);
+  if (mutableNodeTypes.has(node.type)) return true;
+  const text = node.text ?? "";
+  if (grammarName === "python") {
+    return text === "{}" || text === "[]" || /^dict\(/.test(text) || /^list\(/.test(text) || /^set\(/.test(text);
+  }
+  if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
+    return text === "{}" || text === "[]" || /^new\s+(Map|Set|WeakMap|WeakSet)\b/.test(text);
+  }
+  return false;
+}
+
+async function validateGlobalMutableState(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  const extension = extname(fullPath).toLowerCase();
+  if (!isSupportedFile(fullPath)) return [];
+
+  try {
+    return await withSyntaxTree(
+      lineInfo.map((line) => line.text).join("\n"),
+      extension,
+      ({ rootNode, grammarName }) => {
+        const findings: RuleFinding[] = [];
+
+        function addFinding(node: any, detail: string): void {
+          findings.push({
+            file,
+            line: node.startPosition.row + 1,
+            rule: "no-global-mutable-state",
+            severity: "error",
+            message: `${lineInfo[node.startPosition.row]?.trimmed ?? node.type} creates mutable top-level state (${detail}).`,
+          });
+        }
+
+        if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
+          for (const child of rootNode.namedChildren ?? []) {
+            if (child.type !== "lexical_declaration" && child.type !== "variable_declaration") continue;
+            const declarationText = child.text ?? "";
+            const isLetOrVar = declarationText.startsWith("let ") || declarationText.startsWith("var ");
+            for (const declarator of child.namedChildren ?? []) {
+              if (declarator.type !== "variable_declarator") continue;
+              const initializer = declarator.namedChildren?.[1];
+              if (isLetOrVar) {
+                addFinding(child, "top-level let/var declaration");
+                continue;
+              }
+              if (isLikelyMutableTopLevelInitializer(initializer, grammarName)) {
+                addFinding(child, "top-level mutable container");
+              }
+            }
+          }
+          return findings;
+        }
+
+        if (grammarName === "python") {
+          for (const child of rootNode.namedChildren ?? []) {
+            if (child.type !== "expression_statement") continue;
+            const assignment = child.namedChildren?.find((node: any) => node.type === "assignment");
+            if (!assignment) continue;
+            const target = assignment.namedChildren?.[0];
+            const value = assignment.namedChildren?.[1];
+            const targetName = target?.text ?? "";
+            if (targetName === targetName.toUpperCase()) continue;
+            if (isLikelyMutableTopLevelInitializer(value, grammarName) || value?.type === "none") {
+              addFinding(child, "module-level mutable assignment");
+            }
+          }
+          return findings;
+        }
+
+        if (grammarName === "go") {
+          for (const child of rootNode.namedChildren ?? []) {
+            if (child.type !== "var_declaration") continue;
+            addFinding(child, "package-level var declaration");
+          }
+          return findings;
+        }
+
+        if (grammarName === "rust") {
+          for (const child of rootNode.namedChildren ?? []) {
+            if (child.type === "static_item" && child.text.includes("static mut")) {
+              addFinding(child, "static mut declaration");
+            }
+          }
+          return findings;
+        }
+
+        if (grammarName === "java") {
+          const stack = [rootNode];
+          while (stack.length > 0) {
+            const current = stack.pop();
+            if (!current) continue;
+            if (current.type === "field_declaration") {
+              const modifiers = current.namedChildren?.find((node: any) => node.type === "modifiers")?.text ?? "";
+              if (modifiers.includes("static") && !modifiers.includes("final")) {
+                addFinding(current, "mutable static field");
+              }
+            }
+            for (const child of current.namedChildren ?? []) stack.push(child);
+          }
+          return findings;
+        }
+
+        if (grammarName === "c_sharp") {
+          const stack = [rootNode];
+          while (stack.length > 0) {
+            const current = stack.pop();
+            if (!current) continue;
+            if (current.type === "field_declaration") {
+              const modifiers = (current.namedChildren ?? [])
+                .filter((node: any) => node.type === "modifier")
+                .map((node: any) => node.text);
+              if (modifiers.includes("static") && !modifiers.includes("readonly") && !modifiers.includes("const")) {
+                addFinding(current, "mutable static field");
+              }
+            }
+            for (const child of current.namedChildren ?? []) stack.push(child);
+          }
+          return findings;
+        }
+
+        return findings;
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed global mutable state analysis could not analyze this file: ${message}`,
+    }];
+  }
+}
+
+function blockContainsEscalation(node: any, grammarName: string): boolean {
+  const escalationNodeTypes = new Set(
+    grammarName === "python"
+      ? ["raise_statement"]
+      : ["throw_statement"],
+  );
+  const stack = [node];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    if (escalationNodeTypes.has(current.type)) return true;
+    for (const child of current.namedChildren ?? []) stack.push(child);
+  }
+  return false;
+}
+
+function isGenericCatchClause(node: any, grammarName: string): boolean {
+  if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
+    return node.type === "catch_clause";
+  }
+  if (grammarName === "python") {
+    if (node.type !== "except_clause") return false;
+    const identifier = node.namedChildren?.find((child: any) => child.type === "identifier");
+    if (!identifier) return true;
+    return identifier.text === "Exception" || identifier.text === "BaseException";
+  }
+  if (grammarName === "java") {
+    if (node.type !== "catch_clause") return false;
+    const declaration = node.namedChildren?.find((child: any) => child.type === "catch_formal_parameter");
+    return declaration?.text?.includes("Exception") || declaration?.text?.includes("Throwable");
+  }
+  if (grammarName === "c_sharp") {
+    if (node.type !== "catch_clause") return false;
+    const declaration = node.namedChildren?.find((child: any) => child.type === "catch_declaration");
+    return declaration?.text?.includes("Exception") || declaration?.text?.includes("System.Exception");
+  }
+  if (grammarName === "cpp") {
+    if (node.type !== "catch_clause") return false;
+    const parameterList = node.namedChildren?.find((child: any) => child.type === "parameter_list");
+    return parameterList?.text === "(...)";
+  }
+  return false;
+}
+
+async function validateGenericCatch(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  const extension = extname(fullPath).toLowerCase();
+  if (!isSupportedFile(fullPath)) return [];
+
+  try {
+    return await withSyntaxTree(
+      lineInfo.map((line) => line.text).join("\n"),
+      extension,
+      ({ rootNode, grammarName }) => {
+        if (!["typescript", "javascript", "tsx", "python", "java", "c_sharp", "cpp"].includes(grammarName)) {
+          return [];
+        }
+        const findings: RuleFinding[] = [];
+
+        function visit(node: any): void {
+          if (isGenericCatchClause(node, grammarName)) {
+            const handlerBlock = node.namedChildren?.find((child: any) =>
+              child.type === "block"
+              || child.type === "statement_block"
+              || child.type === "compound_statement",
+            );
+            if (handlerBlock && !blockContainsEscalation(handlerBlock, grammarName)) {
+              findings.push({
+                file,
+                line: node.startPosition.row + 1,
+                rule: "no-generic-catch",
+                severity: "error",
+                message: `${lineInfo[node.startPosition.row]?.trimmed ?? node.type} catches too broadly and swallows the failure instead of escalating it.`,
+              });
+            }
+          }
+
+          for (const child of node.namedChildren ?? []) visit(child);
+        }
+
+        visit(rootNode);
+        return findings;
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed generic catch analysis could not analyze this file: ${message}`,
+    }];
+  }
+}
+
 function computeMaxControlFlowDepth(
   node: any,
   grammarName: string,
@@ -847,20 +1095,6 @@ async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: L
   }
 }
 
-function validateBareExcepts(file: string, lineInfo: LineInfo[]): RuleFinding[] {
-  if (extname(file) !== ".py") return [];
-  return lineInfo.flatMap((line) => {
-    if (!/^\s*except\s*:\s*$/.test(line.text)) return [];
-    return [{
-      file,
-      line: line.lineNumber,
-      rule: "no-generic-catch",
-      severity: "error" as const,
-      message: "Bare except blocks hide failures; catch a specific exception and rethrow or escalate.",
-    }];
-  });
-}
-
 async function validateFunctionMetrics(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   if (!isSupportedFile(fullPath)) return [];
 
@@ -942,7 +1176,8 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     findings.push(...validateWildcardImports(relativePath, lineInfo));
     findings.push(...validateSingleStatementLines(relativePath, lineInfo));
     findings.push(...validateCommentedOutCode(relativePath, lineInfo));
-    findings.push(...validateBareExcepts(relativePath, lineInfo));
+    findings.push(...await validateGenericCatch(relativePath, file, lineInfo));
+    findings.push(...await validateGlobalMutableState(relativePath, file, lineInfo));
     findings.push(...await validateFunctionMetrics(relativePath, file, lineInfo));
     findings.push(...await validateNestingDepth(relativePath, file, lineInfo));
     findings.push(...await validatePublicApiDocs(relativePath, file, lineInfo));

@@ -23,3 +23,9 @@
 [x] 2026-04-13T12:00:10Z Implement `typed_public_interfaces` in `src/tools/static-analysis.ts` for public APIs in languages with explicit type syntax. \
 [x] 2026-04-13T12:00:10Z Add automated coverage for `typed_public_interfaces` across the supported public-API languages. \
 [x] 2026-04-13T12:00:10Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against real repo files. \
+[x] 2026-04-13T12:05:14Z Implement `no_generic_catch` as an AST-backed cross-language static-analysis rule for broad catch handlers that swallow failures. \
+[x] 2026-04-13T12:05:14Z Add automated coverage for `no_generic_catch` across the supported catch-capable languages. \
+[x] 2026-04-13T12:05:14Z Rebuild, rerun the targeted static-analysis tests, and verify the new catch rule against real repo files. \
+[x] 2026-04-13T12:19:39Z Implement `no_global_mutable_state` in `src/tools/static-analysis.ts` for obvious top-level mutable runtime state across the supported languages. \
+[x] 2026-04-13T12:19:39Z Add automated coverage for `no_global_mutable_state` across the supported language set. \
+[x] 2026-04-13T12:19:39Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against real repo files. \
