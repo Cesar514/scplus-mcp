@@ -90,6 +90,9 @@ function splitColumns(line: string): string[] {
   return line.trim().split(/\s{2,}/).map((part) => part.trim()).filter(Boolean);
 }
 
+// Purpose: Query the local Ollama runtime for the currently active loaded model processes.
+// Inputs: No direct inputs beyond the current environment and local `ollama ps` command output.
+// Returns/Effects: Returns the normalized Ollama runtime status or an error-backed empty status.
 async function getOllamaRuntimeStatus(): Promise<OllamaRuntimeStatus> {
   try {
     const { stdout } = await execFileAsync("ollama", ["ps"], {
@@ -123,6 +126,9 @@ function shouldInspectFallbackMarkers(path: string): boolean {
   return !OBSERVABILITY_IGNORE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+// Purpose: Scan repository files for explicit `// FALLBACK` markers used in runtime observability.
+// Inputs: The repository root directory whose tracked source files should be inspected.
+// Returns/Effects: Returns the total fallback marker count and the files that contain them.
 async function inspectFallbackMarkers(rootDir: string): Promise<{ count: number; files: string[] }> {
   const entries = await walkDirectory({ rootDir, depthLimit: 0 });
   const files = entries.filter((entry) => !entry.isDirectory && shouldInspectFallbackMarkers(entry.relativePath));
@@ -156,6 +162,9 @@ async function inspectFallbackMarkers(rootDir: string): Promise<{ count: number;
   };
 }
 
+// Purpose: Compute the age of the currently validated generation in milliseconds.
+// Inputs: The ISO timestamp recorded for the active generation validation event.
+// Returns/Effects: Returns the non-negative generation age or undefined when no timestamp exists.
 function getStaleGenerationAgeMs(validatedAt: string | undefined): number | undefined {
   if (!validatedAt) return undefined;
   const parsed = Date.parse(validatedAt);
@@ -163,6 +172,9 @@ function getStaleGenerationAgeMs(validatedAt: string | undefined): number | unde
   return Math.max(0, Date.now() - parsed);
 }
 
+// Purpose: Derive the per-language parse failure counts from the tree-sitter runtime snapshot.
+// Inputs: The current tree-sitter runtime statistics collected for the doctor report.
+// Returns/Effects: Returns a language-to-failure-count map for languages with parse failures.
 function getParseFailuresByLanguage(treeSitter: TreeSitterRuntimeStats): Record<string, number> {
   return Object.fromEntries(
     Object.entries(treeSitter.languages)
@@ -171,6 +183,9 @@ function getParseFailuresByLanguage(treeSitter: TreeSitterRuntimeStats): Record<
   );
 }
 
+// Purpose: Build the structured doctor report consumed by CLI and bridge status surfaces.
+// Inputs: The repository root directory whose runtime, index, and observability state should be inspected.
+// Returns/Effects: Returns the complete doctor report assembled from repository and runtime diagnostics.
 export async function buildDoctorReport(rootDir: string): Promise<BridgeDoctorReport> {
   const runtime = await createIndexRuntime({ rootDir, mode: "full" });
   const [repoStatus, indexValidation, hubState, restorePoints, ollama, treeSitter, hybridVectors, indexStatus, fallbackMarkers] = await Promise.all([

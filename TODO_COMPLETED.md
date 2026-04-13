@@ -50,5 +50,6 @@
 [x] 2026-04-13T14:43:53Z Rebuild and rerun the static-analysis tests to verify the restored rule behaves correctly. \
 [x] 2026-04-13T14:46:45Z Run the strongest available repository-wide lint scan and capture the aggregate severity and score output. \
 [x] 2026-04-13T14:46:45Z Inspect the worst offending files individually and record the highest-signal rule clusters with file and line references. \
+[x] 2026-04-13T15:08:18Z Re-enumerate every remaining script file that still reports the `function-header-3-lines` lint rule after the manual header passes so the next edits use the current state. \
 [x] 2026-04-13T14:59:12Z Add the required 3-line structured function headers to the warned helpers in `src/tools/static-analysis-core.ts`. \
 [x] 2026-04-13T14:59:12Z Rerun the targeted lint check for `src/tools/static-analysis-core.ts` and verify the `function-header-3-lines` warnings are gone there. \

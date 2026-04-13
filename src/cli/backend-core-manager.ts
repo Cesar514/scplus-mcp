@@ -24,6 +24,9 @@ export class BackendCore {
 
   constructor(private readonly eventSink: EventSink = () => { }) { }
 
+  // Purpose: Close every cached backend session and release their watcher resources.
+  // Inputs: No direct inputs beyond the currently cached per-root backend sessions.
+  // Returns/Effects: Closes active sessions and clears the in-memory session cache.
   async close(): Promise<void> {
     for (const session of this.sessions.values()) {
       await session.close();
@@ -35,6 +38,9 @@ export class BackendCore {
     return buildDoctorReport(rootDir);
   }
 
+  // Purpose: Render the structural tree view for the requested repository root.
+  // Inputs: The repository root directory requested by the caller.
+  // Returns/Effects: Returns the formatted tree payload for that repository root.
   async tree(rootDir: string): Promise<TextPayload> {
     return {
       root: rootDir,
@@ -46,6 +52,9 @@ export class BackendCore {
     };
   }
 
+  // Purpose: Render the feature hub view for the requested repository root.
+  // Inputs: The repository root directory requested by the caller.
+  // Returns/Effects: Returns the formatted hub payload for that repository root.
   async hubs(rootDir: string): Promise<TextPayload> {
     return {
       root: rootDir,
@@ -53,6 +62,9 @@ export class BackendCore {
     };
   }
 
+  // Purpose: Render the semantic cluster view for the requested repository root.
+  // Inputs: The repository root directory requested by the caller.
+  // Returns/Effects: Returns the formatted cluster payload for that repository root.
   async cluster(rootDir: string): Promise<TextPayload> {
     return {
       root: rootDir,
@@ -80,6 +92,9 @@ export class BackendCore {
     return this.getSession(rootDir).setWatchEnabled(enabled, debounceMs);
   }
 
+  // Purpose: Control the current backend job state for the requested repository root.
+  // Inputs: The repository root directory and the requested backend job control action.
+  // Returns/Effects: Returns the resulting job-control payload after applying the action.
   async controlJob(rootDir: string, action: BackendJobControlAction): Promise<JobControlPayload> {
     const session = this.getSession(rootDir);
     if (action === "cancel-pending") {
@@ -91,6 +106,9 @@ export class BackendCore {
     return session.retryLastIndex();
   }
 
+  // Purpose: Resolve or create the cached backend session for one repository root.
+  // Inputs: The repository root directory that should map to a backend session.
+  // Returns/Effects: Returns the cached or newly created backend root session instance.
   private getSession(rootDir: string): BackendRootSession {
     const normalizedRoot = resolve(rootDir);
     let session = this.sessions.get(normalizedRoot);

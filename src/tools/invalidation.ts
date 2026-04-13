@@ -30,22 +30,37 @@ const RUNTIME_JS_IMPORT_EXTENSIONS = new Set([
   ".cjs",
 ]);
 
+// Purpose: Normalize repository-relative paths into forward-slash form for stable indexing.
+// Inputs: A filesystem path that may contain platform-specific separators.
+// Returns/Effects: Returns the normalized repository-relative path string.
 export function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+// Purpose: Compute the stable SHA-256 hash for raw file bytes.
+// Inputs: The file content bytes to hash.
+// Returns/Effects: Returns the hexadecimal digest for the provided bytes.
 export function hashBytes(content: Uint8Array): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
+// Purpose: Compute the stable SHA-256 hash for UTF-8 text content.
+// Inputs: The text content to hash.
+// Returns/Effects: Returns the hexadecimal digest for the provided text.
 export function hashTextContent(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
+// Purpose: Load a file from disk and compute its content hash.
+// Inputs: The file path whose bytes should be read and hashed.
+// Returns/Effects: Reads the file from disk and returns its SHA-256 digest.
 export async function computeFileContentHash(filePath: string): Promise<string> {
   return hashBytes(await readFile(filePath));
 }
 
+// Purpose: Build a deterministic aggregate hash for a file's resolved dependency set.
+// Inputs: The dependency paths plus the current content-hash map for known files.
+// Returns/Effects: Returns a stable hash representing the ordered dependency fingerprint.
 export function buildDependencyHash(dependencyPaths: string[], contentHashes: Record<string, string>): string {
   const encoded = dependencyPaths
     .slice()
@@ -55,6 +70,9 @@ export function buildDependencyHash(dependencyPaths: string[], contentHashes: Re
   return hashTextContent(encoded);
 }
 
+// Purpose: Resolve one local import source against the repository's available file paths.
+// Inputs: The importing file path, the raw import source, and the set of available repository paths.
+// Returns/Effects: Returns the normalized resolved dependency path or null when no local match exists.
 export function resolveLocalDependencyPath(
   fromRelativePath: string,
   source: string,

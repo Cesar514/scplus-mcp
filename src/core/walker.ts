@@ -42,6 +42,9 @@ const ALWAYS_IGNORE = new Set([
   ".parcel-cache",
 ]);
 
+// Purpose: Load repository `.gitignore` rules into the ignore matcher used for directory traversal.
+// Inputs: The repository root directory whose `.gitignore` file should be read.
+// Returns/Effects: Returns an ignore matcher populated with the repository rules when available.
 async function loadIgnoreRules(rootDir: string): Promise<Ignore> {
   const ig = ignore();
   try {
@@ -52,6 +55,9 @@ async function loadIgnoreRules(rootDir: string): Promise<Ignore> {
   return ig;
 }
 
+// Purpose: Detect whether an unknown filesystem error represents a missing path.
+// Inputs: An unknown error value caught from filesystem operations.
+// Returns/Effects: Returns true only when the error exposes the `ENOENT` code.
 function isMissingPathError(error: unknown): boolean {
   return typeof error === "object"
     && error !== null
@@ -59,6 +65,9 @@ function isMissingPathError(error: unknown): boolean {
     && error.code === "ENOENT";
 }
 
+// Purpose: Recursively walk repository directories while honoring ignore rules and depth limits.
+// Inputs: The current directory, repository root, ignore matcher, current depth, and maximum traversal depth.
+// Returns/Effects: Returns an ordered file-entry list for the directory subtree.
 async function walkRecursive(
   dir: string,
   rootDir: string,
@@ -115,6 +124,9 @@ async function walkRecursive(
   return orderedResults;
 }
 
+// Purpose: Walk a repository or scoped subpath into a filtered ordered file-entry listing.
+// Inputs: Walk options containing the repository root plus optional target path and depth limit.
+// Returns/Effects: Resolves ignore rules, validates the start path, and returns the walked file entries.
 export async function walkDirectory(options: WalkOptions): Promise<FileEntry[]> {
   const rootDir = resolve(options.rootDir);
   const startDir = options.targetPath ? resolve(rootDir, options.targetPath) : rootDir;
@@ -129,6 +141,9 @@ export async function walkDirectory(options: WalkOptions): Promise<FileEntry[]> 
   return walkRecursive(startDir, rootDir, ig, 0, options.depthLimit ?? 0);
 }
 
+// Purpose: Group walked file entries by their containing relative directory.
+// Inputs: The ordered file-entry list produced by the repository walker.
+// Returns/Effects: Returns a map keyed by relative directory path containing the matching entries.
 export function groupByDirectory(entries: FileEntry[]): Map<string, FileEntry[]> {
   const groups = new Map<string, FileEntry[]>();
   for (const entry of entries) {

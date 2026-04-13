@@ -22,6 +22,9 @@ export interface BackendSchedulerObservability {
 const MAX_FULL_REBUILD_REASONS = 5;
 const schedulerSnapshots = new Map<string, BackendSchedulerObservability>();
 
+// Purpose: Construct the empty scheduler observability snapshot used for new repository roots.
+// Inputs: No direct inputs beyond the default scheduler metric values encoded in this module.
+// Returns/Effects: Returns a zeroed observability snapshot suitable for initialization.
 function buildDefaultSchedulerObservability(): BackendSchedulerObservability {
   return {
     watchEnabled: false,
@@ -38,6 +41,9 @@ function buildDefaultSchedulerObservability(): BackendSchedulerObservability {
   };
 }
 
+// Purpose: Read the current scheduler observability snapshot for a repository root.
+// Inputs: The repository root whose cached scheduler metrics should be retrieved.
+// Returns/Effects: Returns a defensive copy of the current observability snapshot for that root.
 export function getBackendSchedulerObservability(rootDir: string): BackendSchedulerObservability {
   const snapshot = schedulerSnapshots.get(resolve(rootDir)) ?? buildDefaultSchedulerObservability();
   return {
@@ -47,6 +53,9 @@ export function getBackendSchedulerObservability(rootDir: string): BackendSchedu
   };
 }
 
+// Purpose: Update the scheduler observability snapshot for a repository root with normalized bounds.
+// Inputs: The repository root and an updater function that derives the next snapshot from the current one.
+// Returns/Effects: Stores the normalized snapshot in memory and returns a defensive copy of it.
 export function updateBackendSchedulerObservability(
   rootDir: string,
   updater: (current: BackendSchedulerObservability) => BackendSchedulerObservability,
@@ -66,6 +75,9 @@ export function updateBackendSchedulerObservability(
   return getBackendSchedulerObservability(normalizedRootDir);
 }
 
+// Purpose: Clear cached scheduler observability for one repository root or for every root.
+// Inputs: An optional repository root whose snapshot should be removed.
+// Returns/Effects: Deletes one normalized snapshot or clears the entire in-memory cache.
 export function resetBackendSchedulerObservability(rootDir?: string): void {
   if (!rootDir) {
     schedulerSnapshots.clear();

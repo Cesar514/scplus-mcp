@@ -68,6 +68,9 @@ export class BackendRootSession {
     private readonly emitEvent: EventSink,
   ) { }
 
+  // Purpose: Enable or disable the repository watcher and emit the resulting watch state snapshot.
+  // Inputs: The desired enabled state plus an optional debounce override for the watcher.
+  // Returns/Effects: Starts or stops watcher resources, emits watch-state events, and returns the new state payload.
   async setWatchEnabled(enabled: boolean, debounceMs?: number): Promise<WatchStatePayload> {
     this.assertOpen();
     if (enabled) {
@@ -101,6 +104,9 @@ export class BackendRootSession {
     return { root: this.rootDir, enabled: false };
   }
 
+  // Purpose: Run the next manual prepared-index operation using either a full rebuild or incremental refresh.
+  // Inputs: An optional manual index mode that selects auto, full, or refresh behavior.
+  // Returns/Effects: Launches the selected backend job and resolves with its human-readable summary output.
   async runManualIndex(mode: ManualIndexMode = "auto"): Promise<string> {
     this.assertOpen();
     if (this.activeJob) {
@@ -121,6 +127,9 @@ export class BackendRootSession {
     }, "manual");
   }
 
+  // Purpose: Refresh cluster-oriented prepared-index artifacts and return the rendered semantic cluster report.
+  // Inputs: No direct inputs beyond the session root and configured backend event sink.
+  // Returns/Effects: Emits cluster job progress events, refreshes search artifacts, and returns rendered cluster text.
   async runManualCluster(): Promise<TextPayload> {
     this.assertOpen();
     if (this.activeJob) {
@@ -257,6 +266,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Cancel any queued or pending watch-triggered backend job before it starts running.
+  // Inputs: No direct inputs beyond the current session queue and pending watch paths.
+  // Returns/Effects: Clears pending watch work, emits cancellation events when needed, and returns queue state details.
   async cancelPendingJob(): Promise<JobControlPayload> {
     this.assertOpen();
     const pendingPaths = this.getLatestPendingPaths();
@@ -297,6 +309,9 @@ export class BackendRootSession {
     return this.buildJobControlPayload("cancel-pending", message);
   }
 
+  // Purpose: Replace stale pending watch work with a fresh plan built from the latest file changes.
+  // Inputs: No direct inputs beyond the active job state and accumulated pending watch paths.
+  // Returns/Effects: Cancels older queued work, queues or launches the newest watch plan, and returns control metadata.
   async supersedePendingJob(): Promise<JobControlPayload> {
     this.assertOpen();
     const pendingPaths = this.getLatestPendingPaths();
@@ -360,6 +375,9 @@ export class BackendRootSession {
     return this.buildJobControlPayload("supersede-pending", message);
   }
 
+  // Purpose: Re-run the last manual prepared-index operation using the session's most recent mode.
+  // Inputs: No direct inputs beyond the stored last manual index mode.
+  // Returns/Effects: Starts the remembered manual index flow and returns control metadata after it begins.
   async retryLastIndex(): Promise<JobControlPayload> {
     this.assertOpen();
     if (this.activeJob) {
@@ -371,6 +389,9 @@ export class BackendRootSession {
     return this.buildJobControlPayload("retry-last", `retried last prepared-index sync with ${mode} strategy`);
   }
 
+  // Purpose: Close the session and release any watcher resources or observability state it owns.
+  // Inputs: No direct inputs beyond the session lifecycle state.
+  // Returns/Effects: Stops active watcher resources, marks the session closed, and clears scheduler observability.
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -378,12 +399,18 @@ export class BackendRootSession {
     resetBackendSchedulerObservability(this.rootDir);
   }
 
+  // Purpose: Guard public session operations from running after the session has been closed.
+  // Inputs: No direct inputs beyond the session closed flag.
+  // Returns/Effects: Throws when callers try to operate on a closed backend session.
   private assertOpen(): void {
     if (this.closed) {
       throw new Error(`Backend session for ${this.rootDir} is closed.`);
     }
   }
 
+  // Purpose: Forward backend events to the configured sink while containing sink failures inside the session.
+  // Inputs: A backend event payload ready to be delivered to the shared event sink.
+  // Returns/Effects: Awaits sink delivery and logs sink failures instead of crashing the current flow.
   private async emit(event: BackendEvent): Promise<void> {
     try {
       await this.emitEvent(event);
@@ -392,6 +419,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Check whether the repository currently has a valid prepared full index available for incremental work.
+  // Inputs: No direct inputs beyond the session root directory and default prepared-index mode.
+  // Returns/Effects: Returns true when validation succeeds and false when validation fails or throws.
   private async hasValidPreparedFullIndex(): Promise<boolean> {
     try {
       const report = await validatePreparedIndex({ rootDir: this.rootDir, mode: DEFAULT_INDEX_MODE });
@@ -401,6 +431,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Emit a structured backend log event tied to the current queue depth and root.
+  // Inputs: A log message plus an optional severity level.
+  // Returns/Effects: Queues a log event for observers without blocking the caller on event delivery.
   private emitLog(message: string, level: "error" | "info" = "info"): void {
     void this.emit({
       kind: "log",
@@ -411,6 +444,9 @@ export class BackendRootSession {
     });
   }
 
+  // Purpose: Acquire the repository mutation lock required for index, refresh, and cluster operations.
+  // Inputs: A human-readable lock holder label describing the current backend operation.
+  // Returns/Effects: Returns the acquired lock handle and emits error logs when contention occurs.
   private async acquireMutationLock(holder: string): Promise<RepoRuntimeLockHandle> {
     return acquireRepoRuntimeLock(this.rootDir, "mutation", {
       holder,
@@ -425,18 +461,27 @@ export class BackendRootSession {
     });
   }
 
+  // Purpose: Stop any active debounce timer before queue state changes or watcher shutdown.
+  // Inputs: No direct inputs beyond the current debounce timer handle.
+  // Returns/Effects: Clears the timer and resets the stored handle to null.
   private clearDebounceTimer(): void {
     if (!this.debounceTimer) return;
     clearTimeout(this.debounceTimer);
     this.debounceTimer = null;
   }
 
+  // Purpose: Report the newest pending watch paths, falling back to the most recent flushed watch batch when needed.
+  // Inputs: No direct inputs beyond pending queue state and the last watch batch snapshot.
+  // Returns/Effects: Returns a deduplicated list of paths representing the latest queued or just-flushed watch work.
   private getLatestPendingPaths(): string[] {
     const currentPending = this.getCurrentPendingPaths();
     if (currentPending.length > 0) return currentPending;
     return [...this.lastWatchBatch];
   }
 
+  // Purpose: Build the current deduplicated watch pending-path list from queued and buffered changes.
+  // Inputs: No direct inputs beyond the pending path set and any queued watch plan.
+  // Returns/Effects: Returns the current set of pending watch paths in stable deduplicated form.
   private getCurrentPendingPaths(): string[] {
     return dedupePaths([
       ...this.pendingPaths,
@@ -444,6 +489,9 @@ export class BackendRootSession {
     ]);
   }
 
+  // Purpose: Assemble the response payload for queue-control commands such as cancel, supersede, and retry.
+  // Inputs: The control action identifier and the human-readable message describing the queue change.
+  // Returns/Effects: Returns a snapshot of queue, mode, and pending-path state for the caller.
   private buildJobControlPayload(action: BackendJobControlAction, message: string): JobControlPayload {
     const pendingPaths = this.getLatestPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
@@ -466,6 +514,9 @@ export class BackendRootSession {
     return this.pendingPaths.size > 0 || this.queuedWatchPlan ? 1 : 0;
   }
 
+  // Purpose: Push the latest watcher and queue counters into backend scheduler observability state.
+  // Inputs: No direct inputs beyond the current session queue, watcher flags, and scheduler counters.
+  // Returns/Effects: Updates the shared scheduler observability record for this repository root.
   private syncSchedulerObservability(): void {
     const pendingPaths = this.getCurrentPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
@@ -485,6 +536,9 @@ export class BackendRootSession {
     }));
   }
 
+  // Purpose: Record a new full-rebuild reason in scheduler observability for later diagnostics.
+  // Inputs: The human-readable reason describing why a full rebuild was required.
+  // Returns/Effects: Appends the rebuild reason to the shared scheduler observability record.
   private recordFullRebuildReason(reason: string): void {
     const pendingPaths = this.getCurrentPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
@@ -505,6 +559,9 @@ export class BackendRootSession {
     }));
   }
 
+  // Purpose: Add a changed path to the pending watch buffer while tracking deduplication metrics.
+  // Inputs: A normalized repository-relative path detected as changed by the watcher scan.
+  // Returns/Effects: Updates pending path state, dedupe counters, and scheduler observability.
   private trackPendingPath(path: string): void {
     if (this.pendingPaths.has(path)) {
       this.dedupedPathEvents++;
@@ -513,6 +570,9 @@ export class BackendRootSession {
     this.syncSchedulerObservability();
   }
 
+  // Purpose: Start polling-based watch scanning for the repository and seed the initial file snapshot.
+  // Inputs: An optional debounce override used to tune watcher polling and batch timing.
+  // Returns/Effects: Acquires the watcher lock, captures the initial snapshot, and schedules polling timers.
   private async startWatcher(debounceMs?: number): Promise<void> {
     if (this.watchEnabled) return;
     this.watchDebounceMs = debounceMs ?? this.watchDebounceMs;
@@ -550,6 +610,9 @@ export class BackendRootSession {
     this.scanTimer.unref?.();
   }
 
+  // Purpose: Stop polling-based watch scanning and release all watcher-owned resources.
+  // Inputs: No direct inputs beyond the session watcher state and timer handles.
+  // Returns/Effects: Clears timers, resets watch queues and snapshots, updates observability, and releases the watcher lock.
   private async stopWatcher(): Promise<void> {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -572,6 +635,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Restart the debounce window used to batch watch-triggered file changes into one job plan.
+  // Inputs: No direct inputs beyond the current debounce interval and timer handle.
+  // Returns/Effects: Schedules a deferred batch flush and replaces any prior pending debounce timer.
   private resetWatchDebounce(): void {
     this.clearDebounceTimer();
     this.debounceTimer = setTimeout(() => {
@@ -581,6 +647,9 @@ export class BackendRootSession {
     this.debounceTimer.unref?.();
   }
 
+  // Purpose: Convert the buffered watch changes into a batch event and either queue or launch the resulting plan.
+  // Inputs: No direct inputs beyond the buffered pending paths and any currently active backend job.
+  // Returns/Effects: Emits a watch-batch event, updates queue state, and starts or queues the next watch plan.
   private async flushWatchBatch(): Promise<void> {
     if (this.pendingPaths.size === 0) return;
     const changedPaths = Array.from(this.pendingPaths).sort();
@@ -649,6 +718,9 @@ export class BackendRootSession {
     void this.runWatchPlan(plan);
   }
 
+  // Purpose: Execute a queued watch plan by dispatching it to refresh or full-index handling.
+  // Inputs: The watch execution plan that was built from recent file changes.
+  // Returns/Effects: Runs the appropriate backend job and relies on emitted events to surface failures.
   private async runWatchPlan(plan: WatchExecutionPlan): Promise<void> {
     try {
       if (plan.job === "refresh") {
@@ -661,6 +733,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Build a recursive file fingerprint snapshot for the repository paths that the watcher tracks.
+  // Inputs: An optional directory to scan plus the snapshot map being populated during recursion.
+  // Returns/Effects: Traverses tracked files, records fingerprints, and returns the completed snapshot map.
   private async scanSnapshot(directoryPath: string = this.rootDir, snapshot: Map<string, string> = new Map()): Promise<Map<string, string>> {
     const entries = await readdir(directoryPath, { withFileTypes: true }).catch((error) => {
       if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return [];
@@ -685,6 +760,9 @@ export class BackendRootSession {
     return snapshot;
   }
 
+  // Purpose: Poll the repository for tracked file changes and queue them for batched watch processing.
+  // Inputs: No direct inputs beyond watcher state, the previous snapshot, and current queue buffers.
+  // Returns/Effects: Updates snapshots, tracks changed paths, resets debounce, and disables the watcher on fatal scan errors.
   private async scanForChanges(): Promise<void> {
     if (!this.watchEnabled || this.closed || this.scanRunning) return;
     this.scanRunning = true;
@@ -722,6 +800,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Run an incremental refresh using prepared-index artifacts and emit staged progress updates.
+  // Inputs: The watch execution plan to refresh plus an optional source label for manual versus watch flows.
+  // Returns/Effects: Acquires the mutation lock, refreshes prepared artifacts, emits progress events, and returns a summary string.
   private async runRefresh(plan: WatchExecutionPlan, source: "manual" | "watch" = "watch"): Promise<string> {
     const mutationLock = await this.acquireMutationLock(source === "manual" ? "bridge manual refresh" : "bridge watch refresh");
     const stageCount = 3;
@@ -853,6 +934,9 @@ export class BackendRootSession {
     }
   }
 
+  // Purpose: Run a full prepared-index rebuild for the repository and emit end-to-end progress updates.
+  // Inputs: The index mode, the initiating source, and an optional override for the rebuild reason text.
+  // Returns/Effects: Acquires the mutation lock, runs the index pipeline, emits job events, and returns the index output.
   private async runIndex(mode: IndexMode, source: "manual" | "watch", rebuildReasonOverride?: string): Promise<string> {
     const mutationLock = await this.acquireMutationLock(source === "manual" ? "bridge manual index" : "bridge watch index");
     this.activeJob = "index";

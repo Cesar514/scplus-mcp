@@ -10,6 +10,9 @@ type InstructionsSectionProps = {
   instructions: string;
 };
 
+// Purpose: Render the landing section that mirrors the repository instruction file.
+// Inputs: The instruction markdown string loaded by the landing page route.
+// Returns/Effects: Returns the copyable instructions panel shown on the landing page.
 export default function InstructionsSection({ instructions }: InstructionsSectionProps) {
   const [copied, setCopied] = useState(false);
 

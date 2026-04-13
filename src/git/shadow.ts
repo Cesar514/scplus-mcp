@@ -19,15 +19,24 @@ export interface RestorePoint {
   message: string;
 }
 
+// Purpose: Load the persisted restore-point manifest for the repository.
+// Inputs: The repository root whose restore-point manifest should be read.
+// Returns/Effects: Returns the persisted restore-point list from the index artifact store.
 async function loadManifest(rootDir: string): Promise<RestorePoint[]> {
   return loadIndexArtifact(rootDir, "restore-points", () => []);
 }
 
+// Purpose: Persist the restore-point manifest and prune orphaned restore-point backups.
+// Inputs: The repository root plus the updated restore-point list to save.
+// Returns/Effects: Writes the manifest artifact and removes backups for deleted restore points.
 async function saveManifest(rootDir: string, points: RestorePoint[]): Promise<void> {
   await saveIndexArtifact(rootDir, "restore-points", points);
   await pruneRestorePointBackups(rootDir, points.map((point) => point.id));
 }
 
+// Purpose: Create a restore point capturing the current contents of the listed files.
+// Inputs: The repository root, the file paths to snapshot, and the restore-point message.
+// Returns/Effects: Saves file backups, updates the manifest, and returns the created restore point.
 export async function createRestorePoint(rootDir: string, files: string[], message: string): Promise<RestorePoint> {
   await ensureScplusLayout(rootDir);
   const id = `rp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -63,6 +72,9 @@ export async function createRestorePoint(rootDir: string, files: string[], messa
   return point;
 }
 
+// Purpose: Restore file contents from one previously created restore point.
+// Inputs: The repository root and the restore-point id to apply.
+// Returns/Effects: Restores backed-up file contents to disk, refreshes prepared indexes, and returns restored paths.
 export async function restorePoint(rootDir: string, pointId: string): Promise<string[]> {
   return runSerializedRootMutation(rootDir, async () => {
     const manifest = await loadManifest(rootDir);
@@ -92,10 +104,16 @@ export async function restorePoint(rootDir: string, pointId: string): Promise<st
   });
 }
 
+// Purpose: List all restore points recorded for the repository.
+// Inputs: The repository root whose restore-point manifest should be read.
+// Returns/Effects: Returns the current restore-point manifest entries.
 export async function listRestorePoints(rootDir: string): Promise<RestorePoint[]> {
   return loadManifest(rootDir);
 }
 
+// Purpose: Save a shadow-history git commit that preserves current local changes on a dedicated branch.
+// Inputs: The repository root plus the descriptive shadow-commit message.
+// Returns/Effects: Stashes changes, commits them onto the shadow branch when needed, and reports success or failure.
 export async function shadowCommit(rootDir: string, message: string): Promise<boolean> {
   try {
     const git: SimpleGit = simpleGit(rootDir);

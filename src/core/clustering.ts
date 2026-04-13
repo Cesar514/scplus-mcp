@@ -10,18 +10,27 @@ export interface ClusterResult {
 const MAX_KMEANS_ITERATIONS = 20;
 const STABLE_CLUSTER_SIZE_HINT = 24;
 
+// Purpose: Compute the squared Euclidean norm used by vector normalization and comparisons.
+// Inputs: A numeric embedding vector.
+// Returns/Effects: Returns the sum of squared component values for the provided vector.
 function squaredNorm(vector: number[]): number {
   let total = 0;
   for (const value of vector) total += value * value;
   return total;
 }
 
+// Purpose: Normalize a vector onto the unit sphere for cosine-similarity clustering.
+// Inputs: A numeric embedding vector.
+// Returns/Effects: Returns a normalized vector, or a zero vector when the norm is effectively zero.
 function normalizeVector(vector: number[]): number[] {
   const norm = Math.sqrt(squaredNorm(vector));
   if (norm <= 1e-10) return new Array(vector.length).fill(0);
   return vector.map((value) => value / norm);
 }
 
+// Purpose: Compute cosine-style dot-product similarity between two normalized vectors.
+// Inputs: Two numeric embedding vectors that may differ in length.
+// Returns/Effects: Returns the summed pairwise product across the shared dimensions.
 function cosine(a: number[], b: number[]): number {
   let dot = 0;
   const limit = Math.min(a.length, b.length);
@@ -29,6 +38,9 @@ function cosine(a: number[], b: number[]): number {
   return dot;
 }
 
+// Purpose: Choose a stable cluster count for deterministic k-means based on corpus size.
+// Inputs: The number of vectors being clustered and the maximum allowed cluster count.
+// Returns/Effects: Returns the derived cluster count constrained by the configured limits.
 function chooseClusterCount(vectorCount: number, maxClusters: number): number {
   if (vectorCount <= 1) return vectorCount;
   if (vectorCount <= maxClusters) return vectorCount;
@@ -36,6 +48,9 @@ function chooseClusterCount(vectorCount: number, maxClusters: number): number {
   return Math.min(maxClusters, Math.max(2, derived));
 }
 
+// Purpose: Seed deterministic centroid candidates using farthest-point initialization.
+// Inputs: The normalized vector set and the desired number of clusters.
+// Returns/Effects: Returns an ordered centroid list chosen from the input vectors.
 function chooseInitialCentroids(vectors: number[][], clusterCount: number): number[][] {
   const centroids: number[][] = [[...vectors[0]]];
   const minDistances = new Array(vectors.length).fill(Infinity);
@@ -65,6 +80,9 @@ function chooseInitialCentroids(vectors: number[][], clusterCount: number): numb
   return centroids;
 }
 
+// Purpose: Assign each vector to the centroid with the highest cosine similarity score.
+// Inputs: The normalized vector set and the current centroid list.
+// Returns/Effects: Returns the cluster index assignment for every input vector.
 function assignVectors(vectors: number[][], centroids: number[][]): number[] {
   const assignments = new Array(vectors.length).fill(0);
   for (let index = 0; index < vectors.length; index++) {
@@ -82,6 +100,9 @@ function assignVectors(vectors: number[][], centroids: number[][]): number[] {
   return assignments;
 }
 
+// Purpose: Rebuild normalized centroids from the current cluster assignments.
+// Inputs: The normalized vectors, their cluster assignments, and the expected cluster count.
+// Returns/Effects: Returns a normalized centroid vector for each non-empty cluster.
 function buildCentroids(vectors: number[][], assignments: number[], clusterCount: number): number[][] {
   const sums = Array.from({ length: clusterCount }, () => new Array(vectors[0].length).fill(0));
   const counts = new Array(clusterCount).fill(0);
@@ -103,6 +124,9 @@ function buildCentroids(vectors: number[][], assignments: number[], clusterCount
   return centroids;
 }
 
+// Purpose: Remap sparse cluster ids into a compact consecutive cluster index space.
+// Inputs: The raw assignment array produced by the current clustering pass.
+// Returns/Effects: Returns compacted assignments plus the resulting compact cluster count.
 function compactAssignments(assignments: number[]): { compacted: number[]; clusterCount: number } {
   const remap = new Map<number, number>();
   const compacted = new Array(assignments.length);
@@ -118,6 +142,9 @@ function compactAssignments(assignments: number[]): { compacted: number[]; clust
   return { compacted, clusterCount: nextCluster };
 }
 
+// Purpose: Run deterministic k-means until assignments stabilize or iteration limits are reached.
+// Inputs: The normalized vector set and the requested cluster count.
+// Returns/Effects: Returns the final assignment array for all input vectors.
 function runDeterministicKMeans(vectors: number[][], clusterCount: number): number[] {
   let centroids = chooseInitialCentroids(vectors, clusterCount);
   if (centroids.length === 0) return new Array(vectors.length).fill(0);
@@ -139,6 +166,9 @@ function runDeterministicKMeans(vectors: number[][], clusterCount: number): numb
   return assignments;
 }
 
+// Purpose: Cluster embedding vectors into deterministic groups suitable for semantic navigation.
+// Inputs: The embedding vectors plus an optional maximum cluster count.
+// Returns/Effects: Returns cluster membership lists that group related vector indices together.
 export function clusterVectors(vectors: number[][], maxClusters: number = 20): ClusterResult[] {
   const vectorCount = vectors.length;
   if (vectorCount <= 1) return [{ indices: Array.from({ length: vectorCount }, (_, index) => index) }];
@@ -160,6 +190,9 @@ export function clusterVectors(vectors: number[][], maxClusters: number = 20): C
     .map((indices) => ({ indices }));
 }
 
+// Purpose: Derive a readable shared path pattern for a group of repository-relative file paths.
+// Inputs: The path list that should be summarized into one common pattern.
+// Returns/Effects: Returns a shared prefix or suffix pattern, or null when no useful pattern exists.
 export function findPathPattern(paths: string[]): string | null {
   if (paths.length <= 1) return null;
 

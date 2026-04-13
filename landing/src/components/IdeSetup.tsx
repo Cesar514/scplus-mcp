@@ -20,6 +20,9 @@ const runners = [
   { id: "bunx", label: "bunx" },
 ];
 
+// Purpose: Build the IDE-specific MCP configuration snippet shown in the landing setup UI.
+// Inputs: The selected command runner and the active IDE identifier from the setup panel.
+// Returns/Effects: Returns the configuration text displayed for the chosen integration target.
 function buildConfig(runner: string, ideId: string): string {
   const isNpx = runner === "npx";
 
@@ -101,12 +104,18 @@ function buildConfig(runner: string, ideId: string): string {
   );
 }
 
+// Purpose: Build the one-line initialization command shown alongside the config snippet.
+// Inputs: The selected command runner and the target agent or IDE identifier.
+// Returns/Effects: Returns the init command text displayed in the setup panel.
 function buildInitCommand(runner: string, agent: string): string {
   return runner === "npx"
     ? `npx -y scplus-mcp init ${agent}`
     : `bunx scplus-mcp init ${agent}`;
 }
 
+// Purpose: Render JSON configuration text with syntax highlighting for the setup code block.
+// Inputs: The raw JSON configuration string selected in the setup panel.
+// Returns/Effects: Returns React nodes that colorize the JSON snippet for display.
 function highlightJson(json: string): ReactNode[] {
   const tokenRegex =
     /"(?:[^"\\]|\\.)*"\s*:|"(?:[^"\\]|\\.)*"|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?|[{}[\]:,]/g;
@@ -163,6 +172,9 @@ function highlightJson(json: string): ReactNode[] {
   return parts;
 }
 
+// Purpose: Render TOML configuration text with syntax highlighting for the setup code block.
+// Inputs: The raw TOML configuration string selected in the setup panel.
+// Returns/Effects: Returns React nodes that colorize the TOML snippet for display.
 function highlightToml(toml: string): ReactNode[] {
   const tokenRegex =
     /^\s*\[[^\]]+\]|\b[A-Z0-9_]+\b\s*=|"(?:[^"\\]|\\.)*"|\btrue\b|\bfalse\b|-?\d+(?:\.\d+)?/gm;
@@ -213,6 +225,9 @@ function highlightToml(toml: string): ReactNode[] {
   return parts;
 }
 
+// Purpose: Render the interactive IDE setup section for the landing page.
+// Inputs: No direct inputs beyond the component-local setup state selected by the visitor.
+// Returns/Effects: Returns the setup UI, copy actions, and highlighted config snippets.
 export default function IdeSetup() {
   const [activeIde, setActiveIde] = useState("claude");
   const [activeRunner, setActiveRunner] = useState("bunx");

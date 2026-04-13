@@ -88,6 +88,9 @@ const toolGroupsDark = [
   },
 ];
 
+// Purpose: Render the grouped tool diagram that summarizes the public scplus surface.
+// Inputs: No direct inputs beyond the current landing theme reflected on the document root.
+// Returns/Effects: Returns the themed tool-group diagram shown in the landing content.
 export default function ToolDiagram() {
   const [isDark, setIsDark] = useState(false);
 

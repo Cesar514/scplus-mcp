@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Purpose: Render the root landing layout with fonts and the shared theme provider.
+// Inputs: The child React node tree supplied by the Next.js app router.
+// Returns/Effects: Returns the root HTML shell for every landing page route.
 export default function RootLayout({
   children,
 }: Readonly<{

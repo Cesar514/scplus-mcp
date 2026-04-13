@@ -6,6 +6,9 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 
+// Purpose: Track whether the landing page is currently using the dark theme variant.
+// Inputs: No direct inputs beyond the document theme attribute observed in the browser.
+// Returns/Effects: Returns a boolean that reflects the active landing theme.
 function useTheme() {
   const [isDark, setIsDark] = useState(false);
 
@@ -89,6 +92,9 @@ const functions = [
   },
 ];
 
+// Purpose: Derive card sizing values for the isometric diagram at the current viewport width.
+// Inputs: The current browser viewport width measured for the landing page.
+// Returns/Effects: Returns the card size and stack offsets used to render the diagram.
 function getCardConfig(width: number) {
   if (width >= 1800) return { cardSize: 360, stackDx: -24, stackDy: 24 };
   if (width >= 1400) return { cardSize: 300, stackDx: -21, stackDy: 21 };
@@ -98,6 +104,9 @@ function getCardConfig(width: number) {
   return { cardSize: 220, stackDx: -14, stackDy: 14 };
 }
 
+// Purpose: Render the animated isometric card stack that showcases key scplus tools.
+// Inputs: No direct inputs beyond browser sizing and local animation state.
+// Returns/Effects: Returns the interactive isometric diagram used on the landing homepage.
 export default function IsometricDiagram() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);

@@ -83,6 +83,9 @@ export function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// Purpose: Return the first non-empty trimmed line from a block of report text.
+// Inputs: The multi-line text block that should be summarized.
+// Returns/Effects: Returns the first non-empty trimmed line or an empty string.
 export function firstNonEmptyLine(text: string): string {
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -95,6 +98,9 @@ export function formatFileFingerprint(size: number, mtimeMs: number): string {
   return `${size}:${mtimeMs}`;
 }
 
+// Purpose: Format file-search progress into a compact line for backend job events.
+// Inputs: The file-search indexing progress payload emitted by the backend.
+// Returns/Effects: Returns a human-readable summary of file-search progress.
 export function formatFileProgress(progress: FileSearchIndexProgress): string {
   return [
     progress.phase,
@@ -105,6 +111,9 @@ export function formatFileProgress(progress: FileSearchIndexProgress): string {
   ].join(" | ");
 }
 
+// Purpose: Format identifier-search progress into a compact line for backend job events.
+// Inputs: The identifier indexing progress payload emitted by the backend.
+// Returns/Effects: Returns a human-readable summary of identifier indexing progress.
 export function formatIdentifierProgress(progress: IdentifierIndexProgress): string {
   return [
     progress.phase,
@@ -115,6 +124,9 @@ export function formatIdentifierProgress(progress: IdentifierIndexProgress): str
   ].join(" | ");
 }
 
+// Purpose: Format full-index progress into a compact line for backend job events.
+// Inputs: The full-index progress payload emitted by the backend.
+// Returns/Effects: Returns a human-readable summary of full-index progress.
 export function formatFullProgress(progress: FullIndexProgress): string {
   return [
     progress.phase,
@@ -126,6 +138,9 @@ export function formatFullProgress(progress: FullIndexProgress): string {
   ].join(" | ");
 }
 
+// Purpose: Convert processed and total counts into an integer completion percentage.
+// Inputs: The processed item count and the total item count for a backend job stage.
+// Returns/Effects: Returns the bounded completion percentage when both counts are usable.
 export function calculatePercentComplete(
   processedItems: number | undefined,
   totalItems: number | undefined,
@@ -135,6 +150,9 @@ export function calculatePercentComplete(
   return Math.max(0, Math.min(100, raw));
 }
 
+// Purpose: Scale one stage-local percentage into the overall refresh job percentage range.
+// Inputs: The stage index, total stage count, and the percentage reported for the current stage.
+// Returns/Effects: Returns the bounded overall refresh percentage for the current stage.
 export function scaleRefreshPercent(
   stageIndex: number,
   stageCount: number,

@@ -35,6 +35,9 @@ export interface BlastRadiusReport {
   files: BlastRadiusFileUsage[];
 }
 
+// Purpose: Render the blast-radius report into the terminal-facing summary format.
+// Inputs: The structured blast-radius report for one symbol query.
+// Returns/Effects: Returns the formatted human-readable blast-radius summary text.
 export function formatBlastRadiusReport(report: BlastRadiusReport): string {
   if (report.usageCount === 0) return `Symbol "${report.symbolName}" is not used anywhere in the codebase.`;
 
@@ -56,6 +59,9 @@ export function formatBlastRadiusReport(report: BlastRadiusReport): string {
   return lines.join("\n");
 }
 
+// Purpose: Scan the repository for usages of one symbol and group them by file.
+// Inputs: Blast-radius options including the root directory, symbol name, and optional definition file.
+// Returns/Effects: Walks supported files, records symbol usages, and returns the grouped report.
 export async function buildBlastRadiusReport(options: BlastRadiusOptions): Promise<BlastRadiusReport> {
   const entries = await walkDirectory({ rootDir: options.rootDir, depthLimit: 0 });
   const files = entries.filter((e) => !e.isDirectory && isSupportedFile(e.path));
@@ -110,6 +116,9 @@ export async function buildBlastRadiusReport(options: BlastRadiusOptions): Promi
   };
 }
 
+// Purpose: Produce the formatted blast-radius output for a symbol query.
+// Inputs: Blast-radius options including the root directory, symbol name, and optional definition file.
+// Returns/Effects: Builds the structured report and returns its formatted text.
 export async function getBlastRadius(options: BlastRadiusOptions): Promise<string> {
   return formatBlastRadiusReport(await buildBlastRadiusReport(options));
 }
@@ -118,6 +127,9 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Purpose: Detect whether a line appears to declare the queried symbol instead of using it.
+// Inputs: One source line plus the symbol name being searched.
+// Returns/Effects: Returns true when the line matches one of the supported definition patterns.
 function isDefinitionLine(line: string, symbolName: string): boolean {
   const definitionPatterns = [
     new RegExp(`(?:function|class|enum|interface|struct|type|trait|fn|def|func)\\s+${escapeRegex(symbolName)}`),

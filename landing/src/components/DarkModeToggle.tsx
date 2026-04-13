@@ -6,6 +6,9 @@
 
 import { useTheme } from "./ThemeProvider";
 
+// Purpose: Render the landing header control that flips between light and dark themes.
+// Inputs: No direct inputs beyond the theme context provided by the shared provider.
+// Returns/Effects: Returns an interactive button that toggles the landing theme state.
 export default function DarkModeToggle() {
   const { theme, toggleTheme } = useTheme();
 

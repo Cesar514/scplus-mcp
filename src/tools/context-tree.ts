@@ -25,10 +25,16 @@ interface TreeNode {
 
 const CHARS_PER_TOKEN = 4;
 
+// Purpose: Estimate token usage for rendered tree text using the repo's fixed character heuristic.
+// Inputs: The rendered tree text whose size should be approximated.
+// Returns/Effects: Returns the estimated token count for the provided text.
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
+// Purpose: Build the in-memory repository tree enriched with file headers and optional symbols.
+// Inputs: Walked file entries, the repository root, and whether symbol rendering is enabled.
+// Returns/Effects: Returns the populated tree structure used for final text rendering.
 async function buildTree(entries: FileEntry[], _rootDir: string, includeSymbols: boolean): Promise<TreeNode> {
   const root: TreeNode = { name: ".", relativePath: ".", isDirectory: true, children: [] };
   const dirMap = new Map<string, TreeNode>();
@@ -70,6 +76,9 @@ async function buildTree(entries: FileEntry[], _rootDir: string, includeSymbols:
   return root;
 }
 
+// Purpose: Render the tree structure into the human-readable repository tree text format.
+// Inputs: One tree node plus an optional indentation depth for recursive rendering.
+// Returns/Effects: Returns the rendered tree text for the node and all descendants.
 function renderTree(node: TreeNode, indent: number = 0): string {
   let result = "";
   const pad = "  ".repeat(indent);
@@ -95,17 +104,26 @@ function renderTree(node: TreeNode, indent: number = 0): string {
   return result;
 }
 
+// Purpose: Remove symbol payloads from the tree when the full rendering exceeds the token budget.
+// Inputs: The tree node whose symbol data should be pruned recursively.
+// Returns/Effects: Mutates the tree in place to clear symbol strings from every node.
 function pruneSymbols(node: TreeNode): void {
   node.symbols = undefined;
   for (const child of node.children) pruneSymbols(child);
 }
 
+// Purpose: Remove header and symbol payloads from the tree for the most compact rendering level.
+// Inputs: The tree node whose header and symbol data should be pruned recursively.
+// Returns/Effects: Mutates the tree in place to clear header and symbol strings from every node.
 function pruneHeaders(node: TreeNode): void {
   node.header = undefined;
   node.symbols = undefined;
   for (const child of node.children) pruneHeaders(child);
 }
 
+// Purpose: Produce the token-aware repository tree rendering for the selected root and path scope.
+// Inputs: Tree options including root, optional path scope, depth limit, symbol flag, and token budget.
+// Returns/Effects: Walks the repository, renders the tree, and progressively prunes detail to fit the token budget.
 export async function getContextTree(options: ContextTreeOptions): Promise<string> {
   const entries = await walkDirectory({
     rootDir: options.rootDir,

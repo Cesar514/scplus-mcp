@@ -30,6 +30,9 @@ const AGENT_CONFIG_PATH: Record<AgentTarget, string> = {
   codex: ".codex/config.toml",
 };
 
+// Purpose: Parse the user-selected agent target into one supported configuration target.
+// Inputs: The optional raw agent target string supplied on the command line.
+// Returns/Effects: Returns the normalized agent target or throws for unsupported values.
 export function parseAgentTarget(input?: string): AgentTarget {
   const normalized = (input ?? "claude").toLowerCase();
   if (normalized === "claude" || normalized === "claude-code") return "claude";
@@ -41,6 +44,9 @@ export function parseAgentTarget(input?: string): AgentTarget {
   throw new Error(`Unsupported coding agent "${input}". Use one of: claude, cursor, vscode, windsurf, opencode, codex.`);
 }
 
+// Purpose: Resolve whether the current CLI invocation should emit `npx` or `bunx` config.
+// Inputs: The raw CLI argument list and any runner hints provided by the current environment.
+// Returns/Effects: Returns the normalized runner selection or throws for invalid explicit flags.
 export function parseRunner(args: string[]): "npx" | "bunx" {
   const explicit = args.find((arg) => arg.startsWith("--runner="));
   if (explicit) {
@@ -60,6 +66,9 @@ export function parseRunner(args: string[]): "npx" | "bunx" {
   return "npx";
 }
 
+// Purpose: Build the standard MCP JSON config snippet for editor integrations.
+// Inputs: The selected package runner used to invoke the scplus MCP server.
+// Returns/Effects: Returns the JSON config text for editors that consume MCP config files.
 function buildMcpConfig(runner: "npx" | "bunx"): string {
   const commandArgs = runner === "npx" ? ["-y", "scplus-mcp"] : ["scplus-mcp"];
   return JSON.stringify(
@@ -83,6 +92,9 @@ function buildMcpConfig(runner: "npx" | "bunx"): string {
   );
 }
 
+// Purpose: Build the OpenCode-specific MCP configuration snippet for the init command.
+// Inputs: The selected package runner used to invoke the scplus MCP server.
+// Returns/Effects: Returns the OpenCode config JSON text for that runner.
 function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
   const command = runner === "npx" ? ["npx", "-y", "scplus-mcp"] : ["bunx", "scplus-mcp"];
   return JSON.stringify(
@@ -108,6 +120,9 @@ function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
   );
 }
 
+// Purpose: Build the Codex-specific TOML MCP configuration snippet for the init command.
+// Inputs: The selected package runner used to invoke the scplus MCP server.
+// Returns/Effects: Returns the Codex TOML config text for that runner.
 function buildCodexConfig(runner: "npx" | "bunx"): string {
   const args = runner === "npx" ? ["-y", "scplus-mcp"] : ["scplus-mcp"];
   return [
@@ -125,6 +140,9 @@ function buildCodexConfig(runner: "npx" | "bunx"): string {
   ].join("\n");
 }
 
+// Purpose: Build the init output payload for the requested agent target and runner.
+// Inputs: The normalized agent target and the selected package runner.
+// Returns/Effects: Returns the config text plus the output path where it should be written.
 export function buildInitConfig(target: AgentTarget, runner: "npx" | "bunx"): { content: string; outputPath: string } {
   const outputPath = resolve(process.cwd(), AGENT_CONFIG_PATH[target]);
   const content = target === "opencode"
@@ -135,6 +153,9 @@ export function buildInitConfig(target: AgentTarget, runner: "npx" | "bunx"): { 
   return { content, outputPath };
 }
 
+// Purpose: Parse raw CLI arguments into positional values and normalized flag entries.
+// Inputs: The raw argument vector passed to the current CLI command.
+// Returns/Effects: Returns the parsed positional arguments and flag map.
 export function parseArgs(args: string[]): ParsedArgs {
   const flags: ParsedFlags = new Map();
   const positionals: string[] = [];
@@ -174,6 +195,9 @@ export function hasFlag(flags: ParsedFlags, name: string): boolean {
   return flags.get(name) === true || typeof flags.get(name) === "string";
 }
 
+// Purpose: Parse a positive integer flag while falling back to the provided default value.
+// Inputs: The optional raw string value and the fallback integer to use when parsing fails.
+// Returns/Effects: Returns the parsed positive integer or the provided fallback.
 export function parseInteger(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -181,24 +205,36 @@ export function parseInteger(value: string | undefined, fallback: number): numbe
   return parsed;
 }
 
+// Purpose: Parse the bridge search intent flag into one supported search intent.
+// Inputs: The optional raw search intent string supplied by the caller.
+// Returns/Effects: Returns the normalized search intent or throws for invalid values.
 export function parseBridgeSearchIntent(value: string | undefined): SearchIntent {
   if (!value) return "related";
   if (value === "exact" || value === "related") return value;
   throw new Error(`Unsupported search intent "${value}". Use "exact" or "related".`);
 }
 
+// Purpose: Parse the bridge search type flag into one supported search entity type.
+// Inputs: The optional raw search type string supplied by the caller.
+// Returns/Effects: Returns the normalized search type or throws for invalid values.
 export function parseBridgeSearchType(value: string | undefined): SearchEntityType {
   if (!value) return "mixed";
   if (value === "file" || value === "symbol" || value === "mixed") return value;
   throw new Error(`Unsupported search type "${value}". Use "file", "symbol", or "mixed".`);
 }
 
+// Purpose: Parse the optional retrieval mode flag used by bridge search commands.
+// Inputs: The optional raw retrieval mode string supplied by the caller.
+// Returns/Effects: Returns the normalized retrieval mode or throws for invalid values.
 export function parseBridgeRetrievalMode(value: string | undefined): RetrievalMode | undefined {
   if (value === undefined) return undefined;
   if (value === "semantic" || value === "keyword" || value === "both") return value;
   throw new Error(`Unsupported retrieval mode "${value}". Use "semantic", "keyword", or "both".`);
 }
 
+// Purpose: Parse a comma-delimited CLI flag into a trimmed string list.
+// Inputs: The optional raw comma-delimited string supplied by the caller.
+// Returns/Effects: Returns the parsed string list or undefined when no items remain.
 export function parseStringList(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
   const items = value
@@ -208,6 +244,9 @@ export function parseStringList(value: string | undefined): string[] | undefined
   return items.length > 0 ? items : undefined;
 }
 
+// Purpose: Resolve the repository root requested by the current parsed CLI arguments.
+// Inputs: The parsed positional arguments and flag map for the active command.
+// Returns/Effects: Returns the absolute repository root path for the command run.
 export function resolveRoot(parsed: ParsedArgs): string {
   const explicit = getFlag(parsed.flags, "root");
   const candidate = explicit ?? parsed.positionals[0];
@@ -218,6 +257,9 @@ export function normalizeIndexMode(value: string | undefined): "core" | "full" {
   return value === "core" ? "core" : DEFAULT_INDEX_MODE;
 }
 
+// Purpose: Format restore-point metadata into the human-readable CLI output block.
+// Inputs: The restore point list returned by the shadow restore-point subsystem.
+// Returns/Effects: Returns the formatted restore-point report string for terminal output.
 export function formatRestorePoints(points: Awaited<ReturnType<typeof listRestorePoints>>): string {
   if (points.length === 0) return "Restore points (0)\nNo restore points.";
   const lines = [`Restore points (${points.length})`];
@@ -227,6 +269,9 @@ export function formatRestorePoints(points: Awaited<ReturnType<typeof listRestor
   return lines.join("\n");
 }
 
+// Purpose: Format the structured doctor report into the human-readable CLI report text.
+// Inputs: The doctor report payload assembled for the requested repository root.
+// Returns/Effects: Returns the formatted multi-line doctor report for terminal output.
 export function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctorReport>>): string {
   const chunkCoverage = report.hybridVectors.chunk.vectorCoverage;
   const identifierCoverage = report.hybridVectors.identifier.vectorCoverage;

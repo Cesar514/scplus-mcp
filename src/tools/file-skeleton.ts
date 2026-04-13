@@ -12,10 +12,16 @@ export interface SkeletonOptions {
   rootDir: string;
 }
 
+// Purpose: Format a symbol line range for the skeleton output.
+// Inputs: The starting and ending source lines for the symbol.
+// Returns/Effects: Returns a single-line or range-style line label.
 function formatLineRange(line: number, endLine: number): string {
   return endLine > line ? `L${line}-L${endLine}` : `L${line}`;
 }
 
+// Purpose: Render the parsed symbol list into the compact signature-block skeleton format.
+// Inputs: The analyzed file metadata and symbol tree.
+// Returns/Effects: Returns the formatted signature block text for the file skeleton output.
 function formatSignatureBlock(analysis: FileAnalysis): string {
   const lines: string[] = [];
 
@@ -35,6 +41,9 @@ function formatSignatureBlock(analysis: FileAnalysis): string {
   return lines.join("\n");
 }
 
+// Purpose: Produce a signature-first skeleton view for a target file within the repository root.
+// Inputs: Skeleton options containing the repository root and target file path.
+// Returns/Effects: Reads or analyzes the file and returns a skeleton or preview text representation.
 export async function getFileSkeleton(options: SkeletonOptions): Promise<string> {
   const fullPath = resolve(options.rootDir, options.filePath);
 

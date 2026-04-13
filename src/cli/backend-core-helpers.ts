@@ -17,6 +17,9 @@ export function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
+// Purpose: Summarize a changed-path list into a compact human-readable watch message.
+// Inputs: The changed repository-relative paths collected for the current watch batch.
+// Returns/Effects: Returns a short textual summary of the changed path set.
 export function summarizeChangedPaths(paths: string[]): string {
   if (paths.length === 0) return "no changed paths";
   if (paths.length <= 4) return paths.join(", ");
@@ -27,6 +30,9 @@ export function dedupePaths(paths: Iterable<string>): string[] {
   return Array.from(new Set(paths)).sort();
 }
 
+// Purpose: Classify a changed path that should force a full watch-triggered rebuild.
+// Inputs: One repository-relative path emitted by the background watcher.
+// Returns/Effects: Returns a rebuild reason string when the path requires a full rebuild.
 function getWatchFullRebuildReasonForPath(path: string): string | null {
   const normalized = normalizeRelativePath(path);
   const baseName = normalized.split("/").at(-1) ?? normalized;
@@ -63,6 +69,9 @@ function getWatchFullRebuildReasonForPath(path: string): string | null {
   return null;
 }
 
+// Purpose: Build the watch execution plan for the current set of changed repository paths.
+// Inputs: The raw changed paths collected from the file watcher batch.
+// Returns/Effects: Returns the watch job kind, mode, changed paths, and reason for execution.
 export function buildWatchExecutionPlan(changedPaths: string[]): WatchExecutionPlan {
   const normalizedPaths = dedupePaths(changedPaths);
   const rebuildReasons = normalizedPaths
@@ -84,6 +93,9 @@ export function buildWatchExecutionPlan(changedPaths: string[]): WatchExecutionP
   };
 }
 
+// Purpose: Format indexing-stage observability metrics into a single doctor-report summary line.
+// Inputs: The bridge doctor report that includes indexing stage timing and throughput data.
+// Returns/Effects: Returns a human-readable summary of indexing observability metrics.
 export function formatStageObservabilitySummary(report: BridgeDoctorReport): string {
   const entries = Object.entries(report.observability.indexing.stages);
   if (entries.length === 0) return "observability indexing: no completed stage metrics";
@@ -98,6 +110,9 @@ export function formatStageObservabilitySummary(report: BridgeDoctorReport): str
   return `observability indexing: ${stageParts.join(" ; ")}`;
 }
 
+// Purpose: Format integrity observability data from the doctor report into one summary line.
+// Inputs: The bridge doctor report that contains vector coverage and integrity metrics.
+// Returns/Effects: Returns a human-readable summary of integrity observability state.
 export function formatIntegrityObservabilitySummary(report: BridgeDoctorReport): string {
   const parseFailuresByLanguage = Object.entries(report.observability.integrity.parseFailuresByLanguage)
     .map(([language, failures]) => `${language}:${failures}`)
@@ -116,6 +131,9 @@ export function formatIntegrityObservabilitySummary(report: BridgeDoctorReport):
   ].join(" | ");
 }
 
+// Purpose: Format scheduler observability counters into a compact doctor-report summary line.
+// Inputs: The bridge doctor report that includes watcher and scheduler observability metrics.
+// Returns/Effects: Returns a human-readable summary of scheduler observability state.
 export function formatSchedulerObservabilitySummary(report: BridgeDoctorReport): string {
   const scheduler = report.observability.scheduler;
   return [

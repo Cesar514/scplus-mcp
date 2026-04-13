@@ -107,6 +107,9 @@ function writeJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+// Purpose: Initialize the MCP configuration file for the selected agent target and runner.
+// Inputs: Raw CLI arguments containing the target selector and optional runner flags.
+// Returns/Effects: Creates parent directories, writes the generated config file, and logs the output path.
 async function runInitCommand(args: string[]): Promise<void> {
   const nonFlags = args.filter((arg) => !arg.startsWith("--"));
   const target = parseAgentTarget(nonFlags[0]);
@@ -118,6 +121,9 @@ async function runInitCommand(args: string[]): Promise<void> {
   console.error(`Wrote MCP config: ${outputPath}`);
 }
 
+// Purpose: Run the prepared-index command for the requested root and index mode.
+// Inputs: Raw CLI arguments that may include root selection and mode flags.
+// Returns/Effects: Executes the backend index flow and writes the textual result to stdout.
 async function runIndexCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
   const targetRoot = resolveRoot(parsed);
@@ -126,6 +132,9 @@ async function runIndexCommand(args: string[]): Promise<void> {
   process.stdout.write(`${await backendCore.index(targetRoot, mode)}\n`);
 }
 
+// Purpose: Render the context tree for the requested repository root using the selected output options.
+// Inputs: Raw CLI arguments that control root resolution, headers-only mode, token budget, and JSON output.
+// Returns/Effects: Computes the tree report and writes either JSON or plain text to stdout.
 async function runTreeCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
   const targetRoot = resolveRoot(parsed);
@@ -141,6 +150,9 @@ async function runTreeCommand(args: string[]): Promise<void> {
   process.stdout.write(`${rendered}\n`);
 }
 
+// Purpose: Render the public skeleton for a specific file within the selected repository root.
+// Inputs: Raw CLI arguments containing the file path, optional root override, and JSON output flag.
+// Returns/Effects: Resolves the target file, renders its skeleton, and writes JSON or plain text output.
 async function runSkeletonCommand(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
   const filePath = parsed.positionals[0];
@@ -156,6 +168,9 @@ async function runSkeletonCommand(args: string[]): Promise<void> {
   process.stdout.write(`${rendered}\n`);
 }
 
+// Purpose: Validate the prepared index for the selected repository root and print the resulting report.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Runs validation and writes either the raw report JSON or formatted text to stdout.
 async function runValidateIndexCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -168,6 +183,9 @@ async function runValidateIndexCommand(args: string[], forceJson: boolean): Prom
   process.stdout.write(`${formatIndexValidationReport(report)}\n`);
 }
 
+// Purpose: Repair a prepared-index stage for the selected repository root and print the repair output.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Executes the requested repair stage and writes JSON or plain text output to stdout.
 async function runRepairIndexCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -183,6 +201,9 @@ async function runRepairIndexCommand(args: string[], forceJson: boolean): Promis
   process.stdout.write(`${output}\n`);
 }
 
+// Purpose: Show the current git worktree status summary for the selected repository root.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Collects repository status and writes either JSON or a formatted summary to stdout.
 async function runStatusCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -195,6 +216,9 @@ async function runStatusCommand(args: string[], forceJson: boolean): Promise<voi
   process.stdout.write(`${formatRepoStatusSummary(status, limit)}\n`);
 }
 
+// Purpose: Show the current git change summary for the selected repository root or path.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Collects repository change data and writes either JSON or a formatted summary to stdout.
 async function runChangesCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -208,6 +232,9 @@ async function runChangesCommand(args: string[], forceJson: boolean): Promise<vo
   process.stdout.write(`${formatRepoChangesSummary(changes, limit)}\n`);
 }
 
+// Purpose: Render semantic cluster navigation output for the selected repository root.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Runs semantic navigation and writes either JSON or plain text to stdout.
 async function runViewClustersCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -223,6 +250,9 @@ async function runViewClustersCommand(args: string[], forceJson: boolean): Promi
   process.stdout.write(`${rendered}\n`);
 }
 
+// Purpose: Refresh cluster artifacts through the backend core and print the resulting cluster text.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Executes cluster refresh and writes either the payload JSON or rendered text to stdout.
 async function runClusterCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -234,6 +264,9 @@ async function runClusterCommand(args: string[], forceJson: boolean): Promise<vo
   process.stdout.write(`${payload.text}\n`);
 }
 
+// Purpose: Render feature-hub output for the selected repository root using the requested filters.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Runs feature-hub resolution and writes either JSON or plain text to stdout.
 async function runHubsCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -252,6 +285,9 @@ async function runHubsCommand(args: string[], forceJson: boolean): Promise<void>
   process.stdout.write(`${rendered}\n`);
 }
 
+// Purpose: List available shadow restore points for the selected repository root.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Loads restore points and writes either raw JSON or a formatted summary to stdout.
 async function runRestorePointsCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -263,6 +299,9 @@ async function runRestorePointsCommand(args: string[], forceJson: boolean): Prom
   process.stdout.write(`${formatRestorePoints(points)}\n`);
 }
 
+// Purpose: Build the diagnostic doctor report for the selected repository root and print it.
+// Inputs: Raw CLI arguments plus a flag indicating whether JSON output is mandatory.
+// Returns/Effects: Runs the doctor report builder and writes JSON or formatted text to stdout.
 async function runDoctorCommand(args: string[], forceJson: boolean): Promise<void> {
   const parsed = parseArgs(args);
   const rootDir = resolveRoot(parsed);
@@ -274,6 +313,9 @@ async function runDoctorCommand(args: string[], forceJson: boolean): Promise<voi
   process.stdout.write(`${formatDoctorReport(report)}\n`);
 }
 
+// Purpose: Attach prepared-index freshness metadata to a bridge payload before returning it.
+// Inputs: The repository root and a payload object that should be extended with bridge metadata.
+// Returns/Effects: Returns a new payload object containing the root and freshness header fields.
 async function buildPreparedBridgePayload<TPayload extends object>(
   rootDir: string,
   payload: TPayload,
@@ -285,6 +327,9 @@ async function buildPreparedBridgePayload<TPayload extends object>(
   };
 }
 
+// Purpose: Write a single JSON frame to stdout for the persistent bridge protocol.
+// Inputs: Any serializable bridge frame object ready to be emitted to the client.
+// Returns/Effects: Resolves after the frame is written or rejects if stdout reports a write failure.
 async function writeBridgeFrame(frame: unknown): Promise<void> {
   await new Promise<void>((resolveWrite, rejectWrite) => {
     process.stdout.write(`${JSON.stringify(frame)}\n`, (error) => {
@@ -297,6 +342,9 @@ async function writeBridgeFrame(frame: unknown): Promise<void> {
   });
 }
 
+// Purpose: Assert that a bridge argument payload is a plain object before accessing its fields.
+// Inputs: An unknown runtime value plus the error message to use if validation fails.
+// Returns/Effects: Returns the value narrowed to a record or throws with the provided message.
 function assertObject(value: unknown, message: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(message);
@@ -304,6 +352,9 @@ function assertObject(value: unknown, message: string): Record<string, unknown> 
   return value as Record<string, unknown>;
 }
 
+// Purpose: Assert that a bridge argument is a non-empty string.
+// Inputs: An unknown runtime value plus the bridge argument name being validated.
+// Returns/Effects: Returns the validated string or throws if the value is missing or blank.
 function assertString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`Persistent bridge command requires string arg "${name}".`);
@@ -311,6 +362,9 @@ function assertString(value: unknown, name: string): string {
   return value;
 }
 
+// Purpose: Assert that a bridge argument is a boolean.
+// Inputs: An unknown runtime value plus the bridge argument name being validated.
+// Returns/Effects: Returns the validated boolean or throws if the value is not boolean.
 function assertBoolean(value: unknown, name: string): boolean {
   if (typeof value !== "boolean") {
     throw new Error(`Persistent bridge command requires boolean arg "${name}".`);
@@ -318,11 +372,17 @@ function assertBoolean(value: unknown, name: string): boolean {
   return value;
 }
 
+// Purpose: Assert that an optional bridge argument is either undefined or a non-empty string.
+// Inputs: An unknown runtime value plus the bridge argument name being validated.
+// Returns/Effects: Returns undefined or the validated string, otherwise throws.
 function assertOptionalString(value: unknown, name: string): string | undefined {
   if (value === undefined) return undefined;
   return assertString(value, name);
 }
 
+// Purpose: Assert that an optional bridge argument is either undefined or a positive finite number.
+// Inputs: An unknown runtime value plus the bridge argument name being validated.
+// Returns/Effects: Returns undefined or the floored numeric value, otherwise throws.
 function assertOptionalPositiveNumber(value: unknown, name: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -331,6 +391,9 @@ function assertOptionalPositiveNumber(value: unknown, name: string): number | un
   return Math.floor(value);
 }
 
+// Purpose: Assert that an optional bridge argument is either undefined or a trimmed string array.
+// Inputs: An unknown runtime value plus the bridge argument name being validated.
+// Returns/Effects: Returns undefined or the trimmed string array, otherwise throws.
 function assertOptionalStringArray(value: unknown, name: string): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.trim() === "")) {
@@ -339,34 +402,52 @@ function assertOptionalStringArray(value: unknown, name: string): string[] | und
   return value.map((entry) => entry.trim());
 }
 
+// Purpose: Assert that a bridge search intent uses one of the supported intent literals.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns the validated search intent or throws on unsupported values.
 function assertSearchIntent(value: unknown): SearchIntent {
   if (value === "exact" || value === "related") return value;
   throw new Error(`Persistent bridge command received invalid intent "${String(value)}".`);
 }
 
+// Purpose: Assert that a bridge search type uses one of the supported entity-type literals.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns the validated search type or throws on unsupported values.
 function assertSearchType(value: unknown): SearchEntityType {
   if (value === "file" || value === "symbol" || value === "mixed") return value;
   throw new Error(`Persistent bridge command received invalid searchType "${String(value)}".`);
 }
 
+// Purpose: Assert that an optional bridge retrieval mode uses one of the supported ranking literals.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns the validated retrieval mode or throws on unsupported values.
 function assertRetrievalMode(value: unknown): RetrievalMode | undefined {
   if (value === undefined) return undefined;
   if (value === "semantic" || value === "keyword" || value === "both") return value;
   throw new Error(`Persistent bridge command received invalid retrievalMode "${String(value)}".`);
 }
 
+// Purpose: Normalize a bridge index mode to the supported CLI bridge literals.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns a normalized bridge mode or throws when the value is invalid.
 function normalizeBridgeIndexMode(value: unknown): "auto" | "core" | "full" {
   if (value === undefined) return "auto";
   if (value === "auto" || value === "core" || value === "full") return value;
   throw new Error(`Persistent bridge command received invalid mode "${String(value)}".`);
 }
 
+// Purpose: Normalize a prepared-index validation mode to the supported prepared-index literals.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns a normalized prepared-index mode or throws when the value is invalid.
 function normalizePreparedIndexMode(value: unknown): "core" | "full" {
   if (value === undefined) return DEFAULT_INDEX_MODE;
   if (value === "core" || value === "full") return value;
   throw new Error(`Persistent bridge command received invalid mode "${String(value)}".`);
 }
 
+// Purpose: Normalize an optional debounce duration passed through the bridge request payload.
+// Inputs: An unknown runtime value read from the bridge request payload.
+// Returns/Effects: Returns undefined or a floored debounce interval, otherwise throws.
 function normalizeDebounceMs(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -569,6 +650,9 @@ const BRIDGE_COMMAND_HANDLERS: Record<string, BridgeCommandHandler> = {
   shutdown: () => ({ shuttingDown: true }),
 };
 
+// Purpose: Execute one shared bridge command against the registered bridge handler table.
+// Inputs: The requested bridge command name plus its already-validated object arguments.
+// Returns/Effects: Invokes the matching bridge handler or throws when the command is unsupported.
 async function executeSharedBridgeCommand(command: string, rawArgs: Record<string, unknown>): Promise<unknown> {
   const normalizedCommand = normalizeBridgeCommand(command);
   if (Object.prototype.hasOwnProperty.call(BRIDGE_COMMAND_HANDLERS, normalizedCommand)) {
@@ -580,11 +664,17 @@ async function executeSharedBridgeCommand(command: string, rawArgs: Record<strin
   throw new Error(`Unsupported bridge command "${command}".`);
 }
 
+// Purpose: Normalize an untyped persistent bridge payload and dispatch it through the shared bridge handlers.
+// Inputs: The requested bridge command name plus the raw unknown argument payload from stdin.
+// Returns/Effects: Validates the payload shape and returns the executed bridge command result.
 async function executePersistentBridgeCommand(command: string, rawArgs: unknown): Promise<unknown> {
   const args = rawArgs === undefined ? {} : assertObject(rawArgs, "Persistent bridge args must be an object.");
   return executeSharedBridgeCommand(command, args);
 }
 
+// Purpose: Parse and validate one JSON line from the persistent bridge protocol input stream.
+// Inputs: The raw newline-delimited JSON request line received on stdin.
+// Returns/Effects: Returns a validated bridge request object or throws a protocol error.
 function parseBridgeServeRequest(line: string): BridgeServeRequest {
   let parsed: unknown;
   try {
@@ -610,6 +700,9 @@ function parseBridgeServeRequest(line: string): BridgeServeRequest {
   };
 }
 
+// Purpose: Run the long-lived stdin/stdout bridge server protocol for repeated CLI bridge requests.
+// Inputs: No direct inputs beyond process stdin and the shared bridge backend core.
+// Returns/Effects: Streams requests from stdin, emits bridge responses, and closes backend state on shutdown.
 async function runBridgeServeCommand(): Promise<void> {
   const input = createInterface({
     input: process.stdin,
@@ -663,6 +756,9 @@ async function runBridgeServeCommand(): Promise<void> {
   }
 }
 
+// Purpose: Handle bridge subcommands that reuse the human CLI command printers with forced JSON output.
+// Inputs: The raw bridge subcommand plus the remaining CLI arguments for that subcommand.
+// Returns/Effects: Runs a direct command handler and returns whether the subcommand was handled.
 async function handleDirectBridgeCommand(subcommand: string, rest: string[]): Promise<boolean> {
   if (subcommand === "doctor") {
     await runDoctorCommand(rest, true);
@@ -703,6 +799,9 @@ async function handleDirectBridgeCommand(subcommand: string, rest: string[]): Pr
   return false;
 }
 
+// Purpose: Handle structured bridge subcommands that dispatch into shared bridge command handlers.
+// Inputs: The normalized bridge subcommand, resolved root directory, and parsed CLI argument structure.
+// Returns/Effects: Validates per-command arguments, writes JSON responses, or throws on unsupported commands.
 async function handleSharedBridgeCommand(
   normalizedSubcommand: string,
   rootDir: string,
@@ -834,6 +933,9 @@ async function handleSharedBridgeCommand(
   throw new Error(`Unsupported bridge subcommand "${normalizedSubcommand}".`);
 }
 
+// Purpose: Route the top-level `bridge` CLI command onto direct or shared bridge subcommand handlers.
+// Inputs: Raw CLI arguments beginning with the bridge subcommand and its remaining flags.
+// Returns/Effects: Dispatches the selected bridge workflow and writes any bridge output to stdout.
 async function runBridgeCommand(args: string[]): Promise<void> {
   const [subcommand, ...rest] = args;
   if (!subcommand) throw new Error("bridge requires a subcommand.");
@@ -849,6 +951,9 @@ async function runBridgeCommand(args: string[]): Promise<void> {
   await handleSharedBridgeCommand(normalizedSubcommand, rootDir, parsed);
 }
 
+// Purpose: Route the top-level CLI argument vector onto the matching human or bridge subcommand.
+// Inputs: Raw CLI arguments beginning with the optional subcommand name and its flags.
+// Returns/Effects: Executes the selected CLI handler and returns whether a known subcommand was handled.
 export async function handleCliCommand(args: string[]): Promise<boolean> {
   const [subcommand, ...rest] = args;
   if (!subcommand) return false;

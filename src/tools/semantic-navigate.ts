@@ -12,6 +12,9 @@ export interface SemanticNavigateOptions {
   maxClusters?: number;
 }
 
+// Purpose: Render the persisted semantic cluster view for a repository with prepared full-index artifacts.
+// Inputs: Semantic navigation options including the root directory and optional render limits.
+// Returns/Effects: Validates the prepared index, loads cluster state, and returns the rendered cluster view text.
 export async function semanticNavigate(options: SemanticNavigateOptions): Promise<string> {
   await assertValidPreparedIndex({
     rootDir: options.rootDir,

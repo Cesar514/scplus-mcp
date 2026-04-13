@@ -9,6 +9,9 @@ import { useEffect, useState } from "react";
 
 const LetterGlitch = dynamic(() => import("./LetterGlitch"), { ssr: false });
 
+// Purpose: Render the animated atmospheric background layers for the landing page.
+// Inputs: No direct inputs beyond the shared theme state observed from the document root.
+// Returns/Effects: Returns fixed-position background layers that react to theme changes.
 export default function Background() {
   const [isDark, setIsDark] = useState(false);
 

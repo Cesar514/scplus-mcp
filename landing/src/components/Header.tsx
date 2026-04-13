@@ -10,6 +10,9 @@ interface HeaderProps {
     stars: number;
 }
 
+// Purpose: Render the landing header with repository metadata and theme controls.
+// Inputs: The current GitHub star count supplied by the landing page route.
+// Returns/Effects: Returns the sticky landing navigation bar for the public homepage.
 export default function Header({ stars }: HeaderProps) {
     return (
         <nav

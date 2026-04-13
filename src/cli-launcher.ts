@@ -10,6 +10,9 @@ import { constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Purpose: Resolve and execute the packaged human CLI binary from the Node launcher entrypoint.
+// Inputs: No direct inputs beyond the current process arguments and packaged build directory.
+// Returns/Effects: Spawns the CLI binary, forwards stdio, and propagates its exit status.
 async function main(): Promise<void> {
   const buildDir = dirname(fileURLToPath(import.meta.url));
   const binaryName = process.platform === "win32" ? "scplus-cli.exe" : "scplus-cli";

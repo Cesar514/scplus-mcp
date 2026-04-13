@@ -39,25 +39,40 @@ const IGNORE_PREFIXES = [
   "landing/.next/",
 ];
 
+// Purpose: Normalize watcher-relative paths into stable forward-slash repository paths.
+// Inputs: A watcher-reported path that may contain platform-specific separators or leading slashes.
+// Returns/Effects: Returns the normalized repository-relative path string.
 function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
+// Purpose: Decide whether a changed path should trigger embedding refresh work.
+// Inputs: The normalized repository-relative path reported by the watcher.
+// Returns/Effects: Returns true when the path is non-empty and not inside ignored prefixes.
 function shouldTrack(path: string): boolean {
   if (!path) return false;
   return !IGNORE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+// Purpose: Clamp the per-tick embedding refresh batch size into the supported range.
+// Inputs: The optional configured maximum files per tick.
+// Returns/Effects: Returns a bounded integer batch size for embedding refresh work.
 function clampFilesPerTick(value: number | undefined): number {
   if (!Number.isFinite(value)) return DEFAULT_FILES_PER_TICK;
   return Math.max(MIN_FILES_PER_TICK, Math.min(MAX_FILES_PER_TICK, Math.floor(value ?? DEFAULT_FILES_PER_TICK)));
 }
 
+// Purpose: Clamp the embedding tracker debounce interval into the supported range.
+// Inputs: The optional configured debounce duration in milliseconds.
+// Returns/Effects: Returns a bounded integer debounce duration.
 function clampDebounceMs(value: number | undefined): number {
   if (!Number.isFinite(value)) return DEFAULT_DEBOUNCE_MS;
   return Math.max(500, Math.floor(value ?? DEFAULT_DEBOUNCE_MS));
 }
 
+// Purpose: Normalize the embedding tracker mode string into the supported runtime modes.
+// Inputs: The optional embedding tracker mode string from configuration or environment.
+// Returns/Effects: Returns the normalized tracker mode literal.
 export function parseEmbeddingTrackerMode(value: string | undefined): "off" | "lazy" | "eager" {
   if (!value) return "lazy";
   const normalized = value.trim().toLowerCase();
@@ -66,6 +81,9 @@ export function parseEmbeddingTrackerMode(value: string | undefined): "off" | "l
   return "lazy";
 }
 
+// Purpose: Start the filesystem-backed embedding tracker for changed source files.
+// Inputs: Embedding tracker options including root directory, debounce interval, and batch size.
+// Returns/Effects: Starts file watching and returns a stop function for the tracker.
 export function startEmbeddingTracker(options: EmbeddingTrackerOptions): () => void {
   const pendingFiles = new Set<string>();
   const debounceMs = clampDebounceMs(options.debounceMs);
@@ -136,6 +154,9 @@ export function startEmbeddingTracker(options: EmbeddingTrackerOptions): () => v
   };
 }
 
+// Purpose: Build a mode-aware embedding tracker controller with explicit start and stop operations.
+// Inputs: Tracker controller options including runtime mode and optional custom starter.
+// Returns/Effects: Returns a controller that manages tracker lifecycle according to the selected mode.
 export function createEmbeddingTrackerController(options: EmbeddingTrackerControllerOptions): EmbeddingTrackerController {
   const { mode: rawMode, starter = startEmbeddingTracker, ...trackerOptions } = options;
   const mode = parseEmbeddingTrackerMode(rawMode);

@@ -46,6 +46,9 @@ export interface FileAnalysis {
   lineCount: number;
 }
 
+// Purpose: Extract the short two-line file header summary from the start of a source file.
+// Inputs: The source file split into lines.
+// Returns/Effects: Returns a condensed header string built from the first meaningful comment lines.
 function extractHeader(lines: string[]): string {
   const headerLines: string[] = [];
   for (const line of lines.slice(0, 10)) {
@@ -58,6 +61,9 @@ function extractHeader(lines: string[]): string {
   return headerLines.join(" | ");
 }
 
+// Purpose: Read and analyze one source file into header metadata and parsed symbols.
+// Inputs: The absolute or repository-relative file path to analyze.
+// Returns/Effects: Loads file contents, parses symbols through tree-sitter, and returns the analysis record.
 export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
   const content = await readFile(filePath, "utf-8");
   const lines = content.split("\n");
@@ -72,6 +78,9 @@ export async function analyzeFile(filePath: string): Promise<FileAnalysis> {
   };
 }
 
+// Purpose: Render a parsed symbol tree into an indented human-readable outline line format.
+// Inputs: One code symbol plus an optional indentation depth for recursive formatting.
+// Returns/Effects: Returns the formatted outline text for the symbol and its children.
 export function formatSymbol(sym: CodeSymbol, indent: number = 0): string {
   const prefix = "  ".repeat(indent);
   const kindLabel = sym.kind === SymbolKind.Method ? "method" : sym.kind;
@@ -88,11 +97,17 @@ export function formatSymbol(sym: CodeSymbol, indent: number = 0): string {
   return result;
 }
 
+// Purpose: Determine whether a file path uses one of the parser-supported source extensions.
+// Inputs: The file path whose extension should be checked.
+// Returns/Effects: Returns true when the file extension is analyzable by the tree-sitter pipeline.
 export function isSupportedFile(filePath: string): boolean {
   const ext = extname(filePath).toLowerCase();
   return getAnalyzableExtensions().includes(ext);
 }
 
+// Purpose: Flatten a nested symbol tree into a linear list of symbol locations with parent context.
+// Inputs: The symbol tree to flatten plus an optional parent symbol name for recursion.
+// Returns/Effects: Returns a flat ordered list of symbol location records.
 export function flattenSymbols(symbols: CodeSymbol[], parentName?: string): SymbolLocation[] {
   const out: SymbolLocation[] = [];
   for (const sym of symbols) {

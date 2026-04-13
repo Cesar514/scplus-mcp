@@ -33,6 +33,9 @@ export interface LegacyVectorEntryRow {
   updated_at: string;
 }
 
+// Purpose: Encode one numeric vector into the binary blob format stored in sqlite.
+// Inputs: The numeric vector that should be serialized.
+// Returns/Effects: Returns the vector as a Float32-backed byte array or throws on invalid values.
 export function encodeVectorBlob(vector: number[]): Uint8Array {
   if (!Array.isArray(vector)) throw new Error("Vector entry must be an array of numbers.");
   if (vector.some((value) => !Number.isFinite(value))) {
@@ -41,6 +44,9 @@ export function encodeVectorBlob(vector: number[]): Uint8Array {
   return new Uint8Array(Float32Array.from(vector).buffer);
 }
 
+// Purpose: Decode one sqlite vector blob back into a numeric vector.
+// Inputs: The raw blob bytes read from sqlite.
+// Returns/Effects: Returns the decoded numeric vector or throws when the blob shape is invalid.
 function decodeVectorBlob(blob: Uint8Array): number[] {
   if (!(blob instanceof Uint8Array)) {
     throw new Error("Vector blob row was not returned as binary data.");
@@ -55,6 +61,9 @@ function decodeVectorBlob(blob: Uint8Array): number[] {
   return Array.from(vector);
 }
 
+// Purpose: Map one sqlite vector-entry row into the in-memory typed vector store shape.
+// Inputs: The raw sqlite row containing ids, hashes, search text, blob bytes, and metadata JSON.
+// Returns/Effects: Parses metadata JSON, decodes the vector blob, and returns the typed vector entry.
 export function mapVectorEntryRow<TMetadata>(row: VectorEntryRow): VectorStoreEntry<TMetadata> {
   let metadata: TMetadata;
   try {

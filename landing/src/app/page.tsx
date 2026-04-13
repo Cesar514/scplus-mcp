@@ -165,6 +165,9 @@ const toolRefRows = [
   },
 ];
 
+// Purpose: Load the current GitHub star count for the public landing page header.
+// Inputs: No direct inputs beyond the remote GitHub API response for this repository.
+// Returns/Effects: Returns the numeric star count or throws when the payload is invalid.
 async function getStars(): Promise<number> {
   const res = await fetch(
     "https://api.github.com/repos/Cesar514/scplus-mcp",
@@ -184,6 +187,9 @@ async function getInstructions(): Promise<string> {
   return readFile(new URL("../../../INSTRUCTIONS.md", import.meta.url), "utf8");
 }
 
+// Purpose: Render the landing homepage with the current instructions and GitHub metadata.
+// Inputs: No direct inputs beyond the server-side data loaded for this route.
+// Returns/Effects: Returns the full marketing homepage React tree for the landing app.
 export default async function Home() {
   const [stars, instructions] = await Promise.all([
     getStars(),

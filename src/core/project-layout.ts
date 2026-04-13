@@ -25,6 +25,9 @@ export interface ScplusLayout {
   state: string;
 }
 
+// Purpose: Build the canonical `.scplus` directory layout for a repository root.
+// Inputs: The repository root directory whose Context+ storage paths should be resolved.
+// Returns/Effects: Returns the full set of repo-local storage and artifact paths.
 export function getScplusLayout(rootDir: string): ScplusLayout {
   return {
     root: join(rootDir, SCPLUS_DIR),
@@ -37,6 +40,9 @@ export function getScplusLayout(rootDir: string): ScplusLayout {
   };
 }
 
+// Purpose: Ensure the minimal `.scplus` directory structure exists before stateful operations run.
+// Inputs: The repository root directory whose Context+ layout should be created.
+// Returns/Effects: Creates required directories on disk and returns the resolved layout paths.
 export async function ensureScplusLayout(rootDir: string): Promise<ScplusLayout> {
   const layout = getScplusLayout(rootDir);
   await mkdir(layout.root, { recursive: true });

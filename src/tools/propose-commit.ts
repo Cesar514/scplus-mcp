@@ -31,6 +31,9 @@ export interface CheckpointReport {
 
 const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
 
+// Purpose: Validate that a proposed source file starts with the required structured header block.
+// Inputs: The proposed file content split into lines plus the target file extension.
+// Returns/Effects: Returns validation errors describing any missing required header fields.
 function validateHeader(lines: string[], ext: string): ValidationError[] {
   const errors: ValidationError[] = [];
   const commentPrefixes: Record<string, string> = {
@@ -80,6 +83,9 @@ function validateHeader(lines: string[], ext: string): ValidationError[] {
   return errors;
 }
 
+// Purpose: Validate broad file-structure limits such as nesting depth and total line count.
+// Inputs: The proposed file content split into lines.
+// Returns/Effects: Returns validation errors describing structural complexity issues.
 function validateAbstraction(lines: string[]): ValidationError[] {
   const errors: ValidationError[] = [];
   let nestingDepth = 0;
@@ -109,6 +115,9 @@ function validateAbstraction(lines: string[]): ValidationError[] {
   return errors;
 }
 
+// Purpose: Render a checkpoint report into the terminal-facing human-readable summary format.
+// Inputs: The checkpoint report describing the saved file, warnings, and refresh mode.
+// Returns/Effects: Returns the formatted checkpoint report text.
 export function formatCheckpointReport(report: CheckpointReport): string {
   const result = [`✅ File saved: ${report.filePath}`];
   if (report.warnings.length > 0) {
@@ -122,6 +131,9 @@ export function formatCheckpointReport(report: CheckpointReport): string {
   return result.join("\n");
 }
 
+// Purpose: Validate a proposed file write, create a restore point, save the file, and refresh indexes.
+// Inputs: The repository root, target file path, and replacement file content.
+// Returns/Effects: Runs validation, writes the file, refreshes prepared indexes, and returns the checkpoint report.
 export async function buildCheckpointReport(options: ProposeCommitOptions): Promise<CheckpointReport> {
   return runSerializedRootMutation(options.rootDir, async () => {
     const fullPath = resolve(options.rootDir, options.filePath);
@@ -154,6 +166,9 @@ export async function buildCheckpointReport(options: ProposeCommitOptions): Prom
   });
 }
 
+// Purpose: Produce the formatted checkpoint output for a proposed file write.
+// Inputs: The repository root, target file path, and replacement file content.
+// Returns/Effects: Runs the checkpoint workflow and returns the formatted human-readable report.
 export async function proposeCommit(options: ProposeCommitOptions): Promise<string> {
   return formatCheckpointReport(await buildCheckpointReport(options));
 }
