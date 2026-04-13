@@ -8,6 +8,7 @@ import { readFile, stat } from "fs/promises";
 import { dirname, extname, relative, resolve } from "path";
 import { promisify } from "util";
 import { analyzeFile, flattenSymbols, isSupportedFile, SymbolKind } from "../core/parser.js";
+import { withSyntaxTree } from "../core/tree-sitter.js";
 import { walkDirectory } from "../core/walker.js";
 
 const execFileAsync = promisify(execFile);
@@ -128,6 +129,7 @@ const BLOCK_COMMENT_EXTENSIONS = new Set([
 const MAX_FILE_LOC = 800;
 const MAX_FUNCTION_LOC = 40;
 const MAX_PARAMETER_COUNT = 5;
+const MAX_NESTING_DEPTH = 2;
 const MAX_FUNCTIONS_PER_FILE = 12;
 const MAX_LINE_LENGTH = 150;
 const FILE_LOC_LIMITS = new Map<string, number>([
@@ -145,6 +147,34 @@ const WILDCARD_IMPORT_PATTERNS = [
   /^\s*using\s+namespace\s+\w[\w:]*\s*;?\s*$/,
 ];
 const COMMENTED_OUT_CODE_PATTERN = /(?:\b(?:if|for|while|switch|catch|return|import|export|class|def|func|const|let|var)\b|=>|==|!=|=\s*[^=]|[{()}];?$)/;
+const CONTROL_FLOW_NODE_TYPES: Record<string, Set<string>> = {
+  c: new Set(["if_statement", "for_statement", "while_statement", "do_statement", "switch_statement"]),
+  cpp: new Set(["if_statement", "for_statement", "for_range_loop", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+  c_sharp: new Set(["if_statement", "for_statement", "for_each_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+  go: new Set(["if_statement", "for_statement", "expression_switch_statement", "type_switch_statement", "select_statement"]),
+  java: new Set(["if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement", "switch_expression", "switch_statement", "try_statement"]),
+  javascript: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+  kotlin: new Set(["if_expression", "for_statement", "while_statement", "do_while_statement", "when_expression", "try_expression"]),
+  python: new Set(["if_statement", "for_statement", "while_statement", "try_statement", "match_statement"]),
+  rust: new Set(["if_expression", "for_expression", "while_expression", "loop_expression", "match_expression"]),
+  swift: new Set(["if_statement", "for_statement", "while_statement", "repeat_while_statement", "switch_statement", "do_statement"]),
+  tsx: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+  typescript: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+};
+const FUNCTION_NODE_TYPES: Record<string, Set<string>> = {
+  c: new Set(["function_definition"]),
+  cpp: new Set(["function_definition", "lambda_expression"]),
+  c_sharp: new Set(["constructor_declaration", "destructor_declaration", "local_function_statement", "method_declaration"]),
+  go: new Set(["function_declaration", "method_declaration", "func_literal"]),
+  java: new Set(["constructor_declaration", "lambda_expression", "method_declaration"]),
+  javascript: new Set(["arrow_function", "function_declaration", "function_expression", "generator_function_declaration", "generator_function"]),
+  kotlin: new Set(["anonymous_function", "function_declaration", "lambda_literal"]),
+  python: new Set(["function_definition", "lambda"]),
+  rust: new Set(["closure_expression", "function_item"]),
+  swift: new Set(["anonymous_function", "function_declaration"]),
+  tsx: new Set(["arrow_function", "function_declaration", "function_expression", "generator_function_declaration", "generator_function"]),
+  typescript: new Set(["arrow_function", "function_declaration", "function_expression", "generator_function_declaration", "generator_function"]),
+};
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -543,6 +573,81 @@ function validateFunctionHeaderBlock(
   }];
 }
 
+function computeMaxControlFlowDepth(
+  node: any,
+  grammarName: string,
+  currentDepth: number,
+  isRootCallable: boolean,
+): number {
+  const controlFlowTypes = CONTROL_FLOW_NODE_TYPES[grammarName] ?? new Set<string>();
+  const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
+  const isCallableNode = functionTypes.has(node.type);
+  if (!isRootCallable && isCallableNode) return currentDepth;
+
+  const nextDepth = controlFlowTypes.has(node.type) ? currentDepth + 1 : currentDepth;
+  let maxDepth = nextDepth;
+
+  for (const child of node.namedChildren ?? []) {
+    maxDepth = Math.max(
+      maxDepth,
+      computeMaxControlFlowDepth(child, grammarName, nextDepth, false),
+    );
+  }
+
+  return maxDepth;
+}
+
+async function validateNestingDepth(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  const extension = extname(fullPath).toLowerCase();
+  if (!isSupportedFile(fullPath)) return [];
+
+  try {
+    return await withSyntaxTree(
+      lineInfo.map((line) => line.text).join("\n"),
+      extension,
+      ({ rootNode, grammarName }) => {
+        const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
+        const findings: RuleFinding[] = [];
+
+        function visit(node: any): void {
+          if (functionTypes.has(node.type)) {
+            const nestingDepth = computeMaxControlFlowDepth(node, grammarName, 0, true);
+            if (nestingDepth > MAX_NESTING_DEPTH) {
+              const signatureText = buildCallableSignatureText(
+                node.startPosition.row + 1,
+                node.endPosition.row + 1,
+                lineInfo,
+                lineInfo[node.startPosition.row]?.trimmed ?? node.type,
+              );
+              findings.push({
+                file,
+                line: node.startPosition.row + 1,
+                rule: "max-nesting-depth",
+                severity: "error",
+                message: `${signatureText} exceeds nesting depth ${MAX_NESTING_DEPTH} (${nestingDepth}).`,
+              });
+            }
+          }
+
+          for (const child of node.namedChildren ?? []) visit(child);
+        }
+
+        visit(rootNode);
+        return findings;
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed nesting analysis could not analyze this file: ${message}`,
+    }];
+  }
+}
+
 function validateBareExcepts(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   if (extname(file) !== ".py") return [];
   return lineInfo.flatMap((line) => {
@@ -640,6 +745,7 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     findings.push(...validateCommentedOutCode(relativePath, lineInfo));
     findings.push(...validateBareExcepts(relativePath, lineInfo));
     findings.push(...await validateFunctionMetrics(relativePath, file, lineInfo));
+    findings.push(...await validateNestingDepth(relativePath, file, lineInfo));
   }
   return findings;
 }

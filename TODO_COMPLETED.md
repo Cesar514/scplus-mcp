@@ -14,3 +14,6 @@
 [x] 2026-04-13T11:41:57Z Increase the static-analysis maximum line length from 100 to 150 characters. \
 [x] 2026-04-13T11:41:57Z Update the static-analysis tests so line-length coverage matches the new 150-character threshold. \
 [x] 2026-04-13T11:41:57Z Rebuild and rerun the targeted static-analysis test suite to verify the new threshold. \
+[x] 2026-04-13T11:49:37Z Implement `max_nesting_depth` as a real AST-backed static-analysis rule in the tree-sitter lint path. \
+[x] 2026-04-13T11:49:37Z Add automated coverage proving `max_nesting_depth` fires across the supported source languages under nested control flow. \
+[x] 2026-04-13T11:49:37Z Rebuild and rerun the targeted static-analysis test suite to verify the new nesting-depth rule. \

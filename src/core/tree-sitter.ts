@@ -417,6 +417,17 @@ export function getGrammarName(ext: string): string | null {
 }
 
 export async function parseWithTreeSitter(content: string, ext: string): Promise<CodeSymbol[]> {
+  return withSyntaxTree(content, ext, ({ rootNode, grammarName }) => {
+    const defTypes = DEFINITION_TYPES[grammarName];
+    return walkTree(rootNode, defTypes);
+  });
+}
+
+export async function withSyntaxTree<T>(
+  content: string,
+  ext: string,
+  visitor: (context: { rootNode: TSNode; grammarName: string }) => T,
+): Promise<T> {
   const grammarName = getGrammarName(ext);
   if (!grammarName) throw new TreeSitterUnsupportedLanguageError(ext);
 
@@ -435,7 +446,7 @@ export async function parseWithTreeSitter(content: string, ext: string): Promise
   try {
     const parser = await getOrCreateParser(grammarName, lang);
     tree = parser.parse(content);
-    return walkTree(tree.rootNode, defTypes);
+    return visitor({ rootNode: tree.rootNode, grammarName });
   } catch (error) {
     if (error instanceof TreeSitterGrammarLoadError || error instanceof TreeSitterParseError) throw error;
     recordFailure(grammarName, "parse", error);
