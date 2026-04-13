@@ -28,6 +28,9 @@ const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g;
 const CROSS_LINK_RE = /@linked-to\s+\[\[([^\]]+)\]\]/g;
 const HEADER_FEATURE_RE = /^(?:\/\/|#|--)\s*FEATURE:\s*(.+)$/m;
 
+// Purpose: Parse unique wikilinks from hub markdown content while ignoring cross-link directives.
+// Inputs: The raw hub markdown content.
+// Returns/Effects: Returns the ordered unique wikilinks found in the content.
 export function parseWikiLinks(content: string): HubLink[] {
   const links: HubLink[] = [];
   const seen = new Set<string>();
@@ -43,6 +46,9 @@ export function parseWikiLinks(content: string): HubLink[] {
   return links;
 }
 
+// Purpose: Parse cross-link directives that point from one source file to related hubs.
+// Inputs: The raw hub markdown content plus the source file that owns the cross-links.
+// Returns/Effects: Returns the parsed cross-link records found in the content.
 export function parseCrossLinks(content: string, sourceFile: string): CrossLink[] {
   const crossLinks: CrossLink[] = [];
   for (const match of content.matchAll(CROSS_LINK_RE)) {
@@ -51,11 +57,17 @@ export function parseCrossLinks(content: string, sourceFile: string): CrossLink[
   return crossLinks;
 }
 
+// Purpose: Extract the first FEATURE tag found in a supported file header or markdown heading block.
+// Inputs: The raw file content to inspect.
+// Returns/Effects: Returns the trimmed feature tag string or null when absent.
 export function extractFeatureTag(content: string): string | null {
   const match = content.match(HEADER_FEATURE_RE);
   return match ? match[1].trim() : null;
 }
 
+// Purpose: Parse one hub markdown file into its title, wikilinks, cross-links, and raw content.
+// Inputs: The absolute path to the hub markdown file.
+// Returns/Effects: Reads the file and returns the parsed hub information.
 export async function parseHubFile(hubPath: string): Promise<HubInfo> {
   const content = await readFile(hubPath, "utf-8");
   const lines = content.split("\n");
@@ -73,10 +85,16 @@ export async function parseHubFile(hubPath: string): Promise<HubInfo> {
   };
 }
 
+// Purpose: Discover markdown files under the repository root that contain wikilinks and therefore behave as hubs.
+// Inputs: The repository root directory to scan.
+// Returns/Effects: Walks the repository tree and returns sorted relative hub paths.
 export async function discoverHubs(rootDir: string): Promise<string[]> {
   const hubs: string[] = [];
   const skip = new Set(["node_modules", ".git", "build", "dist", ".scplus"]);
 
+  // Purpose: Recursively scan directories for markdown files that contain wikilinks.
+  // Inputs: The absolute directory path currently being traversed.
+  // Returns/Effects: Adds discovered hub-relative paths into the outer `hubs` collection.
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
     await Promise.all(entries.map(async (entry) => {
@@ -100,6 +118,9 @@ export async function discoverHubs(rootDir: string): Promise<string[]> {
   return hubs.sort();
 }
 
+// Purpose: Find non-markdown files that are not referenced by any discovered hub.
+// Inputs: The repository root plus the full list of repository file paths to evaluate.
+// Returns/Effects: Returns the relative file paths that are not linked from any hub.
 export async function findOrphanedFiles(
   rootDir: string,
   allFilePaths: string[],
@@ -120,6 +141,9 @@ export async function findOrphanedFiles(
     .filter((f) => !linkedFiles.has(f.replace(/\\/g, "/")));
 }
 
+// Purpose: Render one hub wikilink in markdown with an optional display description.
+// Inputs: The linked target path plus the optional link description.
+// Returns/Effects: Returns the formatted markdown wikilink string.
 export function formatHubLink(target: string, description: string): string {
   return description
     ? `- [[${target}|${description}]]`

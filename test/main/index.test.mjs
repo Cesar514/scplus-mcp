@@ -13,10 +13,16 @@ import { rerunIndexStage } from "../../build/tools/index-stages.js";
 
 const execFileAsync = promisify(execFile);
 
+// Purpose: Assert that a filesystem path exists during index command integration tests.
+// Inputs: The path that should already exist on disk.
+// Returns/Effects: Resolves when the path is accessible or rejects if it is missing.
 async function expectExists(path) {
   await access(path);
 }
 
+// Purpose: Create the minimal source fixture repository used by the index command tests.
+// Inputs: The temporary repository root that should receive the fixture files.
+// Returns/Effects: Creates fixture directories and writes the sample application source file.
 async function createFixtureRepo(cwd) {
   await mkdir(join(cwd, "src"), { recursive: true });
   await writeFile(
@@ -25,6 +31,9 @@ async function createFixtureRepo(cwd) {
   );
 }
 
+// Purpose: Read one persisted index artifact JSON payload from sqlite for the active generation.
+// Inputs: The sqlite database path plus the artifact key to read.
+// Returns/Effects: Opens the database, qualifies the artifact key, and returns parsed artifact JSON or null.
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -37,6 +46,9 @@ function readArtifactFromDb(dbPath, artifactKey) {
   }
 }
 
+// Purpose: Read one persisted text artifact payload from sqlite for the active generation.
+// Inputs: The sqlite database path plus the text artifact key to read.
+// Returns/Effects: Opens the database, qualifies the artifact key, and returns the stored text or null.
 function readTextArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -48,6 +60,9 @@ function readTextArtifactFromDb(dbPath, artifactKey) {
   }
 }
 
+// Purpose: Read one metadata value from the sqlite index metadata table.
+// Inputs: The sqlite database path plus the metadata key to inspect.
+// Returns/Effects: Opens the database and returns the stored metadata value or null.
 function readMetaFromDb(dbPath, metaKey) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -58,11 +73,17 @@ function readMetaFromDb(dbPath, metaKey) {
   }
 }
 
+// Purpose: Read the currently active index generation number from sqlite metadata.
+// Inputs: The sqlite database path to inspect.
+// Returns/Effects: Returns the numeric active generation or zero when none is stored.
 function getActiveGenerationFromDb(dbPath) {
   const raw = readMetaFromDb(dbPath, "activeGeneration");
   return raw === null ? 0 : Number.parseInt(raw, 10);
 }
 
+// Purpose: Qualify an artifact key with the active generation when the artifact is generation-scoped.
+// Inputs: The logical artifact key plus the active generation number.
+// Returns/Effects: Returns the generation-qualified artifact key used in sqlite storage.
 function qualifyArtifactKey(artifactKey, generation) {
   if (artifactKey === "index-status" || artifactKey === "restore-points") return artifactKey;
   if (generation === 0) return artifactKey;

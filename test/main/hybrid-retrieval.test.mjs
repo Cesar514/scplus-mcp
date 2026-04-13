@@ -13,6 +13,9 @@ import { promisify } from "node:util";
 process.env.SCPLUS_EMBED_PROVIDER = "mock";
 const execFileAsync = promisify(execFile);
 
+// Purpose: Read one persisted index artifact JSON payload from the sqlite database for the active generation.
+// Inputs: The sqlite database path plus the artifact key to read.
+// Returns/Effects: Opens the database, resolves the generation-specific key, and returns parsed artifact JSON or null.
 function readArtifactFromDb(dbPath, artifactKey) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -26,6 +29,9 @@ function readArtifactFromDb(dbPath, artifactKey) {
   }
 }
 
+// Purpose: Read the currently active generation number from the sqlite metadata table.
+// Inputs: The sqlite database path to inspect.
+// Returns/Effects: Opens the database, reads the active generation metadata, and returns the numeric generation id.
 function getActiveGenerationFromDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   try {

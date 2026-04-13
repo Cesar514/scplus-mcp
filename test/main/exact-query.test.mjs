@@ -13,10 +13,16 @@ const execFileAsync = promisify(execFile);
 
 process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
+// Purpose: Run one git command inside the temporary exact-query fixture repository.
+// Inputs: The fixture repository root plus the git CLI arguments to execute.
+// Returns/Effects: Executes the git command and resolves when it completes successfully.
 async function git(rootDir, ...args) {
   await execFileAsync("git", args, { cwd: rootDir });
 }
 
+// Purpose: Create the source files used by the exact-query integration fixture repository.
+// Inputs: The temporary repository root directory that should receive the fixture files.
+// Returns/Effects: Creates fixture directories and writes the auth-related source files under test.
 async function createFixtureRepo(rootDir) {
   await mkdir(join(rootDir, "src", "auth"), { recursive: true });
   await mkdir(join(rootDir, "scripts"), { recursive: true });

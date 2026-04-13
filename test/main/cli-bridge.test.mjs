@@ -11,10 +11,16 @@ import { join } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+// Purpose: Run one git command inside the temporary fixture repository.
+// Inputs: The repository working directory plus the git CLI arguments to execute.
+// Returns/Effects: Executes the git command and resolves when it completes successfully.
 async function git(cwd, ...args) {
   await execFileAsync("git", args, { cwd });
 }
 
+// Purpose: Execute one `scplus bridge` command against the fixture repository and parse its JSON response.
+// Inputs: The repository working directory plus the bridge subcommand arguments.
+// Returns/Effects: Runs the built CLI entrypoint with mock embedding settings and returns parsed JSON stdout.
 async function execBridge(cwd, ...args) {
   const { stdout } = await execFileAsync(
     process.execPath,

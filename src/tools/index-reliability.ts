@@ -46,10 +46,16 @@ export interface AssertPreparedIndexOptions extends ValidatePreparedIndexOptions
   consumer: string;
 }
 
+// Purpose: Append one validation issue to the accumulating prepared-index issue list.
+// Inputs: The mutable issue list plus the issue code and message to record.
+// Returns/Effects: Pushes the new issue into the provided issue list.
 function addIssue(issues: IndexValidationIssue[], code: string, message: string): void {
   issues.push({ code, message });
 }
 
+// Purpose: Derive the artifact, text-artifact, and vector requirements for a requested index mode.
+// Inputs: The requested prepared-index mode.
+// Returns/Effects: Returns the required artifact-key and vector-namespace sets for that mode.
 function parseStageOutputs(mode: IndexMode): { artifactKeys: Set<string>; textArtifactKeys: Set<string>; vectorNamespaces: Set<string> } {
   const definitions = getStageDefinitions();
   const activeStages = Object.values(definitions)
@@ -75,11 +81,17 @@ function parseStageOutputs(mode: IndexMode): { artifactKeys: Set<string>; textAr
   return { artifactKeys, textArtifactKeys, vectorNamespaces };
 }
 
+// Purpose: Check whether a persisted mode can satisfy the currently requested validation mode.
+// Inputs: The persisted mode string plus the requested validation mode.
+// Returns/Effects: Returns true when the persisted mode is sufficient for the requested mode.
 function modeSatisfies(persistedMode: string | undefined, requestedMode: IndexMode): boolean {
   if (requestedMode === "core") return persistedMode === "core" || persistedMode === "full";
   return persistedMode === "full";
 }
 
+// Purpose: Load one required artifact and fail loudly when it is missing.
+// Inputs: The repository root, artifact key, and optional target generation.
+// Returns/Effects: Returns the artifact payload or throws a missing-artifact error.
 async function loadRequiredArtifact<T>(
   rootDir: string,
   artifactKey: IndexArtifactKey,
@@ -90,6 +102,9 @@ async function loadRequiredArtifact<T>(
   }, generation === undefined ? undefined : { generation });
 }
 
+// Purpose: Validate artifact and contract version fields against the current index contract.
+// Inputs: The mutable issue list, artifact label, artifactVersion, and contractVersion values to inspect.
+// Returns/Effects: Appends version mismatch issues when the provided values are stale or missing.
 function validateVersionFields(
   issues: IndexValidationIssue[],
   label: string,
@@ -113,6 +128,9 @@ function validateVersionFields(
   }
 }
 
+// Purpose: Validate that every stage required for the requested mode completed successfully.
+// Inputs: The mutable issue list, persisted stage-state payload, and requested validation mode.
+// Returns/Effects: Appends stage-incomplete issues for missing or incomplete required stages.
 function validateRequiredStages(
   issues: IndexValidationIssue[],
   stageState: PersistedIndexStageState,
@@ -133,6 +151,9 @@ function validateRequiredStages(
   }
 }
 
+// Purpose: Validate the currently served or requested prepared index generation against durable sqlite artifacts.
+// Inputs: The repository root, requested mode, and optional generation override.
+// Returns/Effects: Inspects sqlite state and returns the structured validation report.
 export async function validatePreparedIndex(options: ValidatePreparedIndexOptions): Promise<IndexValidationReport> {
   const checkedAt = new Date().toISOString();
   const serving = await loadIndexServingState(options.rootDir);
@@ -280,6 +301,9 @@ export async function validatePreparedIndex(options: ValidatePreparedIndexOption
   };
 }
 
+// Purpose: Render a prepared-index validation report into operator-facing text.
+// Inputs: The structured validation report to render.
+// Returns/Effects: Returns the formatted validation summary text.
 export function formatIndexValidationReport(report: IndexValidationReport): string {
   const lines = [
     `Index validation: ${report.ok ? "ok" : "failed"}`,
@@ -311,6 +335,9 @@ export function formatIndexValidationReport(report: IndexValidationReport): stri
   return lines.join("\n");
 }
 
+// Purpose: Assert that a prepared index is valid before a consumer attempts to use it.
+// Inputs: The repository root, requested mode, and consumer label requiring the index.
+// Returns/Effects: Returns silently when validation passes or throws a detailed validation error.
 export async function assertValidPreparedIndex(options: AssertPreparedIndexOptions): Promise<void> {
   const report = await validatePreparedIndex(options);
   if (report.ok) return;
@@ -321,6 +348,9 @@ export async function assertValidPreparedIndex(options: AssertPreparedIndexOptio
   );
 }
 
+// Purpose: Repair a prepared index by rebuilding the requested stage scope and revalidating the result.
+// Inputs: The repository root plus the repair target describing core, full, or stage-level repair.
+// Returns/Effects: Rebuilds the index, validates the result, and returns the repair summary text.
 export async function repairPreparedIndex(rootDir: string, target: IndexRepairTarget): Promise<string> {
   if (target === "core" || target === "full") {
     const output = await indexCodebase({ rootDir, mode: target });

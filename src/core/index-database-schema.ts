@@ -6,6 +6,9 @@
 import { DatabaseSync } from "node:sqlite";
 import { encodeVectorBlob, type LegacyVectorEntryRow } from "./index-database-vectors.js";
 
+// Purpose: Check whether the sqlite database already contains the named table.
+// Inputs: The open sqlite database handle plus the table name to inspect.
+// Returns/Effects: Returns true when the table exists in sqlite metadata.
 export function hasTable(db: DatabaseSync, tableName: string): boolean {
   const row = db.prepare(`
     SELECT name
@@ -15,6 +18,9 @@ export function hasTable(db: DatabaseSync, tableName: string): boolean {
   return row?.name === tableName;
 }
 
+// Purpose: Read the column names exposed by a sqlite table after validating the table name.
+// Inputs: The open sqlite database handle plus the table name to inspect.
+// Returns/Effects: Returns the table column list or an empty array when the table is absent.
 export function getTableColumns(db: DatabaseSync, tableName: string): string[] {
   if (!/^[a-z0-9_]+$/i.test(tableName)) {
     throw new Error(`Invalid table name: ${tableName}`);
@@ -24,6 +30,9 @@ export function getTableColumns(db: DatabaseSync, tableName: string): string[] {
   return rows.map((row) => row.name);
 }
 
+// Purpose: Create the current binary vector-entry sqlite schema when it is missing.
+// Inputs: The open sqlite database handle that should receive the vector-entry schema.
+// Returns/Effects: Executes the table and index creation statements for binary vector storage.
 export function createBinaryVectorEntriesTable(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS vector_entries (
@@ -42,6 +51,9 @@ export function createBinaryVectorEntriesTable(db: DatabaseSync): void {
   `);
 }
 
+// Purpose: Migrate legacy JSON-backed vector rows into the current binary vector-entry schema.
+// Inputs: The open sqlite database handle containing the legacy `vector_entries` table.
+// Returns/Effects: Renames the legacy table, rewrites rows into binary form, and commits or rolls back the migration.
 export function migrateLegacyVectorEntriesToBinary(db: DatabaseSync): void {
   const columns = getTableColumns(db, "vector_entries");
   if (columns.includes("vector_blob")) return;

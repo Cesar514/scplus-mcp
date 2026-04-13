@@ -55,10 +55,16 @@ let noteServerActivity = () => { };
 let ensureTrackerRunning = () => { };
 const backendCore = createBackendCore();
 
+// Purpose: Prefix prepared-query text responses with the current prepared-index freshness banner.
+// Inputs: The human-readable response text produced by a prepared-index-backed tool.
+// Returns/Effects: Returns the text prefixed with the current index freshness header.
 async function formatPreparedQueryResponse(text: string): Promise<string> {
   return `${await formatPreparedIndexFreshnessHeader(ROOT_DIR)}\n\n${text}`;
 }
 
+// Purpose: Wrap MCP handlers so each request records activity and optionally starts the embedding tracker.
+// Inputs: An async handler plus optional wrapper behavior flags.
+// Returns/Effects: Returns a wrapped handler that updates server activity before delegating to the original handler.
 function withRequestActivity<TArgs, TResult>(
   handler: (args: TArgs) => Promise<TResult>,
   options?: { useEmbeddingTracker?: boolean },
@@ -474,6 +480,9 @@ server.tool(
 );
 
 
+// Purpose: Start the CLI or MCP stdio entrypoint and install shutdown, idle, and parent-process lifecycle hooks.
+// Inputs: No direct inputs beyond process arguments, environment configuration, and stdio transport state.
+// Returns/Effects: Runs CLI passthrough when requested or starts the MCP stdio server until shutdown.
 async function main() {
   const args = process.argv.slice(2);
   if (await handleCliCommand(args)) {

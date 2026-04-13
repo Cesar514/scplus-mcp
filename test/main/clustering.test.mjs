@@ -5,6 +5,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { clusterVectors, findPathPattern } from "../../build/core/clustering.js";
 
+// Purpose: Generate deterministic clustered vectors that exercise large-input clustering behavior.
+// Inputs: The number of vectors to generate plus an optional number of repeating groups.
+// Returns/Effects: Returns a deterministic array of numeric vectors with grouped structure.
 function makeClusteredVectors(count, groupCount = 4) {
   return Array.from({ length: count }, (_, index) => {
     const group = index % groupCount;

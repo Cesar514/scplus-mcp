@@ -6,10 +6,16 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+// Purpose: Build a minimal mocked OpenAI chat-completions response object for JSON repair tests.
+// Inputs: The message content string that the mocked provider should return.
+// Returns/Effects: Returns a fetch-like response object exposing the requested content through `json()`.
 function createOpenAIResponse(content) {
   return {
     ok: true,
-    async json() {
+    // Purpose: Return the mocked OpenAI chat-completions JSON payload for the current fixture response.
+    // Inputs: No direct inputs beyond the `content` value captured in the surrounding mock response object.
+    // Returns/Effects: Resolves to a minimal OpenAI-style JSON payload containing the mocked message content.
+    json: async function json() {
       return {
         choices: [
           {

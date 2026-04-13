@@ -60,6 +60,9 @@ export interface RelatedSearchReport {
 
 export type SearchIntentReport = ExactSearchReport | RelatedSearchReport;
 
+// Purpose: Filter exact symbol hits down to the requested symbol kinds when a kind filter is provided.
+// Inputs: Exact symbol hits plus an optional list of allowed symbol-kind labels.
+// Returns/Effects: Returns the filtered symbol hits while preserving original ordering.
 function filterSymbolHitsByKind(hits: ExactSymbolHit[], includeKinds?: string[]): ExactSymbolHit[] {
   if (!includeKinds || includeKinds.length === 0) return hits;
   const allowed = new Set(includeKinds.map((value) => value.trim().toLowerCase()).filter(Boolean));
@@ -67,6 +70,9 @@ function filterSymbolHitsByKind(hits: ExactSymbolHit[], includeKinds?: string[])
   return hits.filter((hit) => allowed.has(hit.kind.toLowerCase()));
 }
 
+// Purpose: Filter word hits using the requested symbol-kind set while keeping file hits intact.
+// Inputs: Word-match hits plus an optional list of allowed symbol-kind labels.
+// Returns/Effects: Returns the filtered word hits while preserving original ordering.
 function filterWordHitsByKind(hits: WordMatchHit[], includeKinds?: string[]): WordMatchHit[] {
   if (!includeKinds || includeKinds.length === 0) return hits;
   const allowed = new Set(includeKinds.map((value) => value.trim().toLowerCase()).filter(Boolean));
@@ -74,6 +80,9 @@ function filterWordHitsByKind(hits: WordMatchHit[], includeKinds?: string[]): Wo
   return hits.filter((hit) => hit.kind === "symbol" ? allowed.has("symbol") || allowed.has("function") || allowed.has("class") || allowed.has("method") || allowed.has("variable") : true);
 }
 
+// Purpose: Build the operator-facing exact-search miss message for the requested scope.
+// Inputs: The original query string plus the exact-search scope that missed.
+// Returns/Effects: Returns the formatted next-step guidance text for an exact-search miss.
 function formatExactMiss(query: string, scope: "symbol" | "file" | "mixed"): string {
   return [
     `No exact ${scope} matches for "${query}".`,
@@ -81,10 +90,16 @@ function formatExactMiss(query: string, scope: "symbol" | "file" | "mixed"): str
   ].join("\n");
 }
 
+// Purpose: Execute exact-search routing and return only the rendered text output.
+// Inputs: Search intent options describing the root, query, scope, and optional filters.
+// Returns/Effects: Builds the exact-search report and returns its rendered text.
 async function runExactSearch(options: SearchIntentOptions): Promise<string> {
   return (await buildExactSearchReport(options)).text;
 }
 
+// Purpose: Build the structured exact-search report for one query and scope.
+// Inputs: Search intent options describing the root, query, scope, and optional filters.
+// Returns/Effects: Runs exact symbol, path, and word lookups and returns the structured report.
 async function buildExactSearchReport(options: SearchIntentOptions): Promise<ExactSearchReport> {
   const topK = options.topK ?? 5;
   if (options.searchType === "symbol") {
@@ -144,10 +159,16 @@ async function buildExactSearchReport(options: SearchIntentOptions): Promise<Exa
   };
 }
 
+// Purpose: Normalize the related-search retrieval mode so related queries always use an explicit mode.
+// Inputs: The optional retrieval mode supplied by the caller.
+// Returns/Effects: Returns the requested mode or the default mixed mode.
 function normalizeRelatedRetrievalMode(mode: RetrievalMode | undefined): RetrievalMode {
   return mode ?? "both";
 }
 
+// Purpose: Build the structured related-search report for one query and entity scope.
+// Inputs: Search intent options describing the root, query, scope, and optional filters.
+// Returns/Effects: Runs unified related search and returns the structured report with diagnostics.
 async function buildRelatedSearchReport(options: SearchIntentOptions): Promise<RelatedSearchReport> {
   const topK = options.topK ?? 5;
   const retrievalMode = normalizeRelatedRetrievalMode(options.retrievalMode);
@@ -174,6 +195,9 @@ async function buildRelatedSearchReport(options: SearchIntentOptions): Promise<R
   };
 }
 
+// Purpose: Route a search request to exact or related reporting based on the declared intent.
+// Inputs: Search intent options describing the root, query, scope, and optional filters.
+// Returns/Effects: Returns the structured exact or related report for the request.
 export async function buildSearchByIntentReport(options: SearchIntentOptions): Promise<SearchIntentReport> {
   if (options.intent === "exact") {
     return buildExactSearchReport(options);
@@ -181,6 +205,9 @@ export async function buildSearchByIntentReport(options: SearchIntentOptions): P
   return buildRelatedSearchReport(options);
 }
 
+// Purpose: Route a search request to exact or related execution and return only the rendered text.
+// Inputs: Search intent options describing the root, query, scope, and optional filters.
+// Returns/Effects: Returns the rendered text for the routed search report.
 export async function runSearchByIntent(options: SearchIntentOptions): Promise<string> {
   return (await buildSearchByIntentReport(options)).text;
 }

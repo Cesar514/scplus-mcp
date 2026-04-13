@@ -11,10 +11,16 @@ import {
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
+// Purpose: Pause the test flow for a fixed number of milliseconds.
+// Inputs: The wait duration in milliseconds.
+// Returns/Effects: Resolves after the requested timeout elapses.
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Purpose: Generate the child-process harness script used to test transport-aware idle shutdown behavior.
+// Inputs: A boolean selecting whether the harness should pass `isTransportAlive`.
+// Returns/Effects: Returns the ESM script source string written into the temporary harness file.
 function createTestScript(withFix) {
   const buildPath = join(PROJECT_ROOT, "build/core/process-lifecycle.js").replace(/\\/g, "/");
   return `
@@ -40,6 +46,9 @@ function createTestScript(withFix) {
   `;
 }
 
+// Purpose: Run the generated idle-timeout harness in a child process and collect its exit details.
+// Inputs: A boolean selecting whether the harness should pass `isTransportAlive`.
+// Returns/Effects: Spawns the harness, captures stderr, and resolves with exit metadata.
 function runHarness(withFix) {
   return new Promise((resolve) => {
     const tmpDir = mkdtempSync(join(tmpdir(), "cp-test-"));

@@ -9,6 +9,9 @@ import { join } from "node:path";
 
 process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
+// Purpose: Create the source and docs fixture files used by the prepared-index reliability tests.
+// Inputs: The temporary repository root that should receive the fixture tree.
+// Returns/Effects: Creates fixture directories and writes representative auth and docs files.
 async function createFixtureRepo(rootDir) {
   await mkdir(join(rootDir, "src", "auth"), { recursive: true });
   await mkdir(join(rootDir, "docs"), { recursive: true });

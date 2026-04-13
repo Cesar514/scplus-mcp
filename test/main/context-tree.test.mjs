@@ -6,6 +6,9 @@ import { join } from "path";
 
 const FIXTURE_DIR = join(process.cwd(), "test", "_ctx_fixtures");
 
+// Purpose: Create the temporary fixture tree used by the context-tree tests.
+// Inputs: No direct inputs beyond the fixed fixture directory path for this test module.
+// Returns/Effects: Recreates fixture directories and writes representative source files for tree rendering.
 async function setup() {
   await rm(FIXTURE_DIR, { recursive: true, force: true });
   await mkdir(join(FIXTURE_DIR, "src"), { recursive: true });

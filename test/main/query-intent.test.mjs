@@ -15,10 +15,16 @@ const execFileAsync = promisify(execFile);
 
 process.env.SCPLUS_EMBED_PROVIDER = "mock";
 
+// Purpose: Run one git command inside the temporary query-intent fixture repository.
+// Inputs: The fixture repository root plus the git CLI arguments to execute.
+// Returns/Effects: Executes the git command and resolves when it completes successfully.
 async function git(rootDir, ...args) {
   await execFileAsync("git", args, { cwd: rootDir });
 }
 
+// Purpose: Create the source files used by the query-intent integration fixture repository.
+// Inputs: The temporary repository root directory that should receive the fixture files.
+// Returns/Effects: Creates fixture directories and writes the auth and middleware source files under test.
 async function createFixtureRepo(rootDir) {
   await mkdir(join(rootDir, "src", "auth"), { recursive: true });
   await mkdir(join(rootDir, "src", "middleware"), { recursive: true });
@@ -61,6 +67,9 @@ async function createFixtureRepo(rootDir) {
   );
 }
 
+// Purpose: Extract and concatenate all text payload segments from one MCP tool result.
+// Inputs: The MCP tool result object returned by the client.
+// Returns/Effects: Returns the joined text content from every text entry in the result payload.
 function getTextResult(result) {
   return result.content
     .filter((entry) => entry.type === "text")

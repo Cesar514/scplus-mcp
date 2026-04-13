@@ -24,6 +24,9 @@ import {
   runWithIndexGenerationContext,
 } from "../../build/core/index-database.js";
 
+// Purpose: Read the currently active generation number from the sqlite metadata table.
+// Inputs: The sqlite database path to inspect.
+// Returns/Effects: Opens the database, reads the active generation metadata, and returns the numeric generation id.
 function getActiveGeneration(dbPath) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -34,11 +37,17 @@ function getActiveGeneration(dbPath) {
   }
 }
 
+// Purpose: Prefix a vector namespace with the active generation when generation-aware storage is enabled.
+// Inputs: The logical namespace plus the active generation number.
+// Returns/Effects: Returns the generation-qualified namespace used by the sqlite vector store.
 function qualifyNamespace(namespace, generation) {
   if (generation === 0) return namespace;
   return `generation:${generation}:${namespace}`;
 }
 
+// Purpose: Read vector entry metadata rows for one namespace from the sqlite vector store.
+// Inputs: The sqlite database path plus the logical vector namespace to inspect.
+// Returns/Effects: Opens the database and returns the ordered vector entry rows for that namespace.
 function readVectorEntries(dbPath, namespace) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -55,6 +64,9 @@ function readVectorEntries(dbPath, namespace) {
   }
 }
 
+// Purpose: Read the binary storage type and length for one vector entry in the sqlite vector store.
+// Inputs: The sqlite database path, logical namespace, and entry id to inspect.
+// Returns/Effects: Opens the database and returns the stored vector blob metadata for that entry.
 function readVectorEntryStorage(dbPath, namespace, entryId) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -70,6 +82,9 @@ function readVectorEntryStorage(dbPath, namespace, entryId) {
   }
 }
 
+// Purpose: Read the recorded entry count for one vector namespace from the sqlite collection metadata.
+// Inputs: The sqlite database path plus the logical vector namespace to inspect.
+// Returns/Effects: Opens the database and returns the stored entry count or null when absent.
 function readVectorCollectionEntryCount(dbPath, namespace) {
   const db = new DatabaseSync(dbPath);
   try {
@@ -86,6 +101,9 @@ function readVectorCollectionEntryCount(dbPath, namespace) {
   }
 }
 
+// Purpose: Delete one vector entry from sqlite and recompute the stored namespace entry count.
+// Inputs: The sqlite database path, logical namespace, and entry id to delete.
+// Returns/Effects: Removes the entry inside a transaction and updates the vector collection metadata.
 function deleteVectorEntry(dbPath, namespace, entryId) {
   const db = new DatabaseSync(dbPath);
   try {

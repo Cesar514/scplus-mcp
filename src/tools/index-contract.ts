@@ -239,6 +239,9 @@ export const INDEX_STORAGE_CONTRACT: IndexStorageContract = {
   vectorCollectionTable: "vector_collections",
 };
 
+// Purpose: Build the shared index contract metadata used across persistence and validation flows.
+// Inputs: No direct inputs beyond the exported contract constants in this module.
+// Returns/Effects: Returns the assembled index contract metadata object.
 export function buildIndexContract(): IndexContractMetadata {
   return {
     contractVersion: INDEX_CONTRACT_VERSION,
@@ -253,6 +256,9 @@ export function buildIndexContract(): IndexContractMetadata {
   };
 }
 
+// Purpose: Describe the durable stage definitions for each prepared-index pipeline stage.
+// Inputs: No direct inputs beyond the exported stage and artifact constants in this module.
+// Returns/Effects: Returns the stage-definition map used by indexing, validation, and repair flows.
 export function getStageDefinitions(): Record<IndexStageName, IndexStageDefinition> {
   return {
     bootstrap: {
@@ -311,6 +317,9 @@ export function getStageDefinitions(): Record<IndexStageName, IndexStageDefiniti
   };
 }
 
+// Purpose: List the artifact paths required for a valid core prepared index.
+// Inputs: No direct inputs beyond the stage definitions defined in this module.
+// Returns/Effects: Returns the combined bootstrap, file-search, and identifier-search artifact paths.
 export function getCoreArtifactPaths(): string[] {
   const definitions = getStageDefinitions();
   return [
@@ -320,6 +329,9 @@ export function getCoreArtifactPaths(): string[] {
   ];
 }
 
+// Purpose: List the artifact paths required for a valid full prepared index.
+// Inputs: No direct inputs beyond the core and full-artifact stage definitions.
+// Returns/Effects: Returns the combined core and full-artifact path list.
 export function getFullArtifactPaths(): string[] {
   return [...getCoreArtifactPaths(), ...getStageDefinitions()["full-artifacts"].outputs];
 }

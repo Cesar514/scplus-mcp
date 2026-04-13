@@ -11,15 +11,24 @@ import { join } from "path";
 
 const FIXTURE_DIR = join(process.cwd(), "test", "_shadow_fixtures");
 
+// Purpose: Recreate the temporary fixture directory used by the shadow restore-point tests.
+// Inputs: No direct inputs beyond the fixed fixture directory path for this module.
+// Returns/Effects: Deletes any existing fixture directory and creates a fresh empty one.
 async function setup() {
   await rm(FIXTURE_DIR, { recursive: true, force: true });
   await mkdir(FIXTURE_DIR, { recursive: true });
 }
 
+// Purpose: Remove the temporary fixture directory after the shadow tests finish.
+// Inputs: No direct inputs beyond the fixed fixture directory path for this module.
+// Returns/Effects: Deletes the fixture directory tree if it exists.
 async function cleanup() {
   await rm(FIXTURE_DIR, { recursive: true, force: true });
 }
 
+// Purpose: Count persisted restore-point backup rows in the fixture sqlite database.
+// Inputs: The repository root whose `.scplus` sqlite database should be inspected.
+// Returns/Effects: Opens the sqlite database, counts backup rows, and returns the numeric count.
 function getRestorePointBackupCount(rootDir) {
   const db = new DatabaseSync(join(rootDir, ".scplus", "state", "index.sqlite"));
   try {

@@ -11,10 +11,16 @@ import { join } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+// Purpose: Run one git command inside the temporary runtime-concurrency fixture repository.
+// Inputs: The fixture repository root plus the git CLI arguments to execute.
+// Returns/Effects: Executes the git command and resolves when it completes successfully.
 async function git(cwd, ...args) {
   await execFileAsync("git", args, { cwd });
 }
 
+// Purpose: Create the fixture repository used to test same-repo mutation-lock takeover behavior.
+// Inputs: The temporary repository root plus an optional number of generated source files.
+// Returns/Effects: Creates fixture source files and writes a minimal package manifest.
 async function createFixtureRepo(rootDir, fileCount = 220) {
   await mkdir(join(rootDir, "src"), { recursive: true });
   for (let index = 0; index < fileCount; index++) {
@@ -40,6 +46,9 @@ async function createFixtureRepo(rootDir, fileCount = 220) {
   );
 }
 
+// Purpose: Wait until a filesystem path appears or fail after the timeout expires.
+// Inputs: The path to watch plus an optional timeout in milliseconds.
+// Returns/Effects: Resolves when the path becomes accessible or throws after the timeout.
 async function waitForPath(path, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
@@ -53,6 +62,9 @@ async function waitForPath(path, timeoutMs = 15000) {
   throw new Error(`Timed out waiting for ${path}`);
 }
 
+// Purpose: Wait for a spawned child process to exit or fail after the timeout expires.
+// Inputs: The spawned child process plus an optional timeout in milliseconds.
+// Returns/Effects: Resolves with exit metadata or rejects when the timeout expires first.
 async function waitForExit(child, timeoutMs = 15000) {
   if (child.exitCode !== null || child.signalCode !== null) {
     return { code: child.exitCode, signal: child.signalCode };

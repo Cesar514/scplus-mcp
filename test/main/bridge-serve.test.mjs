@@ -12,64 +12,26 @@ import { createInterface } from "node:readline";
 
 const execFileAsync = promisify(execFile);
 
+// Purpose: Run one git command inside the temporary bridge-serve fixture repository.
+// Inputs: The repository working directory plus the git CLI arguments to execute.
+// Returns/Effects: Executes the git command and resolves when it completes successfully.
 async function git(cwd, ...args) {
   await execFileAsync("git", args, { cwd });
 }
 
 class BridgeSession {
-  constructor(cwd) {
-    this.cwd = cwd;
-    this.nextId = 0;
-    this.pending = new Map();
-    this.events = [];
-    this.waiters = [];
-    this.stderrLines = [];
-    this.process = spawn(process.execPath, [join(process.cwd(), "build", "index.js"), "bridge-serve"], {
-      cwd,
-      env: {
-        ...process.env,
-        SCPLUS_EMBED_PROVIDER: "mock",
-        NODE_NO_WARNINGS: "1",
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    this.readline = createInterface({
-      input: this.process.stdout,
-      crlfDelay: Infinity,
-    });
-    this.readline.on("line", (line) => {
-      const frame = JSON.parse(line);
-      if (frame.type === "response") {
-        const pending = this.pending.get(frame.id);
-        if (!pending) return;
-        this.pending.delete(frame.id);
-        if (frame.ok) {
-          pending.resolve(frame.result);
-          return;
-        }
-        pending.reject(new Error(frame.error));
-        return;
-      }
-      if (frame.type !== "event") {
-        throw new Error(`Unexpected frame type ${String(frame.type)}`);
-      }
-      this.events.push(frame);
-      const remaining = [];
-      for (const waiter of this.waiters) {
-        if (waiter.predicate(frame)) {
-          waiter.resolve(frame);
-          continue;
-        }
-        remaining.push(waiter);
-      }
-      this.waiters = remaining;
-    });
-    this.process.stderr.setEncoding("utf8");
-    this.process.stderr.on("data", (chunk) => {
-      this.stderrLines.push(...String(chunk).split("\n").filter(Boolean));
-    });
+  // Purpose: Create and initialize a persistent bridge-serve test session for one fixture repository.
+  // Inputs: The repository working directory that the bridge-serve subprocess should run against.
+  // Returns/Effects: Returns an initialized BridgeSession instance with a live bridge subprocess.
+  static create(cwd) {
+    const session = new BridgeSession();
+    initializeBridgeSession(session, cwd);
+    return session;
   }
 
+  // Purpose: Send one bridge protocol request to the persistent subprocess and await its matching response.
+  // Inputs: The bridge command name plus an optional argument object.
+  // Returns/Effects: Writes one JSON request frame to stdin and resolves or rejects when the response arrives.
   request(command, args = {}) {
     const id = ++this.nextId;
     const payload = JSON.stringify({
@@ -84,6 +46,9 @@ class BridgeSession {
     });
   }
 
+  // Purpose: Wait for a previously emitted or future bridge event that satisfies the given predicate.
+  // Inputs: An event-matching predicate plus an optional timeout in milliseconds.
+  // Returns/Effects: Resolves with the matching event or rejects after the timeout expires.
   waitForEvent(predicate, timeoutMs = 20000) {
     const existing = this.events.find(predicate);
     if (existing) return Promise.resolve(existing);
@@ -103,6 +68,9 @@ class BridgeSession {
     });
   }
 
+  // Purpose: Shut down the persistent bridge subprocess and clean up its readline wrapper.
+  // Inputs: No direct inputs beyond the current bridge subprocess state.
+  // Returns/Effects: Requests shutdown, closes stdin, waits for process exit, and closes readline.
   async close() {
     try {
       await this.request("shutdown");
@@ -117,6 +85,65 @@ class BridgeSession {
   }
 }
 
+// Purpose: Initialize a BridgeSession instance around one persistent bridge-serve subprocess.
+// Inputs: The BridgeSession instance to populate plus the repository working directory for the subprocess.
+// Returns/Effects: Spawns the subprocess, wires stdout and stderr listeners, and seeds session state.
+function initializeBridgeSession(session, cwd) {
+  session.cwd = cwd;
+  session.nextId = 0;
+  session.pending = new Map();
+  session.events = [];
+  session.waiters = [];
+  session.stderrLines = [];
+  session.process = spawn(process.execPath, [join(process.cwd(), "build", "index.js"), "bridge-serve"], {
+    cwd,
+    env: {
+      ...process.env,
+      SCPLUS_EMBED_PROVIDER: "mock",
+      NODE_NO_WARNINGS: "1",
+    },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  session.readline = createInterface({
+    input: session.process.stdout,
+    crlfDelay: Infinity,
+  });
+  session.readline.on("line", (line) => {
+    const frame = JSON.parse(line);
+    if (frame.type === "response") {
+      const pending = session.pending.get(frame.id);
+      if (!pending) return;
+      session.pending.delete(frame.id);
+      if (frame.ok) {
+        pending.resolve(frame.result);
+        return;
+      }
+      pending.reject(new Error(frame.error));
+      return;
+    }
+    if (frame.type !== "event") {
+      throw new Error(`Unexpected frame type ${String(frame.type)}`);
+    }
+    session.events.push(frame);
+    const remaining = [];
+    for (const waiter of session.waiters) {
+      if (waiter.predicate(frame)) {
+        waiter.resolve(frame);
+        continue;
+      }
+      remaining.push(waiter);
+    }
+    session.waiters = remaining;
+  });
+  session.process.stderr.setEncoding("utf8");
+  session.process.stderr.on("data", (chunk) => {
+    session.stderrLines.push(...String(chunk).split("\n").filter(Boolean));
+  });
+}
+
+// Purpose: Retry a bridge request when transient expected errors occur during startup or queue transitions.
+// Inputs: The bridge session, command, args, retry predicate, and optional retry controls.
+// Returns/Effects: Reissues the request until it succeeds or a non-retriable error occurs.
 async function requestWithRetry(session, command, args, predicate, attempts = 6, delayMs = 250) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -169,7 +196,7 @@ describe("bridge-serve", () => {
         },
       );
 
-      const session = new BridgeSession(cwd);
+      const session = BridgeSession.create(cwd);
       try {
         const [doctor, tree] = await Promise.all([
           session.request("doctor", { root: cwd }),

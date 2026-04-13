@@ -70,10 +70,16 @@ const CHUNK_CACHE_FILE = "chunk-embeddings-cache.json";
 const MAX_CHUNK_CHARS = 6000;
 const MAX_FALLBACK_FILE_CHARS = 6000;
 
+// Purpose: Decide whether chunk-index progress should be emitted for the current file count.
+// Inputs: The number of processed files plus the total file count in the current run.
+// Returns/Effects: Returns true for the first file, last file, and periodic progress checkpoints.
 function shouldReportProgress(processedFiles: number, totalFiles: number): boolean {
   return processedFiles === 1 || processedFiles === totalFiles || processedFiles % 25 === 0;
 }
 
+// Purpose: Check whether a persisted chunk artifact still matches the current chunk schema shape.
+// Inputs: A persisted chunk artifact candidate that may be partial or undefined.
+// Returns/Effects: Returns true when the artifact exposes the required current-schema fields.
 function isCurrentChunkArtifact(chunk: Partial<ChunkArtifact> | undefined): boolean {
   if (!chunk) return false;
   return typeof chunk.chunkType === "string"
@@ -82,25 +88,40 @@ function isCurrentChunkArtifact(chunk: Partial<ChunkArtifact> | undefined): bool
     && typeof chunk.contentHash === "string";
 }
 
+// Purpose: Check whether a persisted per-file chunk entry can be reused without rebuilding.
+// Inputs: The previous persisted chunk entry for one file.
+// Returns/Effects: Returns true when the entry hash and every chunk satisfy the current schema.
 function canReuseChunkEntry(entry: PersistedChunkFileEntry | undefined): boolean {
   if (!entry) return false;
   return typeof entry.contentHash === "string" && entry.chunks.every((chunk) => isCurrentChunkArtifact(chunk));
 }
 
+// Purpose: Build the stable chunk id for one symbol or fallback file chunk.
+// Inputs: The relative file path plus the chunk-identifying symbol metadata.
+// Returns/Effects: Returns the stable chunk id string used for persistence and embedding cache keys.
 function getChunkId(relativePath: string, symbol: Pick<ChunkArtifact, "line" | "endLine" | "symbolName" | "signature">): string {
   return `${relativePath}:${symbol.line}:${symbol.endLine}:${symbol.symbolName ?? "file"}:${symbol.signature ?? ""}`;
 }
 
+// Purpose: Extract and trim the source lines that back one chunk artifact.
+// Inputs: The file lines plus the start and end line numbers for the chunk.
+// Returns/Effects: Returns the trimmed chunk content capped to the maximum chunk size.
 function sliceLines(lines: string[], line: number, endLine: number): string {
   const start = Math.max(0, line - 1);
   const end = Math.max(start + 1, endLine);
   return lines.slice(start, end).join("\n").slice(0, MAX_CHUNK_CHARS).trim();
 }
 
+// Purpose: Build the hierarchical symbol path recorded for one flattened symbol location.
+// Inputs: The flattened symbol location from parser output.
+// Returns/Effects: Returns the parent-plus-name path array for the symbol.
 function buildSymbolPath(symbol: SymbolLocation): string[] {
   return symbol.parentName ? [symbol.parentName, symbol.name] : [symbol.name];
 }
 
+// Purpose: Build symbol-backed chunk artifacts from the flattened symbol list of one file.
+// Inputs: The relative path, file header, flattened symbols, and source lines for the file.
+// Returns/Effects: Returns the chunk artifacts generated for each symbol with content.
 function buildSymbolChunks(relativePath: string, header: string, symbols: SymbolLocation[], lines: string[]): ChunkArtifact[] {
   const chunks: ChunkArtifact[] = [];
   for (const symbol of symbols) {
@@ -130,6 +151,9 @@ function buildSymbolChunks(relativePath: string, header: string, symbols: Symbol
   return chunks;
 }
 
+// Purpose: Build a single file-fallback chunk when no symbol-backed chunks can be produced.
+// Inputs: The relative path, file header, raw file content, and total line count.
+// Returns/Effects: Returns the fallback chunk array or an empty array when content is empty.
 function buildFallbackChunk(relativePath: string, header: string, content: string, lineCount: number): ChunkArtifact[] {
   const trimmed = content.slice(0, MAX_FALLBACK_FILE_CHARS).trim();
   if (!trimmed) return [];
@@ -150,6 +174,9 @@ function buildFallbackChunk(relativePath: string, header: string, content: strin
   }];
 }
 
+// Purpose: Load the persisted chunk index state or return the default empty chunk state.
+// Inputs: The repository root whose chunk index state should be loaded.
+// Returns/Effects: Returns the persisted chunk-search index state for the repository.
 export async function loadChunkIndexState(rootDir: string): Promise<PersistedChunkIndexState> {
   return loadIndexArtifact(rootDir, "chunk-search-index", () => ({
     generatedAt: "",
@@ -160,10 +187,16 @@ export async function loadChunkIndexState(rootDir: string): Promise<PersistedChu
   }));
 }
 
+// Purpose: Persist the chunk index state into the repository's sqlite artifact store.
+// Inputs: The repository root plus the chunk index state to save.
+// Returns/Effects: Writes the chunk-search index artifact to durable storage.
 export async function saveChunkIndexState(rootDir: string, state: PersistedChunkIndexState): Promise<void> {
   await saveIndexArtifact(rootDir, "chunk-search-index", state);
 }
 
+// Purpose: Build the chunk artifacts for one supported source file.
+// Inputs: The repository root plus the repository-relative path of the file to analyze.
+// Returns/Effects: Returns symbol or fallback chunk artifacts, or null when the file is unsupported or unreadable.
 export async function buildChunkArtifactsForFile(rootDir: string, relativePath: string): Promise<ChunkArtifact[] | null> {
   const normalized = normalizeRelativePath(relativePath);
   const fullPath = resolve(rootDir, normalized);
@@ -182,6 +215,9 @@ export async function buildChunkArtifactsForFile(rootDir: string, relativePath: 
   }
 }
 
+// Purpose: Refresh the persisted chunk index state by rebuilding changed files and reusing unchanged entries.
+// Inputs: The repository root plus an optional progress callback.
+// Returns/Effects: Walks source files, rebuilds the chunk index state, saves it, and returns refresh stats.
 export async function refreshChunkIndexState(
   rootDir: string,
   onProgress?: (progress: ChunkIndexProgress) => Promise<void> | void,
@@ -243,6 +279,9 @@ export async function refreshChunkIndexState(
   };
 }
 
+// Purpose: Ensure chunk embeddings exist for the provided chunk artifacts using the embedding cache.
+// Inputs: The repository root, chunk artifacts to embed, and an optional progress callback.
+// Returns/Effects: Reuses cached embeddings, fetches missing vectors, saves the cache, and returns embedding stats.
 export async function warmChunkEmbeddings(
   rootDir: string,
   docs: ChunkArtifact[],
