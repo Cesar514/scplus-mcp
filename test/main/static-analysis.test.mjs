@@ -662,6 +662,137 @@ describe("static-analysis", async () => {
       );
     });
 
+    it("reports untyped public interfaces across supported languages", async () => {
+      const fixtures = [
+        {
+          name: "untyped-public.ts",
+          content: [
+            "// summary: TypeScript typed public interface fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: exported api without type boundary",
+            "// outputs: typed public interface finding",
+            "",
+            "// Purpose: Expose an undocumented type boundary for lint coverage.",
+            "// Inputs: A value accepted without an explicit public type.",
+            "// Returns/Effects: Returns the input with no additional effects.",
+            "export function untypedTs(value) {",
+            "  return value;",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "untyped_public.py",
+          content: [
+            "# summary: Python typed public interface fixture module",
+            "# FEATURE: Static Analysis Tests",
+            "# inputs: public api without annotations",
+            "# outputs: typed public interface finding",
+            "",
+            "# Purpose: Expose an undocumented type boundary for lint coverage.",
+            "# Inputs: A value accepted without an explicit public type.",
+            "# Returns/Effects: Returns the input with no additional effects.",
+            "def untyped_py(value):",
+            "    return value",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "untypedPublic.go",
+          content: [
+            "// summary: Go typed public interface fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: exported api without return type",
+            "// outputs: typed public interface finding",
+            "",
+            "package fixtures",
+            "",
+            "// Purpose: Expose an undocumented type boundary for lint coverage.",
+            "// Inputs: A value accepted without an explicit public return type.",
+            "// Returns/Effects: Returns the input with no additional effects.",
+            "func UntypedGo(value int) {",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "UntypedPublic.java",
+          content: [
+            "// summary: Java typed public interface fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: public api without typed parameters",
+            "// outputs: typed public interface finding",
+            "",
+            "public class UntypedPublicJava {",
+            "  // Purpose: Expose an undocumented type boundary for lint coverage.",
+            "  // Inputs: A value accepted without an explicit parameter type.",
+            "  // Returns/Effects: Returns a constant with no side effects.",
+            "  public int untypedJava(var value) {",
+            "    return 1;",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "untyped_public.rs",
+          content: [
+            "// summary: Rust typed public interface fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: public api without return type",
+            "// outputs: typed public interface finding",
+            "",
+            "// Purpose: Expose an undocumented type boundary for lint coverage.",
+            "// Inputs: A value accepted without an explicit public return type.",
+            "// Returns/Effects: Returns the input with no additional effects.",
+            "pub fn untyped_rust(value: i32) {",
+            "    let _ = value;",
+            "}",
+            "",
+          ].join("\n"),
+        },
+      ];
+
+      for (const fixture of fixtures) {
+        await writeFile(join(FIXTURE_DIR, fixture.name), fixture.content);
+        const report = await buildStaticAnalysisReport({
+          rootDir: FIXTURE_DIR,
+          targetPath: fixture.name,
+        });
+        assert.ok(
+          report.ruleFindings.some((finding) => finding.rule === "typed-public-interfaces"),
+          `expected typed public interface finding for ${fixture.name}`,
+        );
+      }
+    });
+
+    it("accepts typed public interfaces", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "typed-public.ts"),
+        [
+          "// summary: Typed public interface acceptance fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: exported api with typed boundary",
+          "// outputs: no typed public interface finding",
+          "",
+          "// Purpose: Expose a fully typed public API for lint verification.",
+          "// Inputs: A numeric value that is accepted through a typed boundary.",
+          "// Returns/Effects: Returns the adjusted numeric result with no side effects.",
+          "export function typedTs(value: number): number {",
+          "  return value + 1;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "typed-public.ts",
+      });
+      assert.ok(
+        !report.ruleFindings.some((finding) => finding.rule === "typed-public-interfaces"),
+      );
+    });
+
     it("reports tracked todo and wildcard import violations", async () => {
       await writeFile(
         join(FIXTURE_DIR, "lint-rules.py"),

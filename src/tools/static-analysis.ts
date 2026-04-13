@@ -649,6 +649,67 @@ function validatePublicApiDocBlock(
   return [];
 }
 
+function hasTypedPublicInterface(signatureText: string, grammarName: string): boolean {
+  const trimmed = signatureText.trim();
+
+  if (grammarName === "typescript" || grammarName === "tsx") {
+    const hasTypedParameters = /\([^)]*:\s*[^,)]+/.test(trimmed) || /\(\s*\)/.test(trimmed);
+    const hasReturnType = /\)\s*:\s*[^{=]+/.test(trimmed);
+    return hasTypedParameters && hasReturnType;
+  }
+
+  if (grammarName === "python") {
+    const hasTypedParameters = /\([^)]*:\s*[^,)]+/.test(trimmed) || /\(\s*(?:self|cls)?\s*\)/.test(trimmed);
+    const hasReturnType = /\)\s*->\s*[^:]+:/.test(trimmed);
+    return hasTypedParameters && hasReturnType;
+  }
+
+  if (grammarName === "go") {
+    const parameterList = trimmed.match(/\(([^)]*)\)/)?.[1] ?? "";
+    const hasTypedParameters = parameterList.trim().length === 0 || /\b[A-Za-z_]\w*\s+[\*\[\]A-Za-z_]/.test(parameterList);
+    const hasReturnType = /\)\s+[({\[*A-Za-z_]/.test(trimmed) && !/\)\s*\{/.test(trimmed);
+    return hasTypedParameters && hasReturnType;
+  }
+
+  if (grammarName === "java" || grammarName === "c_sharp") {
+    const parameterList = trimmed.match(/\(([^)]*)\)/)?.[1] ?? "";
+    const hasTypedParameters = parameterList.trim().length === 0 || /\b(?:final\s+)?[A-Za-z_<>\[\]?.,]+\s+[A-Za-z_]\w*/.test(parameterList);
+    const beforeParen = trimmed.split("(")[0] ?? "";
+    const hasReturnType = /\b[A-Za-z_<>\[\]?.,]+\s+[A-Za-z_]\w*$/.test(beforeParen);
+    return hasTypedParameters && hasReturnType;
+  }
+
+  if (grammarName === "rust") {
+    const parameterList = trimmed.match(/\(([^)]*)\)/)?.[1] ?? "";
+    const parameters = parameterList
+      .split(",")
+      .map((parameter) => parameter.trim())
+      .filter((parameter) => parameter.length > 0 && parameter !== "&self" && parameter !== "&mut self" && parameter !== "self");
+    const hasTypedParameters = parameters.every((parameter) => /:\s*[^,]+/.test(parameter));
+    const hasReturnType = /\)\s*->\s*[^{]+/.test(trimmed);
+    return hasTypedParameters && hasReturnType;
+  }
+
+  return true;
+}
+
+function validateTypedPublicInterface(
+  file: string,
+  symbolLine: number,
+  signatureText: string,
+  grammarName: string,
+): RuleFinding[] {
+  if (grammarName === "javascript") return [];
+  if (hasTypedPublicInterface(signatureText, grammarName)) return [];
+  return [{
+    file,
+    line: symbolLine,
+    rule: "typed-public-interfaces",
+    severity: "error",
+    message: `${signatureText} must declare typed public parameters and a typed return boundary.`,
+  }];
+}
+
 function computeMaxControlFlowDepth(
   node: any,
   grammarName: string,
@@ -764,6 +825,7 @@ async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: L
             && isLikelyPublicApi(signatureText, nameText, grammarName)
           ) {
             findings.push(...validatePublicApiDocBlock(file, lineNumber, signatureText, lineInfo));
+            findings.push(...validateTypedPublicInterface(file, lineNumber, signatureText, grammarName));
           }
 
           for (const child of node.namedChildren ?? []) visit(child);

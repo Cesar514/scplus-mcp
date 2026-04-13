@@ -20,3 +20,6 @@
 [x] 2026-04-13T11:55:40Z Implement `public_api_requires_doc` in `src/tools/static-analysis.ts` for public or exported functions, methods, and classes. \
 [x] 2026-04-13T11:55:40Z Add automated coverage for `public_api_requires_doc` and align the changed exported APIs in this repo with the new rule. \
 [x] 2026-04-13T11:55:40Z Rebuild, rerun the targeted static-analysis tests, and run the lint report against the changed repo files to verify the rule in this repository. \
+[x] 2026-04-13T12:00:10Z Implement `typed_public_interfaces` in `src/tools/static-analysis.ts` for public APIs in languages with explicit type syntax. \
+[x] 2026-04-13T12:00:10Z Add automated coverage for `typed_public_interfaces` across the supported public-API languages. \
+[x] 2026-04-13T12:00:10Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against real repo files. \
