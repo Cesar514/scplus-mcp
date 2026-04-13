@@ -35,3 +35,10 @@
 [x] 2026-04-13T13:04:45Z Implement `no_duplicate_blocks` in `src/tools/static-analysis.ts` with low-noise duplicate block detection for the supported source files. \
 [x] 2026-04-13T13:04:45Z Add automated coverage for `no_duplicate_blocks` in `test/main/static-analysis.test.mjs`. \
 [x] 2026-04-13T13:04:45Z Rebuild, rerun the targeted static-analysis tests, and verify the new duplicate-block rule against a real repo file. \
+[x] 2026-04-13T13:07:47Z Verify the repository lint target and run the strongest available lint check for the current goal. \
+[x] 2026-04-13T13:07:47Z Inspect the highest-signal lint findings and gather file/line references for the report. \
+[x] 2026-04-13T13:19:21Z Refactor `cli/internal/backend/client.go` to remove duplicate wrappers and reduce complexity without changing the CLI/backend protocol. \
+[x] 2026-04-13T13:19:21Z Refactor `cli/cmd/scplus-cli/main.go` to reduce complexity and satisfy structural lint rules without changing command behavior. \
+[x] 2026-04-13T13:19:21Z Refactor `src/tools/static-analysis.ts` to satisfy its own lint rules while preserving the lint report behavior. \
+[x] 2026-04-13T13:19:21Z Refactor `test/main/static-analysis.test.mjs` to remove duplicate fixture blocks while preserving rule coverage. \
+[x] 2026-04-13T13:19:21Z Rebuild and rerun targeted lint and tests for the four files until the goal is verified. \
