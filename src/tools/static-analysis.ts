@@ -129,6 +129,7 @@ const BLOCK_COMMENT_EXTENSIONS = new Set([
 const MAX_FILE_LOC = 800;
 const MAX_FUNCTION_LOC = 40;
 const MAX_PARAMETER_COUNT = 5;
+const MAX_COGNITIVE_COMPLEXITY = 15;
 const MAX_NESTING_DEPTH = 2;
 const MAX_FUNCTIONS_PER_FILE = 12;
 const MAX_LINE_LENGTH = 150;
@@ -166,6 +167,20 @@ const CONTROL_FLOW_NODE_TYPES: Record<string, Set<string>> = {
   swift: new Set(["if_statement", "for_statement", "while_statement", "repeat_while_statement", "switch_statement", "do_statement"]),
   tsx: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
   typescript: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "try_statement"]),
+};
+const COGNITIVE_COMPLEXITY_NODE_TYPES: Record<string, Set<string>> = {
+  c: new Set(["if_statement", "for_statement", "while_statement", "do_statement", "switch_statement", "conditional_expression"]),
+  cpp: new Set(["if_statement", "for_statement", "for_range_loop", "while_statement", "do_statement", "switch_statement", "conditional_expression", "catch_clause"]),
+  c_sharp: new Set(["if_statement", "for_statement", "for_each_statement", "while_statement", "do_statement", "switch_statement", "conditional_expression", "catch_clause"]),
+  go: new Set(["if_statement", "for_statement", "expression_switch_statement", "type_switch_statement", "select_statement"]),
+  java: new Set(["if_statement", "for_statement", "enhanced_for_statement", "while_statement", "do_statement", "switch_expression", "switch_statement", "ternary_expression", "catch_clause"]),
+  javascript: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "ternary_expression", "catch_clause"]),
+  kotlin: new Set(["if_expression", "for_statement", "while_statement", "do_while_statement", "when_expression", "try_expression"]),
+  python: new Set(["if_statement", "for_statement", "while_statement", "except_clause", "match_statement", "conditional_expression"]),
+  rust: new Set(["if_expression", "for_expression", "while_expression", "loop_expression", "match_expression"]),
+  swift: new Set(["if_statement", "for_statement", "while_statement", "repeat_while_statement", "switch_statement", "catch_clause"]),
+  tsx: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "ternary_expression", "catch_clause"]),
+  typescript: new Set(["if_statement", "for_statement", "for_in_statement", "while_statement", "do_statement", "switch_statement", "ternary_expression", "catch_clause"]),
 };
 const FUNCTION_NODE_TYPES: Record<string, Set<string>> = {
   c: new Set(["function_definition"]),
@@ -982,6 +997,56 @@ function computeMaxControlFlowDepth(
   return maxDepth;
 }
 
+function countConditionDecisionPoints(node: any): number {
+  const text = node?.text ?? "";
+  return (text.match(/&&|\|\|/g) ?? []).length;
+}
+
+function computeCognitiveComplexity(
+  node: any,
+  grammarName: string,
+  nestingLevel: number,
+  isRootCallable: boolean,
+): number {
+  const complexityTypes = COGNITIVE_COMPLEXITY_NODE_TYPES[grammarName] ?? new Set<string>();
+  const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
+  const isCallableNode = functionTypes.has(node.type);
+  if (!isRootCallable && isCallableNode) return 0;
+
+  let score = 0;
+  const isComplexityNode = complexityTypes.has(node.type);
+  const nextNestingLevel = isComplexityNode ? nestingLevel + 1 : nestingLevel;
+
+  if (isComplexityNode) {
+    score += 1 + nestingLevel;
+    if (node.type === "if_statement" || node.type === "if_expression") {
+      const conditionNode = node.namedChildren?.find((child: any) =>
+        child.type === "condition_clause"
+        || child.type === "parenthesized_expression"
+        || child.type === "binary_expression"
+        || child.type === "identifier"
+        || child.type === "comparison_operator"
+      ) ?? node.namedChildren?.[0];
+      score += countConditionDecisionPoints(conditionNode);
+    }
+    if (
+      node.type === "while_statement"
+      || node.type === "while_expression"
+      || node.type === "for_statement"
+      || node.type === "for_expression"
+      || node.type === "for_in_statement"
+    ) {
+      score += countConditionDecisionPoints(node);
+    }
+  }
+
+  for (const child of node.namedChildren ?? []) {
+    score += computeCognitiveComplexity(child, grammarName, nextNestingLevel, false);
+  }
+
+  return score;
+}
+
 async function validateNestingDepth(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1029,6 +1094,57 @@ async function validateNestingDepth(file: string, fullPath: string, lineInfo: Li
       rule: "ast-analysis",
       severity: "error",
       message: `AST-backed nesting analysis could not analyze this file: ${message}`,
+    }];
+  }
+}
+
+async function validateCognitiveComplexity(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  const extension = extname(fullPath).toLowerCase();
+  if (!isSupportedFile(fullPath)) return [];
+
+  try {
+    return await withSyntaxTree(
+      lineInfo.map((line) => line.text).join("\n"),
+      extension,
+      ({ rootNode, grammarName }) => {
+        const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
+        const findings: RuleFinding[] = [];
+
+        function visit(node: any): void {
+          if (functionTypes.has(node.type)) {
+            const complexity = computeCognitiveComplexity(node, grammarName, 0, true);
+            if (complexity > MAX_COGNITIVE_COMPLEXITY) {
+              const signatureText = buildCallableSignatureText(
+                node.startPosition.row + 1,
+                node.endPosition.row + 1,
+                lineInfo,
+                lineInfo[node.startPosition.row]?.trimmed ?? node.type,
+              );
+              findings.push({
+                file,
+                line: node.startPosition.row + 1,
+                rule: "max-cognitive-complexity",
+                severity: "error",
+                message: `${signatureText} exceeds cognitive complexity ${MAX_COGNITIVE_COMPLEXITY} (${complexity}).`,
+              });
+            }
+          }
+
+          for (const child of node.namedChildren ?? []) visit(child);
+        }
+
+        visit(rootNode);
+        return findings;
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed cognitive complexity analysis could not analyze this file: ${message}`,
     }];
   }
 }
@@ -1180,6 +1296,7 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     findings.push(...await validateGlobalMutableState(relativePath, file, lineInfo));
     findings.push(...await validateFunctionMetrics(relativePath, file, lineInfo));
     findings.push(...await validateNestingDepth(relativePath, file, lineInfo));
+    findings.push(...await validateCognitiveComplexity(relativePath, file, lineInfo));
     findings.push(...await validatePublicApiDocs(relativePath, file, lineInfo));
   }
   return findings;

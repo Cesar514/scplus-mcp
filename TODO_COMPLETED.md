@@ -29,3 +29,6 @@
 [x] 2026-04-13T12:19:39Z Implement `no_global_mutable_state` in `src/tools/static-analysis.ts` for obvious top-level mutable runtime state across the supported languages. \
 [x] 2026-04-13T12:19:39Z Add automated coverage for `no_global_mutable_state` across the supported language set. \
 [x] 2026-04-13T12:19:39Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against real repo files. \
+[x] 2026-04-13T12:53:01Z Implement `max_cognitive_complexity` in `src/tools/static-analysis.ts` using the existing AST control-flow path. \
+[x] 2026-04-13T12:53:01Z Add automated coverage for `max_cognitive_complexity` across the supported language set. \
+[x] 2026-04-13T12:53:01Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against a real repo file. \
