@@ -42,3 +42,13 @@
 [x] 2026-04-13T13:19:21Z Refactor `src/tools/static-analysis.ts` to satisfy its own lint rules while preserving the lint report behavior. \
 [x] 2026-04-13T13:19:21Z Refactor `test/main/static-analysis.test.mjs` to remove duplicate fixture blocks while preserving rule coverage. \
 [x] 2026-04-13T13:19:21Z Rebuild and rerun targeted lint and tests for the four files until the goal is verified. \
+[x] 2026-04-13T13:19:21Z Narrow or remove the `function-header-3-lines` rule path in `src/tools/static-analysis-core.ts` while preserving the stronger public API doc requirements. \
+[x] 2026-04-13T13:19:21Z Update the static-analysis test suite to match the new `function-header-3-lines` behavior. \
+[x] 2026-04-13T13:19:21Z Rebuild, rerun the static-analysis tests, and verify that repo-wide `function-header-3-lines` findings drop to zero. \
+[x] 2026-04-13T14:43:53Z Restore the `function-header-3-lines` logic in `src/tools/static-analysis-core.ts` and align its non-trivial LOC threshold with the current counter so headerless real functions are flagged again. \
+[x] 2026-04-13T14:43:53Z Restore the `function-header-3-lines` test coverage in `test/main/static-analysis-suite.test.mjs` for missing and valid structured function headers. \
+[x] 2026-04-13T14:43:53Z Rebuild and rerun the static-analysis tests to verify the restored rule behaves correctly. \
+[x] 2026-04-13T14:46:45Z Run the strongest available repository-wide lint scan and capture the aggregate severity and score output. \
+[x] 2026-04-13T14:46:45Z Inspect the worst offending files individually and record the highest-signal rule clusters with file and line references. \
+[x] 2026-04-13T14:59:12Z Add the required 3-line structured function headers to the warned helpers in `src/tools/static-analysis-core.ts`. \
+[x] 2026-04-13T14:59:12Z Rerun the targeted lint check for `src/tools/static-analysis-core.ts` and verify the `function-header-3-lines` warnings are gone there. \

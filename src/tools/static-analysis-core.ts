@@ -277,6 +277,9 @@ const FUNCTION_NODE_TYPES: Record<string, Set<string>> = {
   typescript: new Set(["arrow_function", "function_declaration", "function_expression", "generator_function_declaration", "generator_function"]),
 };
 
+// Purpose: Check whether a filesystem path exists without surfacing the stat failure.
+// Inputs: An absolute or repo-relative filesystem path string.
+// Returns/Effects: Returns true when the path resolves on disk, otherwise false.
 async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -286,6 +289,9 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+// Purpose: Resolve a Node-installed tool from either the repo or package-local node_modules tree.
+// Inputs: A repository root directory and the relative executable path inside a package.
+// Returns/Effects: Returns the resolved executable path when present, otherwise null.
 async function resolveNodeTool(rootDir: string, relativePath: string): Promise<string | null> {
   const localPath = resolve(rootDir, "node_modules", relativePath);
   if (await pathExists(localPath)) return localPath;
@@ -294,6 +300,9 @@ async function resolveNodeTool(rootDir: string, relativePath: string): Promise<s
   return null;
 }
 
+// Purpose: Execute one native lint command and normalize its stdout, stderr, and exit code.
+// Inputs: A command binary, its argument vector, the working directory, and a tool label.
+// Returns/Effects: Returns a native lint result object after spawning the external process.
 async function runCommand(cmd: string, args: string[], cwd: string, tool: string): Promise<NativeLintResult> {
   try {
     const { stdout, stderr } = await execFileAsync(cmd, args, {
@@ -311,6 +320,9 @@ async function runCommand(cmd: string, args: string[], cwd: string, tool: string
   }
 }
 
+// Purpose: Expand an optional lint target into the concrete files that static analysis should inspect.
+// Inputs: A repository root directory and an optional file-or-directory target path.
+// Returns/Effects: Returns the matching file paths, walking directories when needed.
 async function getTargetFiles(rootDir: string, targetPath?: string): Promise<string[]> {
   if (!targetPath) {
     const entries = await walkDirectory({ rootDir });
@@ -333,6 +345,9 @@ function stripCommentPrefix(text: string, prefix: string): string {
   return text.startsWith(prefix) ? text.slice(prefix.length).trim() : text.trim();
 }
 
+// Purpose: Derive per-line metadata used by the rule validators from raw file contents.
+// Inputs: A repository-relative file path and the file's raw text split into lines.
+// Returns/Effects: Returns line records with blank and comment classification for each source line.
 function buildLineInfo(file: string, lines: string[]): LineInfo[] {
   const prefix = COMMENT_PREFIXES[extname(file)];
   const supportsBlockComments = BLOCK_COMMENT_EXTENSIONS.has(extname(file));
@@ -371,6 +386,9 @@ function buildLineInfo(file: string, lines: string[]): LineInfo[] {
   return output;
 }
 
+// Purpose: Count the non-comment lines inside an inclusive line range for one file.
+// Inputs: Line metadata plus the starting and ending line numbers to inspect.
+// Returns/Effects: Returns the non-comment logical line count within the requested span.
 function countNonCommentLines(lineInfo: LineInfo[], startLine: number, endLine: number): number {
   return lineInfo
     .filter((line) =>
@@ -385,6 +403,9 @@ function countFileNonCommentLines(lineInfo: LineInfo[]): number {
   return lineInfo.filter((line) => !line.isBlank && !line.isCommentOnly).length;
 }
 
+// Purpose: Remove inline comments while preserving quoted strings used in code comparisons.
+// Inputs: One source line and the source-file extension that determines comment syntax.
+// Returns/Effects: Returns the source text with inline comments removed where safe.
 function stripInlineComments(text: string, extension: string): string {
   let stripped = BLOCK_COMMENT_EXTENSIONS.has(extension)
     ? text.replace(/\/\*.*?\*\//g, " ")
@@ -415,6 +436,9 @@ function stripInlineComments(text: string, extension: string): string {
   return stripped;
 }
 
+// Purpose: Normalize literals and whitespace so duplicate-block checks compare stable code shapes.
+// Inputs: A code snippet with comments already removed.
+// Returns/Effects: Returns normalized text with literals canonicalized for comparison.
 function normalizeCodeText(text: string): string {
   return text
     .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g, "__STR__")
@@ -428,6 +452,9 @@ function isBoilerplateLine(text: string): boolean {
     || /^[{}()[\];,]+$/.test(text);
 }
 
+// Purpose: Collect normalized, signal-bearing code lines for duplicate-line detection.
+// Inputs: One rule-file context containing extension, path, and per-line metadata.
+// Returns/Effects: Returns normalized logical code lines with original source line numbers.
 function collectLogicalCodeLines(context: RuleFileContext): LogicalCodeLine[] {
   return context.lineInfo.flatMap((line) => {
     if (line.isBlank || line.isCommentOnly) return [];
@@ -439,12 +466,18 @@ function collectLogicalCodeLines(context: RuleFileContext): LogicalCodeLine[] {
   });
 }
 
+// Purpose: Canonicalize identifier-like tokens while preserving structural punctuation and sentinels.
+// Inputs: One normalized token produced by the duplicate-block tokenizer.
+// Returns/Effects: Returns a comparable token representation for duplicate-token matching.
 function normalizeToken(token: string): string {
   if (/^__(?:STR|NUM)__$/.test(token)) return token;
   if (/^[A-Za-z_][$\w]*$/.test(token) && !LANGUAGE_KEYWORDS.has(token)) return "__ID__";
   return token;
 }
 
+// Purpose: Tokenize normalized code into a stream suitable for duplicate-token detection.
+// Inputs: One rule-file context containing the source lines and extension metadata.
+// Returns/Effects: Returns normalized tokens annotated with their originating source line.
 function collectNormalizedTokens(context: RuleFileContext): NormalizedToken[] {
   return context.lineInfo.flatMap((line) => {
     if (line.isBlank || line.isCommentOnly) return [];
@@ -459,6 +492,9 @@ function collectNormalizedTokens(context: RuleFileContext): NormalizedToken[] {
   });
 }
 
+// Purpose: Filter duplicate-line windows down to spans with enough signal to matter.
+// Inputs: A candidate duplicate window made of normalized logical code lines.
+// Returns/Effects: Returns true when the window carries enough non-trivial content to report.
 function hasUsefulDuplicateLineWindow(window: LogicalCodeLine[]): boolean {
   const signal = window
     .map((line) => line.normalized)
@@ -472,6 +508,9 @@ function hasUsefulDuplicateTokenWindow(window: NormalizedToken[]): boolean {
   return new Set(window.map((entry) => entry.token)).size >= 8;
 }
 
+// Purpose: Detect duplicated logical line and token windows across the lint target contexts.
+// Inputs: The rule-file contexts prepared for the current static-analysis run.
+// Returns/Effects: Returns duplicate-block findings sorted by file and source line.
 function validateDuplicateBlocks(contexts: RuleFileContext[]): RuleFinding[] {
   const orderedContexts = [...contexts].sort((left, right) =>
     left.relativePath.localeCompare(right.relativePath),
@@ -479,6 +518,9 @@ function validateDuplicateBlocks(contexts: RuleFileContext[]): RuleFinding[] {
   const findingByLocation = new Map<string, { weight: number; finding: RuleFinding }>();
   const lastReportedRun = new Map<string, { currentLine: number; originalLine: number }>();
 
+  // Purpose: Record the strongest duplicate finding for one source location while coalescing nearby runs.
+  // Inputs: The current and original file locations plus the duplicate kind and matched span size.
+  // Returns/Effects: Updates the in-memory duplicate finding maps for the enclosing validator.
   function recordDuplicate(
     currentFile: string,
     currentLine: number,
@@ -576,6 +618,9 @@ function validateDuplicateBlocks(contexts: RuleFileContext[]): RuleFinding[] {
     );
 }
 
+// Purpose: Extract the final top-level parameter group from a callable signature string.
+// Inputs: A reconstructed callable signature gathered from parser or source lines.
+// Returns/Effects: Returns the innermost parameter text for counting, or null when absent.
 function extractParameterGroup(signature: string): string | null {
   const groups: string[] = [];
   let start = -1;
@@ -599,6 +644,9 @@ function extractParameterGroup(signature: string): string | null {
   return groups.at(-1) ?? null;
 }
 
+// Purpose: Split a parameter group on top-level commas without breaking nested syntax.
+// Inputs: The raw parameter-group substring taken from a callable signature.
+// Returns/Effects: Returns the individual parameter fragments in declaration order.
 function splitTopLevelParameters(parameterGroup: string): string[] {
   const parts: string[] = [];
   let current = "";
@@ -638,6 +686,9 @@ function splitTopLevelParameters(parameterGroup: string): string[] {
   return parts;
 }
 
+// Purpose: Decide whether one parsed parameter should be ignored for parameter-count enforcement.
+// Inputs: A single parameter fragment reconstructed from a callable signature.
+// Returns/Effects: Returns true for ignorable placeholders such as `self`, `this`, or empty markers.
 function shouldIgnoreParameter(parameter: string): boolean {
   const cleaned = parameter
     .replace(/^\.\.\./, "")
@@ -651,6 +702,9 @@ function shouldIgnoreParameter(parameter: string): boolean {
   return IGNORED_PARAMETER_NAMES.has(name);
 }
 
+// Purpose: Count the meaningful parameters declared by a callable signature.
+// Inputs: A reconstructed callable signature string from the analyzed source.
+// Returns/Effects: Returns the parameter count after filtering ignorable placeholders.
 function countParameters(signature: string): number {
   const parameterGroup = extractParameterGroup(signature);
   if (!parameterGroup) return 0;
@@ -659,6 +713,9 @@ function countParameters(signature: string): number {
     .length;
 }
 
+// Purpose: Reconstruct a readable callable signature from source lines for lint messages.
+// Inputs: The callable line range, file line metadata, and a parser-provided fallback signature.
+// Returns/Effects: Returns a signature string suitable for user-facing diagnostics.
 function buildCallableSignatureText(
   startLine: number,
   endLine: number,
@@ -677,6 +734,9 @@ function buildCallableSignatureText(
   return reconstructed.length > 0 ? reconstructed : fallbackSignature;
 }
 
+// Purpose: Validate the file-level summary header required at the top of supported source files.
+// Inputs: A repository-relative file path and the raw source lines for that file.
+// Returns/Effects: Returns header findings for missing or incomplete top-of-file metadata.
 function validateHeader(file: string, lines: string[]): RuleFinding[] {
   const prefix = COMMENT_PREFIXES[extname(file)];
   if (!prefix) return [];
@@ -723,6 +783,9 @@ function validateHeader(file: string, lines: string[]): RuleFinding[] {
   return findings;
 }
 
+// Purpose: Flag files whose non-comment LOC exceeds the configured per-file limit.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns a size finding when the file is too large for the configured limit.
 function validateFileLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   const limit = FILE_LOC_LIMITS.get(file) ?? MAX_FILE_LOC;
   const nonCommentLoc = countFileNonCommentLines(lineInfo);
@@ -736,6 +799,9 @@ function validateFileLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   }];
 }
 
+// Purpose: Flag source lines that exceed the repository line-length policy.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns line-length findings for overlong non-exempt lines.
 function validateLineLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   return lineInfo.flatMap((line) => {
     if (line.text.length <= MAX_LINE_LENGTH) return [];
@@ -751,6 +817,9 @@ function validateLineLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   });
 }
 
+// Purpose: Enforce tracked TODO and FIXME comments that point to real follow-up work.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns findings for untracked TODO or FIXME comments.
 function validateTrackedTodos(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   return lineInfo.flatMap((line) => {
     if (!/\b(?:TODO|FIXME)\b/.test(line.text)) return [];
@@ -765,6 +834,9 @@ function validateTrackedTodos(file: string, lineInfo: LineInfo[]): RuleFinding[]
   });
 }
 
+// Purpose: Detect wildcard imports that weaken review clarity and dependency precision.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns findings for wildcard or namespace-wide import statements.
 function validateWildcardImports(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   return lineInfo.flatMap((line) => {
     if (line.isBlank || line.isCommentOnly) return [];
@@ -779,6 +851,9 @@ function validateWildcardImports(file: string, lineInfo: LineInfo[]): RuleFindin
   });
 }
 
+// Purpose: Detect executable lines that pack multiple semicolon-terminated statements together.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns findings for multi-statement lines outside valid loop syntax.
 function validateSingleStatementLines(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   return lineInfo.flatMap((line) => {
     if (line.isBlank || line.isCommentOnly) return [];
@@ -795,6 +870,9 @@ function validateSingleStatementLines(file: string, lineInfo: LineInfo[]): RuleF
   });
 }
 
+// Purpose: Detect adjacent comment-only lines that look like commented-out code blocks.
+// Inputs: A repository-relative file path and its derived line metadata.
+// Returns/Effects: Returns findings for suspicious commented-out code spans.
 function validateCommentedOutCode(file: string, lineInfo: LineInfo[]): RuleFinding[] {
   const findings: RuleFinding[] = [];
   const suspiciousLines = lineInfo.filter((line) => line.isCommentOnly && COMMENTED_OUT_CODE_PATTERN.test(line.commentText));
@@ -816,6 +894,9 @@ function validateCommentedOutCode(file: string, lineInfo: LineInfo[]): RuleFindi
   return findings;
 }
 
+// Purpose: Collect the contiguous comment block immediately above a symbol or callable.
+// Inputs: The starting source line for the target node and the file's line metadata.
+// Returns/Effects: Returns the adjacent comment-only lines directly above that source line.
 function collectImmediateCommentBlock(startLine: number, lineInfo: LineInfo[]): Array<{ lineNumber: number; text: string }> {
   const block: Array<{ lineNumber: number; text: string }> = [];
   let lineNumber = startLine - 1;
@@ -831,6 +912,9 @@ function collectImmediateCommentBlock(startLine: number, lineInfo: LineInfo[]): 
   return block;
 }
 
+// Purpose: Check whether a structured doc block includes one accepted return or side-effect field.
+// Inputs: The normalized comment lines extracted from a structured documentation block.
+// Returns/Effects: Returns true when the block documents returns, effects, or both.
 function hasReturnOrEffectsField(lines: string[]): boolean {
   return lines.some((line) =>
     line.startsWith("returns:")
@@ -839,6 +923,9 @@ function hasReturnOrEffectsField(lines: string[]): boolean {
   );
 }
 
+// Purpose: Enforce the 3-line structured header required above non-trivial callable bodies.
+// Inputs: The file path, callable line, rendered signature, callable LOC, and line metadata.
+// Returns/Effects: Returns findings for missing or incomplete callable header blocks.
 function validateFunctionHeaderBlock(
   file: string,
   callableLine: number,
@@ -846,7 +933,7 @@ function validateFunctionHeaderBlock(
   nonCommentLoc: number,
   lineInfo: LineInfo[],
 ): RuleFinding[] {
-  if (nonCommentLoc <= 5) return [];
+  if (nonCommentLoc <= 4) return [];
   const block = collectImmediateCommentBlock(callableLine, lineInfo);
   if (block.length < 3) {
     return [{
@@ -873,6 +960,9 @@ function validateFunctionHeaderBlock(
   }];
 }
 
+// Purpose: Decide whether one parsed symbol should be treated as a public API surface.
+// Inputs: The rendered signature text, resolved symbol name, and parser grammar identifier.
+// Returns/Effects: Returns true when the symbol appears publicly reachable in its language.
 function isLikelyPublicApi(signatureText: string, symbolName: string, grammarName: string): boolean {
   if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
     return /\bexport\b/.test(signatureText);
@@ -892,6 +982,9 @@ function isLikelyPublicApi(signatureText: string, symbolName: string, grammarNam
   return false;
 }
 
+// Purpose: Validate the structured public API doc block required above exported symbols.
+// Inputs: The file path, symbol line, rendered signature, and file line metadata.
+// Returns/Effects: Returns findings for missing or incomplete public API documentation.
 function validatePublicApiDocBlock(
   file: string,
   symbolLine: number,
@@ -935,6 +1028,9 @@ function validatePublicApiDocBlock(
   return [];
 }
 
+// Purpose: Check whether a public signature uses explicit parameter and return typing for its language.
+// Inputs: The rendered signature text and the parser grammar identifier for that source file.
+// Returns/Effects: Returns true when the signature satisfies the typed public interface policy.
 function hasTypedPublicInterface(signatureText: string, grammarName: string): boolean {
   const trimmed = signatureText.trim();
 
@@ -979,6 +1075,9 @@ function hasTypedPublicInterface(signatureText: string, grammarName: string): bo
   return true;
 }
 
+// Purpose: Emit a finding when a public API surface lacks an explicit typed boundary.
+// Inputs: The file path, symbol line, rendered signature, and parser grammar identifier.
+// Returns/Effects: Returns either an empty list or one typed-interface finding for the symbol.
 function validateTypedPublicInterface(
   file: string,
   symbolLine: number,
@@ -996,6 +1095,9 @@ function validateTypedPublicInterface(
   }];
 }
 
+// Purpose: Decide whether an AST initializer node represents obvious mutable top-level state.
+// Inputs: An AST node candidate plus the parser grammar identifier for the current file.
+// Returns/Effects: Returns true when the initializer shape indicates mutable shared state.
 function isLikelyMutableTopLevelInitializer(node: any, grammarName: string): boolean {
   if (!node) return false;
   const mutableNodeTypes = new Set([
@@ -1026,6 +1128,9 @@ function isLikelyMutableTopLevelInitializer(node: any, grammarName: string): boo
   return false;
 }
 
+// Purpose: Run AST-backed checks that reject obvious mutable top-level state across supported languages.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns mutable-state findings or an AST-analysis failure for unsupported parsing paths.
 async function validateGlobalMutableState(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1037,6 +1142,9 @@ async function validateGlobalMutableState(file: string, fullPath: string, lineIn
       ({ rootNode, grammarName }) => {
         const findings: RuleFinding[] = [];
 
+        // Purpose: Append one mutable-state finding tied to the AST node currently under review.
+        // Inputs: The offending AST node and a short explanation of why it is mutable.
+        // Returns/Effects: Pushes a new rule finding into the enclosing findings array.
         function addFinding(node: any, detail: string): void {
           findings.push({
             file,
@@ -1149,6 +1257,9 @@ async function validateGlobalMutableState(file: string, fullPath: string, lineIn
   }
 }
 
+// Purpose: Detect whether a catch handler body escalates failure by rethrowing or raising.
+// Inputs: An AST node representing the handler body and the parser grammar identifier.
+// Returns/Effects: Returns true when the block contains an escalation statement.
 function blockContainsEscalation(node: any, grammarName: string): boolean {
   const escalationNodeTypes = new Set(
     grammarName === "python"
@@ -1165,6 +1276,9 @@ function blockContainsEscalation(node: any, grammarName: string): boolean {
   return false;
 }
 
+// Purpose: Detect broad catch handlers that likely swallow failures in each supported language.
+// Inputs: One AST node candidate and the parser grammar identifier for the current file.
+// Returns/Effects: Returns true when the node represents a generic catch or except clause.
 function isGenericCatchClause(node: any, grammarName: string): boolean {
   if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
     return node.type === "catch_clause";
@@ -1193,6 +1307,9 @@ function isGenericCatchClause(node: any, grammarName: string): boolean {
   return false;
 }
 
+// Purpose: Run AST-backed checks that reject generic catch handlers which fail to escalate errors.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns generic-catch findings or an AST-analysis failure for the file.
 async function validateGenericCatch(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1207,6 +1324,9 @@ async function validateGenericCatch(file: string, fullPath: string, lineInfo: Li
         }
         const findings: RuleFinding[] = [];
 
+        // Purpose: Walk the syntax tree and collect generic catch findings for matching handler nodes.
+        // Inputs: The current AST node in the recursive syntax-tree traversal.
+        // Returns/Effects: Pushes generic-catch findings into the enclosing findings array.
         function visit(node: any): void {
           if (isGenericCatchClause(node, grammarName)) {
             const handlerBlock = node.namedChildren?.find((child: any) =>
@@ -1244,6 +1364,9 @@ async function validateGenericCatch(file: string, fullPath: string, lineInfo: Li
   }
 }
 
+// Purpose: Compute the deepest nested control-flow level inside one callable subtree.
+// Inputs: An AST node, grammar identifier, current depth, and root-callable traversal flag.
+// Returns/Effects: Returns the maximum control-flow nesting depth below the provided node.
 function computeMaxControlFlowDepth(
   node: any,
   grammarName: string,
@@ -1273,6 +1396,9 @@ function countConditionDecisionPoints(node: any): number {
   return (text.match(/&&|\|\|/g) ?? []).length;
 }
 
+// Purpose: Compute cognitive complexity for one callable subtree using the repository scoring rules.
+// Inputs: An AST node, grammar identifier, current nesting level, and root-callable traversal flag.
+// Returns/Effects: Returns the accumulated cognitive complexity score for that subtree.
 function computeCognitiveComplexity(
   node: any,
   grammarName: string,
@@ -1318,6 +1444,9 @@ function computeCognitiveComplexity(
   return score;
 }
 
+// Purpose: Run AST-backed checks that flag callables exceeding the configured nesting-depth limit.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns nesting-depth findings or an AST-analysis failure for the file.
 async function validateNestingDepth(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1330,6 +1459,9 @@ async function validateNestingDepth(file: string, fullPath: string, lineInfo: Li
         const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
         const findings: RuleFinding[] = [];
 
+        // Purpose: Walk each callable subtree and emit findings for excessive control-flow nesting.
+        // Inputs: The current AST node in the recursive syntax-tree traversal.
+        // Returns/Effects: Pushes nesting-depth findings into the enclosing findings array.
         function visit(node: any): void {
           if (functionTypes.has(node.type)) {
             const nestingDepth = computeMaxControlFlowDepth(node, grammarName, 0, true);
@@ -1369,6 +1501,9 @@ async function validateNestingDepth(file: string, fullPath: string, lineInfo: Li
   }
 }
 
+// Purpose: Run AST-backed checks that flag callables exceeding the cognitive-complexity threshold.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns cognitive-complexity findings or an AST-analysis failure for the file.
 async function validateCognitiveComplexity(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1381,6 +1516,9 @@ async function validateCognitiveComplexity(file: string, fullPath: string, lineI
         const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
         const findings: RuleFinding[] = [];
 
+        // Purpose: Walk each callable subtree and emit findings for excessive cognitive complexity.
+        // Inputs: The current AST node in the recursive syntax-tree traversal.
+        // Returns/Effects: Pushes cognitive-complexity findings into the enclosing findings array.
         function visit(node: any): void {
           if (functionTypes.has(node.type)) {
             const complexity = computeCognitiveComplexity(node, grammarName, 0, true);
@@ -1420,6 +1558,9 @@ async function validateCognitiveComplexity(file: string, fullPath: string, lineI
   }
 }
 
+// Purpose: Run AST-backed checks that enforce docs and typed boundaries for public APIs.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns public-API documentation findings or an AST-analysis failure for the file.
 async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   const extension = extname(fullPath).toLowerCase();
   if (!isSupportedFile(fullPath)) return [];
@@ -1432,6 +1573,9 @@ async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: L
         const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
         const findings: RuleFinding[] = [];
 
+        // Purpose: Walk the syntax tree and emit doc and type findings for public symbols.
+        // Inputs: The current AST node in the recursive syntax-tree traversal.
+        // Returns/Effects: Pushes public API findings into the enclosing findings array.
         function visit(node: any): void {
           const lineNumber = node.startPosition.row + 1;
           const signatureText = buildCallableSignatureText(
@@ -1482,6 +1626,9 @@ async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: L
   }
 }
 
+// Purpose: Validate callable-level metrics such as size, parameter count, and required headers.
+// Inputs: A repository-relative file path, its absolute path, and the derived line metadata.
+// Returns/Effects: Returns function-metric findings gathered from parser-produced callable symbols.
 async function validateFunctionMetrics(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
   if (!isSupportedFile(fullPath)) return [];
 
@@ -1544,11 +1691,15 @@ async function validateFunctionMetrics(file: string, fullPath: string, lineInfo:
     findings.push(
       ...validateFunctionHeaderBlock(file, callable.line, signatureText, nonCommentLoc, lineInfo),
     );
+
   }
 
   return findings;
 }
 
+// Purpose: Run every repository hygiene rule across the supported files selected for linting.
+// Inputs: A repository root directory and the absolute file paths selected for the lint target.
+// Returns/Effects: Returns the complete rule finding list for the requested lint scope.
 async function collectRuleFindings(rootDir: string, targetFiles: string[]): Promise<RuleFinding[]> {
   const findings: RuleFinding[] = [];
   const contexts: RuleFileContext[] = [];
@@ -1581,6 +1732,9 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
   return findings;
 }
 
+// Purpose: Discover which native lint or typecheck commands apply to the current lint target.
+// Inputs: A repository root, the selected target files, and an optional scoped target path.
+// Returns/Effects: Returns the native lint command configurations that should be executed.
 async function detectNativeLinters(rootDir: string, targetFiles: string[], targetPath?: string): Promise<NativeLintConfig[]> {
   const configs: NativeLintConfig[] = [];
   const extensions = new Set(targetFiles.map((file) => extname(file)));
@@ -1633,6 +1787,9 @@ async function detectNativeLinters(rootDir: string, targetFiles: string[], targe
   return configs;
 }
 
+// Purpose: Render structured rule findings into the human-readable report line format.
+// Inputs: The rule finding list produced by the static-analysis validators.
+// Returns/Effects: Returns formatted finding lines for the final lint report.
 function formatFindings(findings: RuleFinding[]): string[] {
   return findings.map((finding) => {
     const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
@@ -1644,6 +1801,9 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+// Purpose: Summarize rule findings into a score plus error and warning counts.
+// Inputs: The rule findings that should contribute to one lint score summary.
+// Returns/Effects: Returns the computed score, error count, and warning count.
 function summarizeRuleSeverities(findings: RuleFinding[]): ScoreSummary {
   const errors = findings.filter((finding) => finding.severity === "error").length;
   const warnings = findings.length - errors;
@@ -1654,6 +1814,9 @@ function summarizeRuleSeverities(findings: RuleFinding[]): ScoreSummary {
   };
 }
 
+// Purpose: Combine rule findings and failing native tools into one repository score summary.
+// Inputs: Rule findings from repository checks and native lint results with non-zero exits.
+// Returns/Effects: Returns the final repository score including native tool penalties.
 function summarizeRepoScore(findings: RuleFinding[], nativeFailures: NativeLintResult[]): ScoreSummary {
   const ruleSummary = summarizeRuleSeverities(findings);
   return {
@@ -1663,6 +1826,9 @@ function summarizeRepoScore(findings: RuleFinding[], nativeFailures: NativeLintR
   };
 }
 
+// Purpose: Compute per-file lint scores so reports can highlight the lowest-scoring files first.
+// Inputs: The complete rule finding list for the current lint run.
+// Returns/Effects: Returns file-level score summaries sorted from worst to best.
 function summarizeFileScores(findings: RuleFinding[]): StaticAnalysisFileScore[] {
   const grouped = new Map<string, RuleFinding[]>();
   for (const finding of findings) {
