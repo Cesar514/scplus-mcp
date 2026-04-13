@@ -32,3 +32,6 @@
 [x] 2026-04-13T12:53:01Z Implement `max_cognitive_complexity` in `src/tools/static-analysis.ts` using the existing AST control-flow path. \
 [x] 2026-04-13T12:53:01Z Add automated coverage for `max_cognitive_complexity` across the supported language set. \
 [x] 2026-04-13T12:53:01Z Rebuild, rerun the targeted static-analysis tests, and verify the new rule against a real repo file. \
+[x] 2026-04-13T13:04:45Z Implement `no_duplicate_blocks` in `src/tools/static-analysis.ts` with low-noise duplicate block detection for the supported source files. \
+[x] 2026-04-13T13:04:45Z Add automated coverage for `no_duplicate_blocks` in `test/main/static-analysis.test.mjs`. \
+[x] 2026-04-13T13:04:45Z Rebuild, rerun the targeted static-analysis tests, and verify the new duplicate-block rule against a real repo file. \

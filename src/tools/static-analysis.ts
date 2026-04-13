@@ -70,6 +70,23 @@ interface LineInfo {
   commentText: string;
 }
 
+interface RuleFileContext {
+  fullPath: string;
+  relativePath: string;
+  extension: string;
+  lineInfo: LineInfo[];
+}
+
+interface LogicalCodeLine {
+  lineNumber: number;
+  normalized: string;
+}
+
+interface NormalizedToken {
+  lineNumber: number;
+  token: string;
+}
+
 const COMMENT_PREFIXES: Record<string, string> = {
   ".c": "//",
   ".cc": "//",
@@ -133,6 +150,8 @@ const MAX_COGNITIVE_COMPLEXITY = 15;
 const MAX_NESTING_DEPTH = 2;
 const MAX_FUNCTIONS_PER_FILE = 12;
 const MAX_LINE_LENGTH = 150;
+const DUPLICATE_LINE_WINDOW = 10;
+const DUPLICATE_TOKEN_WINDOW = 100;
 const FILE_LOC_LIMITS = new Map<string, number>([
   ["cli/internal/ui/model.go", 5000],
   ["src/tools/evaluation.ts", 1500],
@@ -154,6 +173,67 @@ const WILDCARD_IMPORT_PATTERNS = [
   /^\s*using\s+namespace\s+\w[\w:]*\s*;?\s*$/,
 ];
 const COMMENTED_OUT_CODE_PATTERN = /(?:\b(?:if|for|while|switch|catch|return|import|export|class|def|func|const|let|var)\b|=>|==|!=|=\s*[^=]|[{()}];?$)/;
+const NORMALIZED_TOKEN_PATTERN = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|[A-Za-z_][$\w]*|==|!=|<=|>=|=>|->|::|\+\+|--|\+=|-=|\*=|\/=|%=|&&|\|\||[{}()[\].,;:+\-*/%<>=!?&|^~]/g;
+const LANGUAGE_KEYWORDS = new Set([
+  "and",
+  "as",
+  "async",
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "def",
+  "default",
+  "do",
+  "else",
+  "enum",
+  "except",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "fn",
+  "for",
+  "from",
+  "func",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "interface",
+  "let",
+  "loop",
+  "match",
+  "mod",
+  "new",
+  "nil",
+  "None",
+  "null",
+  "package",
+  "pub",
+  "raise",
+  "return",
+  "self",
+  "static",
+  "struct",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "trait",
+  "true",
+  "try",
+  "type",
+  "use",
+  "using",
+  "var",
+  "void",
+  "while",
+]);
 const CONTROL_FLOW_NODE_TYPES: Record<string, Set<string>> = {
   c: new Set(["if_statement", "for_statement", "while_statement", "do_statement", "switch_statement"]),
   cpp: new Set(["if_statement", "for_statement", "for_range_loop", "while_statement", "do_statement", "switch_statement", "try_statement"]),
@@ -303,6 +383,197 @@ function countNonCommentLines(lineInfo: LineInfo[], startLine: number, endLine: 
 
 function countFileNonCommentLines(lineInfo: LineInfo[]): number {
   return lineInfo.filter((line) => !line.isBlank && !line.isCommentOnly).length;
+}
+
+function stripInlineComments(text: string, extension: string): string {
+  let stripped = BLOCK_COMMENT_EXTENSIONS.has(extension)
+    ? text.replace(/\/\*.*?\*\//g, " ")
+    : text;
+  const prefix = COMMENT_PREFIXES[extension];
+  if (!prefix) return stripped;
+
+  let quote: string | null = null;
+  for (let index = 0; index < stripped.length; index += 1) {
+    const char = stripped[index];
+    if (quote) {
+      if (char === "\\" && index + 1 < stripped.length) {
+        index += 1;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (stripped.startsWith(prefix, index)) {
+      return stripped.slice(0, index);
+    }
+  }
+
+  return stripped;
+}
+
+function normalizeCodeText(text: string): string {
+  return text
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g, "__STR__")
+    .replace(/\b\d+(?:\.\d+)?\b/g, "__NUM__")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isBoilerplateLine(text: string): boolean {
+  return /^(?:import|from|package|using|use|namespace|module|#include)\b/.test(text)
+    || /^[{}()[\];,]+$/.test(text);
+}
+
+function collectLogicalCodeLines(context: RuleFileContext): LogicalCodeLine[] {
+  return context.lineInfo.flatMap((line) => {
+    if (line.isBlank || line.isCommentOnly) return [];
+    const stripped = stripInlineComments(line.text, context.extension).trim();
+    if (stripped.length === 0 || isBoilerplateLine(stripped)) return [];
+    const normalized = normalizeCodeText(stripped);
+    if (normalized.length === 0) return [];
+    return [{ lineNumber: line.lineNumber, normalized }];
+  });
+}
+
+function normalizeToken(token: string): string {
+  if (/^__(?:STR|NUM)__$/.test(token)) return token;
+  if (/^[A-Za-z_][$\w]*$/.test(token) && !LANGUAGE_KEYWORDS.has(token)) return "__ID__";
+  return token;
+}
+
+function collectNormalizedTokens(context: RuleFileContext): NormalizedToken[] {
+  return context.lineInfo.flatMap((line) => {
+    if (line.isBlank || line.isCommentOnly) return [];
+    const stripped = stripInlineComments(line.text, context.extension).trim();
+    if (stripped.length === 0 || isBoilerplateLine(stripped)) return [];
+    const normalized = normalizeCodeText(stripped);
+    const tokens = normalized.match(NORMALIZED_TOKEN_PATTERN) ?? [];
+    return tokens.map((token) => ({
+      lineNumber: line.lineNumber,
+      token: normalizeToken(token),
+    }));
+  });
+}
+
+function hasUsefulDuplicateLineWindow(window: LogicalCodeLine[]): boolean {
+  const signal = window
+    .map((line) => line.normalized)
+    .join(" ")
+    .replace(/__STR__|__NUM__/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "");
+  return signal.length >= 40;
+}
+
+function hasUsefulDuplicateTokenWindow(window: NormalizedToken[]): boolean {
+  return new Set(window.map((entry) => entry.token)).size >= 8;
+}
+
+function validateDuplicateBlocks(contexts: RuleFileContext[]): RuleFinding[] {
+  const orderedContexts = [...contexts].sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
+  const findingByLocation = new Map<string, { weight: number; finding: RuleFinding }>();
+  const lastReportedRun = new Map<string, { currentLine: number; originalLine: number }>();
+
+  function recordDuplicate(
+    currentFile: string,
+    currentLine: number,
+    originalFile: string,
+    originalLine: number,
+    kind: "lines" | "tokens",
+    size: number,
+  ): void {
+    const runKey = `${kind}:${currentFile}:${originalFile}`;
+    const previousRun = lastReportedRun.get(runKey);
+    if (
+      previousRun
+      && currentLine <= previousRun.currentLine + 2
+      && originalLine <= previousRun.originalLine + 2
+    ) {
+      return;
+    }
+
+    const key = `${currentFile}:${currentLine}`;
+    const finding: RuleFinding = {
+      file: currentFile,
+      line: currentLine,
+      rule: "no-duplicate-blocks",
+      severity: "error",
+      message: kind === "lines"
+        ? `Block duplicates ${size} logical lines already seen at ${originalFile}:${originalLine}.`
+        : `Block duplicates ${size} successive normalized tokens already seen at ${originalFile}:${originalLine}.`,
+    };
+    const weight = kind === "tokens" ? size + 1000 : size;
+    const existing = findingByLocation.get(key);
+    if (!existing || weight > existing.weight) {
+      findingByLocation.set(key, { weight, finding });
+    }
+    lastReportedRun.set(runKey, { currentLine, originalLine });
+  }
+
+  const lineWindows = new Map<string, Array<{ file: string; line: number; index: number }>>();
+  for (const context of orderedContexts) {
+    const logicalLines = collectLogicalCodeLines(context);
+    for (let index = 0; index <= logicalLines.length - DUPLICATE_LINE_WINDOW; index += 1) {
+      const window = logicalLines.slice(index, index + DUPLICATE_LINE_WINDOW);
+      if (!hasUsefulDuplicateLineWindow(window)) continue;
+      const signature = window.map((line) => line.normalized).join("\n");
+      const previousMatches = lineWindows.get(signature) ?? [];
+      const currentLine = window[0].lineNumber;
+      const previous = previousMatches.find((match) =>
+        match.file !== context.relativePath || Math.abs(match.index - index) >= DUPLICATE_LINE_WINDOW,
+      );
+      if (previous) {
+        recordDuplicate(
+          context.relativePath,
+          currentLine,
+          previous.file,
+          previous.line,
+          "lines",
+          DUPLICATE_LINE_WINDOW,
+        );
+      }
+      previousMatches.push({ file: context.relativePath, line: currentLine, index });
+      lineWindows.set(signature, previousMatches);
+    }
+  }
+
+  const tokenWindows = new Map<string, Array<{ file: string; line: number; index: number }>>();
+  for (const context of orderedContexts) {
+    const tokens = collectNormalizedTokens(context);
+    for (let index = 0; index <= tokens.length - DUPLICATE_TOKEN_WINDOW; index += 1) {
+      const window = tokens.slice(index, index + DUPLICATE_TOKEN_WINDOW);
+      if (!hasUsefulDuplicateTokenWindow(window)) continue;
+      const signature = window.map((entry) => entry.token).join(" ");
+      const previousMatches = tokenWindows.get(signature) ?? [];
+      const currentLine = window[0].lineNumber;
+      const previous = previousMatches.find((match) =>
+        match.file !== context.relativePath || Math.abs(match.index - index) >= DUPLICATE_TOKEN_WINDOW,
+      );
+      if (previous) {
+        recordDuplicate(
+          context.relativePath,
+          currentLine,
+          previous.file,
+          previous.line,
+          "tokens",
+          DUPLICATE_TOKEN_WINDOW,
+        );
+      }
+      previousMatches.push({ file: context.relativePath, line: currentLine, index });
+      tokenWindows.set(signature, previousMatches);
+    }
+  }
+
+  return [...findingByLocation.values()]
+    .map((entry) => entry.finding)
+    .sort((left, right) =>
+      left.file.localeCompare(right.file) || (left.line ?? 0) - (right.line ?? 0),
+    );
 }
 
 function extractParameterGroup(signature: string): string | null {
@@ -1280,11 +1551,18 @@ async function validateFunctionMetrics(file: string, fullPath: string, lineInfo:
 
 async function collectRuleFindings(rootDir: string, targetFiles: string[]): Promise<RuleFinding[]> {
   const findings: RuleFinding[] = [];
+  const contexts: RuleFileContext[] = [];
   for (const file of getSupportedRuleFiles(targetFiles)) {
     const content = await readFile(file, "utf-8");
     const lines = content.split("\n");
     const relativePath = relative(rootDir, file).replace(/\\/g, "/");
     const lineInfo = buildLineInfo(relativePath, lines);
+    contexts.push({
+      fullPath: file,
+      relativePath,
+      extension: extname(file).toLowerCase(),
+      lineInfo,
+    });
     findings.push(...validateHeader(relativePath, lines));
     findings.push(...validateFileLength(relativePath, lineInfo));
     findings.push(...validateLineLength(relativePath, lineInfo));
@@ -1299,6 +1577,7 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     findings.push(...await validateCognitiveComplexity(relativePath, file, lineInfo));
     findings.push(...await validatePublicApiDocs(relativePath, file, lineInfo));
   }
+  findings.push(...validateDuplicateBlocks(contexts));
   return findings;
 }
 

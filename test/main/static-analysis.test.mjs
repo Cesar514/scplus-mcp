@@ -1343,6 +1343,141 @@ describe("static-analysis", async () => {
         !report.ruleFindings.some((finding) => finding.rule === "no-global-mutable-state"),
       );
     });
+
+    it("reports duplicate logical line blocks", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "duplicate-lines.ts"),
+        [
+          "// summary: Duplicate logical lines fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: repeated executable blocks",
+          "// outputs: duplicate block lint finding",
+          "",
+          "export function firstDuplicateBlock(value: number): number {",
+          "  const start = value + 1;",
+          "  const middle = start * 2;",
+          "  const branch = middle - 3;",
+          "  const stable = branch + 4;",
+          "  const current = stable / 5;",
+          "  const next = current + 6;",
+          "  const finish = next - 7;",
+          "  const total = finish * 8;",
+          "  const result = total - 9;",
+          "  return result + 10;",
+          "}",
+          "",
+          "export function secondDuplicateBlock(value: number): number {",
+          "  const start = value + 1;",
+          "  const middle = start * 2;",
+          "  const branch = middle - 3;",
+          "  const stable = branch + 4;",
+          "  const current = stable / 5;",
+          "  const next = current + 6;",
+          "  const finish = next - 7;",
+          "  const total = finish * 8;",
+          "  const result = total - 9;",
+          "  return result + 10;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "duplicate-lines.ts",
+      });
+      assert.ok(
+        report.ruleFindings.some((finding) => finding.rule === "no-duplicate-blocks"),
+      );
+    });
+
+    it("reports duplicate normalized token blocks with renamed identifiers", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "duplicate-tokens.ts"),
+        [
+          "// summary: Duplicate token blocks fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: renamed copy paste blocks",
+          "// outputs: duplicate block lint finding",
+          "",
+          "export function firstTokenClone(source: number, offset: number): number {",
+          "  const alpha = source + offset;",
+          "  const beta = alpha * 2;",
+          "  const gamma = beta - 3;",
+          "  const delta = gamma + 4;",
+          "  const epsilon = delta / 5;",
+          "  const zeta = epsilon + 6;",
+          "  const eta = zeta - 7;",
+          "  const theta = eta * 8;",
+          "  const iota = theta - 9;",
+          "  const kappa = iota + source;",
+          "  const lambda = kappa + offset;",
+          "  const mu = lambda * 10;",
+          "  const nu = mu - 11;",
+          "  const xi = nu + 12;",
+          "  return xi - 13;",
+          "}",
+          "",
+          "export function secondTokenClone(input: number, shift: number): number {",
+          "  const one = input + shift;",
+          "  const two = one * 20;",
+          "  const three = two - 30;",
+          "  const four = three + 40;",
+          "  const five = four / 50;",
+          "  const six = five + 60;",
+          "  const seven = six - 70;",
+          "  const eight = seven * 80;",
+          "  const nine = eight - 90;",
+          "  const ten = nine + input;",
+          "  const eleven = ten + shift;",
+          "  const twelve = eleven * 100;",
+          "  const thirteen = twelve - 110;",
+          "  const fourteen = thirteen + 120;",
+          "  return fourteen - 130;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "duplicate-tokens.ts",
+      });
+      assert.ok(
+        report.ruleFindings.some((finding) => finding.rule === "no-duplicate-blocks"),
+      );
+    });
+
+    it("accepts distinct code blocks", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "unique-blocks.ts"),
+        [
+          "// summary: Unique blocks fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: distinct executable blocks",
+          "// outputs: no duplicate block lint finding",
+          "",
+          "export function uniqueAlpha(value: number): number {",
+          "  const scaled = value * 2;",
+          "  const shifted = scaled + 3;",
+          "  return shifted - 1;",
+          "}",
+          "",
+          "export function uniqueBeta(value: number): number {",
+          "  if (value > 5) {",
+          "    return value - 2;",
+          "  }",
+          "  return value + 4;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "unique-blocks.ts",
+      });
+      assert.ok(
+        !report.ruleFindings.some((finding) => finding.rule === "no-duplicate-blocks"),
+      );
+    });
   });
 
   after(async () => {
