@@ -140,6 +140,9 @@ export interface TreeSitterRuntimeStats {
   recentFailures: TreeSitterFailureRecord[];
 }
 
+// Purpose: Report a grammar load failure with the grammar and wasm path attached.
+// Inputs: A grammar name, the expected wasm path, and the original thrown cause.
+// Returns/Effects: Constructs an error instance that preserves load failure context for callers.
 export class TreeSitterGrammarLoadError extends Error {
   readonly grammarName: string;
   readonly wasmPath: string;
@@ -155,6 +158,9 @@ export class TreeSitterGrammarLoadError extends Error {
   }
 }
 
+// Purpose: Report a tree-sitter parse failure with the active grammar attached.
+// Inputs: A grammar name and the original thrown parse cause.
+// Returns/Effects: Constructs an error instance that preserves parse failure context for callers.
 export class TreeSitterParseError extends Error {
   readonly grammarName: string;
   readonly cause: unknown;
@@ -168,6 +174,9 @@ export class TreeSitterParseError extends Error {
   }
 }
 
+// Purpose: Report when a file extension has no configured tree-sitter grammar.
+// Inputs: The unsupported file extension supplied by the caller.
+// Returns/Effects: Constructs an error instance that explains the unsupported language boundary.
 export class TreeSitterUnsupportedLanguageError extends Error {
   readonly extension: string;
 
@@ -253,28 +262,43 @@ function resetParserCache(): void {
   parserCache.clear();
 }
 
+// Purpose: Return a defensive snapshot of tree-sitter runtime counters and recent failures.
+// Inputs: No direct inputs beyond the in-memory runtime state tracked by this module.
+// Returns/Effects: Returns cloned observability data without mutating parser or grammar state.
 export function getTreeSitterRuntimeStats(): TreeSitterRuntimeStats {
   return cloneRuntimeStats();
 }
 
+// Purpose: Reset parser caches and clear accumulated tree-sitter runtime statistics.
+// Inputs: No direct inputs beyond the in-memory caches owned by this module.
+// Returns/Effects: Deletes cached parsers, clears loaded grammars, and zeros runtime counters.
 export function resetTreeSitterRuntimeStats(): void {
   resetParserCache();
   grammarCache.clear();
   runtimeStats = createEmptyRuntimeStats();
 }
 
+// Purpose: Reset tree-sitter runtime state and test overrides back to the default environment.
+// Inputs: No direct inputs beyond the in-memory overrides managed for tests.
+// Returns/Effects: Clears caches, runtime stats, grammar-dir overrides, and parser-factory overrides.
 export function resetTreeSitterRuntimeStateForTests(): void {
   resetTreeSitterRuntimeStats();
   grammarDirOverride = null;
   parserFactoryOverride = null;
 }
 
+// Purpose: Override the grammar directory used by tests that need controlled wasm fixtures.
+// Inputs: A replacement grammar directory path or null to restore the default location.
+// Returns/Effects: Updates the override, clears cached grammars, and resets parser instances.
 export function setTreeSitterGrammarDirForTests(directory: string | null): void {
   grammarDirOverride = directory;
   grammarCache.clear();
   resetParserCache();
 }
 
+// Purpose: Inject a parser factory for tests that need controlled parser behavior.
+// Inputs: A parser factory callback or null to restore normal parser construction.
+// Returns/Effects: Updates the override and clears cached parser instances for subsequent parses.
 export function setTreeSitterParserFactoryForTests(
   factory: ((ParserCtor: any, language: TSLanguage, grammarName: string) => TSParser) | null,
 ): void {
@@ -412,10 +436,16 @@ function walkTree(rootNode: TSNode, defTypes: Record<string, string>, maxDepth: 
   return symbols;
 }
 
+// Purpose: Resolve a file extension to the configured tree-sitter grammar name.
+// Inputs: A source-file extension such as `.ts` or `.py`.
+// Returns/Effects: Returns the grammar name when configured, otherwise null with no side effects.
 export function getGrammarName(ext: string): string | null {
   return EXT_TO_GRAMMAR[ext.toLowerCase()] ?? null;
 }
 
+// Purpose: Parse source text into the code-symbol model used by the rest of the repository tools.
+// Inputs: Source-file contents and the file extension used to select a grammar.
+// Returns/Effects: Returns extracted symbols or throws an explicit tree-sitter error on failure.
 export async function parseWithTreeSitter(content: string, ext: string): Promise<CodeSymbol[]> {
   return withSyntaxTree(content, ext, ({ rootNode, grammarName }) => {
     const defTypes = DEFINITION_TYPES[grammarName];
@@ -423,6 +453,9 @@ export async function parseWithTreeSitter(content: string, ext: string): Promise
   });
 }
 
+// Purpose: Run a visitor against a live syntax tree while keeping parser lifecycle management internal.
+// Inputs: Source-file contents, the file extension, and a visitor that consumes the parsed root node.
+// Returns/Effects: Returns the visitor result and always cleans up the temporary syntax tree afterwards.
 export async function withSyntaxTree<T>(
   content: string,
   ext: string,
@@ -456,10 +489,16 @@ export async function withSyntaxTree<T>(
   }
 }
 
+// Purpose: List every file extension that has any configured tree-sitter grammar mapping.
+// Inputs: No direct inputs beyond the static extension-to-grammar registry.
+// Returns/Effects: Returns the configured extension list without mutating runtime state.
 export function getSupportedExtensions(): string[] {
   return Object.keys(EXT_TO_GRAMMAR);
 }
 
+// Purpose: List the subset of extensions that also have symbol-definition mappings for analysis.
+// Inputs: No direct inputs beyond the configured grammar and definition registries.
+// Returns/Effects: Returns the analyzable extension list without mutating runtime state.
 export function getAnalyzableExtensions(): string[] {
   const analyzableGrammars = new Set(Object.keys(DEFINITION_TYPES));
   return Object.entries(EXT_TO_GRAMMAR)

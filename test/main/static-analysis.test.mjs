@@ -539,6 +539,129 @@ describe("static-analysis", async () => {
       }
     });
 
+    it("reports missing public API docs across supported languages", async () => {
+      const fixtures = [
+        {
+          name: "public-docs.ts",
+          content: [
+            "// summary: TypeScript public api doc fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: exported api without structured docs",
+            "// outputs: public api doc lint finding",
+            "",
+            "export function undocumentedTs(value: number): number {",
+            "  const doubled = value * 2;",
+            "  return doubled - value;",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "public_docs.py",
+          content: [
+            "# summary: Python public api doc fixture module",
+            "# FEATURE: Static Analysis Tests",
+            "# inputs: public api without structured docs",
+            "# outputs: public api doc lint finding",
+            "",
+            "def undocumented_py(value: int) -> int:",
+            "    doubled = value * 2",
+            "    return doubled - value",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "publicDocs.go",
+          content: [
+            "// summary: Go public api doc fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: exported api without structured docs",
+            "// outputs: public api doc lint finding",
+            "",
+            "package fixtures",
+            "",
+            "func UndocumentedGo(value int) int {",
+            "    doubled := value * 2",
+            "    return doubled - value",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "PublicDocs.java",
+          content: [
+            "// summary: Java public api doc fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: public api without structured docs",
+            "// outputs: public api doc lint finding",
+            "",
+            "public class PublicDocsJava {",
+            "  public int undocumentedJava(int value) {",
+            "    int doubled = value * 2;",
+            "    return doubled - value;",
+            "  }",
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          name: "public_docs.rs",
+          content: [
+            "// summary: Rust public api doc fixture module",
+            "// FEATURE: Static Analysis Tests",
+            "// inputs: public api without structured docs",
+            "// outputs: public api doc lint finding",
+            "",
+            "pub fn undocumented_rust(value: i32) -> i32 {",
+            "    let doubled = value * 2;",
+            "    doubled - value",
+            "}",
+            "",
+          ].join("\n"),
+        },
+      ];
+
+      for (const fixture of fixtures) {
+        await writeFile(join(FIXTURE_DIR, fixture.name), fixture.content);
+        const report = await buildStaticAnalysisReport({
+          rootDir: FIXTURE_DIR,
+          targetPath: fixture.name,
+        });
+        assert.ok(
+          report.ruleFindings.some((finding) => finding.rule === "public-api-requires-doc"),
+          `expected public api doc finding for ${fixture.name}`,
+        );
+      }
+    });
+
+    it("accepts a structured public API doc block", async () => {
+      await writeFile(
+        join(FIXTURE_DIR, "public-docs-valid.ts"),
+        [
+          "// summary: Structured public api doc fixture module",
+          "// FEATURE: Static Analysis Tests",
+          "// inputs: exported api with structured docs",
+          "// outputs: no public api doc lint finding",
+          "",
+          "// Purpose: Expose a documented public API function for lint verification.",
+          "// Inputs: A numeric value that will be transformed deterministically.",
+          "// Returns/Effects: Returns the adjusted numeric result with no side effects.",
+          "export function documentedTs(value: number): number {",
+          "  const doubled = value * 2;",
+          "  return doubled - value;",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const report = await buildStaticAnalysisReport({
+        rootDir: FIXTURE_DIR,
+        targetPath: "public-docs-valid.ts",
+      });
+      assert.ok(
+        !report.ruleFindings.some((finding) => finding.rule === "public-api-requires-doc"),
+      );
+    });
+
     it("reports tracked todo and wildcard import violations", async () => {
       await writeFile(
         join(FIXTURE_DIR, "lint-rules.py"),

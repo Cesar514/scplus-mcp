@@ -17,3 +17,6 @@
 [x] 2026-04-13T11:49:37Z Implement `max_nesting_depth` as a real AST-backed static-analysis rule in the tree-sitter lint path. \
 [x] 2026-04-13T11:49:37Z Add automated coverage proving `max_nesting_depth` fires across the supported source languages under nested control flow. \
 [x] 2026-04-13T11:49:37Z Rebuild and rerun the targeted static-analysis test suite to verify the new nesting-depth rule. \
+[x] 2026-04-13T11:55:40Z Implement `public_api_requires_doc` in `src/tools/static-analysis.ts` for public or exported functions, methods, and classes. \
+[x] 2026-04-13T11:55:40Z Add automated coverage for `public_api_requires_doc` and align the changed exported APIs in this repo with the new rule. \
+[x] 2026-04-13T11:55:40Z Rebuild, rerun the targeted static-analysis tests, and run the lint report against the changed repo files to verify the rule in this repository. \

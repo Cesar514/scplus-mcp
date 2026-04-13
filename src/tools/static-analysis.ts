@@ -138,7 +138,13 @@ const FILE_LOC_LIMITS = new Map<string, number>([
 ]);
 const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
 const REQUIRED_FUNCTION_HEADER_FIELDS = ["purpose", "inputs", "returns/effects"] as const;
+const REQUIRED_PUBLIC_API_DOC_FIELDS = ["purpose", "inputs"] as const;
 const CALLABLE_KINDS = new Set([SymbolKind.Function, SymbolKind.Method]);
+const PUBLIC_API_KINDS = new Set([
+  SymbolKind.Class,
+  SymbolKind.Function,
+  SymbolKind.Method,
+]);
 const IGNORED_PARAMETER_NAMES = new Set(["self", "this", "ctx", "cls"]);
 const TRACKED_TODO_PATTERN = /\b(?:TODO|FIXME)\b:?\s+(?:[A-Z]+-\d+\b|https?:\/\/\S+|\d{4}-\d{2}-\d{2}\b|v?\d+\.\d+(?:\.\d+)?\b)/;
 const WILDCARD_IMPORT_PATTERNS = [
@@ -539,6 +545,14 @@ function collectImmediateCommentBlock(startLine: number, lineInfo: LineInfo[]): 
   return block;
 }
 
+function hasReturnOrEffectsField(lines: string[]): boolean {
+  return lines.some((line) =>
+    line.startsWith("returns:")
+    || line.startsWith("effects:")
+    || line.startsWith("returns/effects:"),
+  );
+}
+
 function validateFunctionHeaderBlock(
   file: string,
   callableLine: number,
@@ -571,6 +585,68 @@ function validateFunctionHeaderBlock(
     severity: "warning",
     message: `${signatureText} is missing the "${missingField}:" line in its structured function header.`,
   }];
+}
+
+function isLikelyPublicApi(signatureText: string, symbolName: string, grammarName: string): boolean {
+  if (grammarName === "typescript" || grammarName === "javascript" || grammarName === "tsx") {
+    return /\bexport\b/.test(signatureText);
+  }
+  if (grammarName === "python") {
+    return !symbolName.startsWith("_");
+  }
+  if (grammarName === "go") {
+    return /^[A-Z]/.test(symbolName);
+  }
+  if (grammarName === "rust") {
+    return /\bpub\b/.test(signatureText);
+  }
+  if (grammarName === "java" || grammarName === "c_sharp") {
+    return /\bpublic\b/.test(signatureText);
+  }
+  return false;
+}
+
+function validatePublicApiDocBlock(
+  file: string,
+  symbolLine: number,
+  signatureText: string,
+  lineInfo: LineInfo[],
+): RuleFinding[] {
+  const block = collectImmediateCommentBlock(symbolLine, lineInfo);
+  if (block.length === 0) {
+    return [{
+      file,
+      line: symbolLine,
+      rule: "public-api-requires-doc",
+      severity: "error",
+      message: `${signatureText} must have a structured public API doc block directly above it.`,
+    }];
+  }
+
+  const normalized = block.map((line) => line.text.toLowerCase());
+  const missingField = REQUIRED_PUBLIC_API_DOC_FIELDS.find((field) =>
+    !normalized.some((line) => line.startsWith(`${field}:`)),
+  );
+  if (missingField) {
+    return [{
+      file,
+      line: symbolLine,
+      rule: "public-api-requires-doc",
+      severity: "error",
+      message: `${signatureText} is missing the "${missingField}:" line in its public API doc block.`,
+    }];
+  }
+  if (!hasReturnOrEffectsField(normalized)) {
+    return [{
+      file,
+      line: symbolLine,
+      rule: "public-api-requires-doc",
+      severity: "error",
+      message: `${signatureText} must document either "Returns:", "Effects:", or "Returns/Effects:".`,
+    }];
+  }
+
+  return [];
 }
 
 function computeMaxControlFlowDepth(
@@ -644,6 +720,67 @@ async function validateNestingDepth(file: string, fullPath: string, lineInfo: Li
       rule: "ast-analysis",
       severity: "error",
       message: `AST-backed nesting analysis could not analyze this file: ${message}`,
+    }];
+  }
+}
+
+async function validatePublicApiDocs(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  const extension = extname(fullPath).toLowerCase();
+  if (!isSupportedFile(fullPath)) return [];
+
+  try {
+    return await withSyntaxTree(
+      lineInfo.map((line) => line.text).join("\n"),
+      extension,
+      ({ rootNode, grammarName }) => {
+        const functionTypes = FUNCTION_NODE_TYPES[grammarName] ?? new Set<string>();
+        const findings: RuleFinding[] = [];
+
+        function visit(node: any): void {
+          const lineNumber = node.startPosition.row + 1;
+          const signatureText = buildCallableSignatureText(
+            lineNumber,
+            node.endPosition.row + 1,
+            lineInfo,
+            lineInfo[node.startPosition.row]?.trimmed ?? node.type,
+          );
+          const nameText = (() => {
+            const nameNode = node.childForFieldName?.("name");
+            if (nameNode?.text) return nameNode.text;
+            const declarator = node.childForFieldName?.("declarator");
+            if (declarator?.text) return declarator.text;
+            return "";
+          })();
+
+          const kindFromNode = (() => {
+            if (functionTypes.has(node.type)) return SymbolKind.Function;
+            if (node.type.includes("class")) return SymbolKind.Class;
+            return null;
+          })();
+
+          if (
+            kindFromNode
+            && PUBLIC_API_KINDS.has(kindFromNode)
+            && isLikelyPublicApi(signatureText, nameText, grammarName)
+          ) {
+            findings.push(...validatePublicApiDocBlock(file, lineNumber, signatureText, lineInfo));
+          }
+
+          for (const child of node.namedChildren ?? []) visit(child);
+        }
+
+        visit(rootNode);
+        return findings;
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed public API doc analysis could not analyze this file: ${message}`,
     }];
   }
 }
@@ -746,6 +883,7 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     findings.push(...validateBareExcepts(relativePath, lineInfo));
     findings.push(...await validateFunctionMetrics(relativePath, file, lineInfo));
     findings.push(...await validateNestingDepth(relativePath, file, lineInfo));
+    findings.push(...await validatePublicApiDocs(relativePath, file, lineInfo));
   }
   return findings;
 }
@@ -846,6 +984,9 @@ function summarizeFileScores(findings: RuleFinding[]): StaticAnalysisFileScore[]
       || left.file.localeCompare(right.file));
 }
 
+// Purpose: Render a human-readable lint report from the structured static-analysis result model.
+// Inputs: A completed static-analysis report with native diagnostics, findings, and score summaries.
+// Returns/Effects: Returns formatted report text without mutating the underlying report data.
 export function formatStaticAnalysisReport(report: StaticAnalysisReport): string {
   const lines = [
     `Lint target: ${report.targetPath ?? "."}`,
@@ -890,6 +1031,9 @@ export function formatStaticAnalysisReport(report: StaticAnalysisReport): string
   return lines.join("\n");
 }
 
+// Purpose: Build the structured static-analysis report for a repository root or scoped target path.
+// Inputs: A repository root plus an optional file or directory target for linting.
+// Returns/Effects: Returns the full lint report after running native tools and repository rule checks.
 export async function buildStaticAnalysisReport(options: StaticAnalysisOptions): Promise<StaticAnalysisReport> {
   const rootDir = resolve(options.rootDir);
   const targetFiles = await getTargetFiles(rootDir, options.targetPath);
@@ -913,6 +1057,9 @@ export async function buildStaticAnalysisReport(options: StaticAnalysisOptions):
   };
 }
 
+// Purpose: Run static analysis and return the formatted report text used by CLI and MCP surfaces.
+// Inputs: A repository root plus an optional file or directory target for linting.
+// Returns/Effects: Returns formatted lint output after building the structured static-analysis report.
 export async function runStaticAnalysis(options: StaticAnalysisOptions): Promise<string> {
   return formatStaticAnalysisReport(await buildStaticAnalysisReport(options));
 }
