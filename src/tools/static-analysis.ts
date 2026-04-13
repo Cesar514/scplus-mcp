@@ -7,6 +7,7 @@ import { execFile } from "child_process";
 import { readFile, stat } from "fs/promises";
 import { dirname, extname, relative, resolve } from "path";
 import { promisify } from "util";
+import { analyzeFile, flattenSymbols, isSupportedFile, SymbolKind } from "../core/parser.js";
 import { walkDirectory } from "../core/walker.js";
 
 const execFileAsync = promisify(execFile);
@@ -59,16 +60,30 @@ export interface StaticAnalysisReport {
   fileScores: StaticAnalysisFileScore[];
 }
 
+interface LineInfo {
+  lineNumber: number;
+  text: string;
+  trimmed: string;
+  isBlank: boolean;
+  isCommentOnly: boolean;
+  commentText: string;
+}
+
 const COMMENT_PREFIXES: Record<string, string> = {
   ".c": "//",
+  ".cc": "//",
+  ".cjs": "//",
   ".cpp": "//",
   ".cs": "//",
   ".go": "//",
+  ".h": "//",
+  ".hpp": "//",
   ".java": "//",
   ".js": "//",
   ".jsx": "//",
   ".kt": "//",
   ".lua": "--",
+  ".mjs": "//",
   ".py": "#",
   ".rb": "#",
   ".rs": "//",
@@ -90,12 +105,46 @@ const ROOT_ESLINT_CONFIGS = [
   ".eslintrc.yml",
 ];
 
-const MAX_FILE_LINES = 1000;
-const FILE_LENGTH_LIMITS = new Map<string, number>([
+const BLOCK_COMMENT_EXTENSIONS = new Set([
+  ".c",
+  ".cc",
+  ".cjs",
+  ".cpp",
+  ".cs",
+  ".go",
+  ".h",
+  ".hpp",
+  ".java",
+  ".js",
+  ".jsx",
+  ".kt",
+  ".mjs",
+  ".rs",
+  ".swift",
+  ".ts",
+  ".tsx",
+  ".zig",
+]);
+const MAX_FILE_LOC = 800;
+const MAX_FUNCTION_LOC = 40;
+const MAX_PARAMETER_COUNT = 5;
+const MAX_FUNCTIONS_PER_FILE = 12;
+const MAX_LINE_LENGTH = 150;
+const FILE_LOC_LIMITS = new Map<string, number>([
   ["cli/internal/ui/model.go", 5000],
   ["src/tools/evaluation.ts", 1500],
 ]);
 const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
+const REQUIRED_FUNCTION_HEADER_FIELDS = ["purpose", "inputs", "returns/effects"] as const;
+const CALLABLE_KINDS = new Set([SymbolKind.Function, SymbolKind.Method]);
+const IGNORED_PARAMETER_NAMES = new Set(["self", "this", "ctx", "cls"]);
+const TRACKED_TODO_PATTERN = /\b(?:TODO|FIXME)\b:?\s+(?:[A-Z]+-\d+\b|https?:\/\/\S+|\d{4}-\d{2}-\d{2}\b|v?\d+\.\d+(?:\.\d+)?\b)/;
+const WILDCARD_IMPORT_PATTERNS = [
+  /^\s*from\s+\S+\s+import\s+\*/,
+  /^\s*import\s+[\w.]+\.\*\s*;?\s*$/,
+  /^\s*using\s+namespace\s+\w[\w:]*\s*;?\s*$/,
+];
+const COMMENTED_OUT_CODE_PATTERN = /(?:\b(?:if|for|while|switch|catch|return|import|export|class|def|func|const|let|var)\b|=>|==|!=|=\s*[^=]|[{()}];?$)/;
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -149,6 +198,163 @@ function getSupportedRuleFiles(paths: string[]): string[] {
   return paths.filter((path) => COMMENT_PREFIXES[extname(path)]);
 }
 
+function stripCommentPrefix(text: string, prefix: string): string {
+  return text.startsWith(prefix) ? text.slice(prefix.length).trim() : text.trim();
+}
+
+function buildLineInfo(file: string, lines: string[]): LineInfo[] {
+  const prefix = COMMENT_PREFIXES[extname(file)];
+  const supportsBlockComments = BLOCK_COMMENT_EXTENSIONS.has(extname(file));
+  const output: LineInfo[] = [];
+  let inBlockComment = false;
+
+  for (const [index, text] of lines.entries()) {
+    const trimmed = text.trim();
+    const isBlank = trimmed.length === 0;
+    let isCommentOnly = false;
+    let commentText = "";
+
+    if (inBlockComment) {
+      isCommentOnly = true;
+      commentText = trimmed.replace(/^\*+\s?/, "").replace(/\*\/$/, "").trim();
+      if (trimmed.includes("*/")) inBlockComment = false;
+    } else if (!isBlank && prefix && trimmed.startsWith(prefix)) {
+      isCommentOnly = true;
+      commentText = stripCommentPrefix(trimmed, prefix);
+    } else if (!isBlank && supportsBlockComments && trimmed.startsWith("/*")) {
+      isCommentOnly = true;
+      commentText = trimmed.replace(/^\/\*\*?\s?/, "").replace(/\*\/$/, "").trim();
+      if (!trimmed.includes("*/")) inBlockComment = true;
+    }
+
+    output.push({
+      lineNumber: index + 1,
+      text,
+      trimmed,
+      isBlank,
+      isCommentOnly,
+      commentText,
+    });
+  }
+
+  return output;
+}
+
+function countNonCommentLines(lineInfo: LineInfo[], startLine: number, endLine: number): number {
+  return lineInfo
+    .filter((line) =>
+      line.lineNumber >= startLine
+      && line.lineNumber <= endLine
+      && !line.isBlank
+      && !line.isCommentOnly)
+    .length;
+}
+
+function countFileNonCommentLines(lineInfo: LineInfo[]): number {
+  return lineInfo.filter((line) => !line.isBlank && !line.isCommentOnly).length;
+}
+
+function extractParameterGroup(signature: string): string | null {
+  const groups: string[] = [];
+  let start = -1;
+  let depth = 0;
+
+  for (let index = 0; index < signature.length; index += 1) {
+    const char = signature[index];
+    if (char === "(") {
+      if (depth === 0) start = index + 1;
+      depth += 1;
+      continue;
+    }
+    if (char !== ")") continue;
+    depth -= 1;
+    if (depth === 0 && start >= 0) {
+      groups.push(signature.slice(start, index));
+      start = -1;
+    }
+  }
+
+  return groups.at(-1) ?? null;
+}
+
+function splitTopLevelParameters(parameterGroup: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  let quote: string | null = null;
+
+  for (const char of parameterGroup) {
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if ("([{<".includes(char)) {
+      depth += 1;
+      current += char;
+      continue;
+    }
+    if (")]}>".includes(char)) {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  if (current.trim().length > 0) parts.push(current.trim());
+  return parts;
+}
+
+function shouldIgnoreParameter(parameter: string): boolean {
+  const cleaned = parameter
+    .replace(/^\.\.\./, "")
+    .replace(/\s*=.*$/, "")
+    .trim();
+  if (cleaned.length === 0 || cleaned === "/" || cleaned === "*") return true;
+  const name = cleaned.match(/^([A-Za-z_][$\w]*)\s*[:?=]/)?.[1]
+    ?? cleaned.match(/^([A-Za-z_][$\w]*)\s+/)?.[1]
+    ?? cleaned.match(/^&?([A-Za-z_][$\w]*)$/)?.[1]
+    ?? "";
+  return IGNORED_PARAMETER_NAMES.has(name);
+}
+
+function countParameters(signature: string): number {
+  const parameterGroup = extractParameterGroup(signature);
+  if (!parameterGroup) return 0;
+  return splitTopLevelParameters(parameterGroup)
+    .filter((parameter) => !shouldIgnoreParameter(parameter))
+    .length;
+}
+
+function buildCallableSignatureText(
+  startLine: number,
+  endLine: number,
+  lineInfo: LineInfo[],
+  fallbackSignature: string,
+): string {
+  const signatureLines: string[] = [];
+
+  for (const line of lineInfo) {
+    if (line.lineNumber < startLine || line.lineNumber > endLine || line.isCommentOnly) continue;
+    signatureLines.push(line.trimmed);
+    if (line.trimmed.includes("{") || line.trimmed.endsWith(":")) break;
+  }
+
+  const reconstructed = signatureLines.join(" ").trim();
+  return reconstructed.length > 0 ? reconstructed : fallbackSignature;
+}
+
 function validateHeader(file: string, lines: string[]): RuleFinding[] {
   const prefix = COMMENT_PREFIXES[extname(file)];
   if (!prefix) return [];
@@ -195,16 +401,227 @@ function validateHeader(file: string, lines: string[]): RuleFinding[] {
   return findings;
 }
 
-function validateFileLength(file: string, lines: string[]): RuleFinding[] {
-  const limit = FILE_LENGTH_LIMITS.get(file) ?? MAX_FILE_LINES;
-  if (lines.length <= limit) return [];
+function validateFileLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  const limit = FILE_LOC_LIMITS.get(file) ?? MAX_FILE_LOC;
+  const nonCommentLoc = countFileNonCommentLines(lineInfo);
+  if (nonCommentLoc <= limit) return [];
   return [{
     file,
-    line: limit + 1,
-    rule: "file-length",
+    line: lineInfo.find((line) => !line.isBlank && !line.isCommentOnly)?.lineNumber ?? 1,
+    rule: "max-file-loc",
     severity: "warning",
-    message: `File has ${lines.length} lines. Recommended maximum is ${limit}.`,
+    message: `File has ${nonCommentLoc} non-comment LOC. Recommended maximum is ${limit}.`,
   }];
+}
+
+function validateLineLength(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  return lineInfo.flatMap((line) => {
+    if (line.text.length <= MAX_LINE_LENGTH) return [];
+    if (line.trimmed.startsWith("import ") || line.trimmed.startsWith("from ")) return [];
+    if (line.isCommentOnly && /https?:\/\//.test(line.text)) return [];
+    return [{
+      file,
+      line: line.lineNumber,
+      rule: "line-length",
+      severity: "error" as const,
+      message: `Line exceeds ${MAX_LINE_LENGTH} columns (${line.text.length}).`,
+    }];
+  });
+}
+
+function validateTrackedTodos(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  return lineInfo.flatMap((line) => {
+    if (!/\b(?:TODO|FIXME)\b/.test(line.text)) return [];
+    if (TRACKED_TODO_PATTERN.test(line.text)) return [];
+    return [{
+      file,
+      line: line.lineNumber,
+      rule: "tracked-todo-only",
+      severity: "error" as const,
+      message: "TODO/FIXME comments must include an issue ID, URL, or milestone/date token.",
+    }];
+  });
+}
+
+function validateWildcardImports(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  return lineInfo.flatMap((line) => {
+    if (line.isBlank || line.isCommentOnly) return [];
+    if (!WILDCARD_IMPORT_PATTERNS.some((pattern) => pattern.test(line.trimmed))) return [];
+    return [{
+      file,
+      line: line.lineNumber,
+      rule: "no-wildcard-imports",
+      severity: "error" as const,
+      message: "Wildcard or namespace-wide imports are not allowed.",
+    }];
+  });
+}
+
+function validateSingleStatementLines(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  return lineInfo.flatMap((line) => {
+    if (line.isBlank || line.isCommentOnly) return [];
+    const semicolonCount = (line.text.match(/;/g) ?? []).length;
+    if (semicolonCount < 2) return [];
+    if (/for\s*\([^)]*;[^)]*;[^)]*\)/.test(line.text)) return [];
+    return [{
+      file,
+      line: line.lineNumber,
+      rule: "one-statement-per-line",
+      severity: "error" as const,
+      message: "Multiple executable statements on one line make patching and review less reliable.",
+    }];
+  });
+}
+
+function validateCommentedOutCode(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  const findings: RuleFinding[] = [];
+  const suspiciousLines = lineInfo.filter((line) => line.isCommentOnly && COMMENTED_OUT_CODE_PATTERN.test(line.commentText));
+
+  for (let index = 0; index < suspiciousLines.length - 1; index += 1) {
+    const current = suspiciousLines[index];
+    const next = suspiciousLines[index + 1];
+    if (next.lineNumber !== current.lineNumber + 1) continue;
+    findings.push({
+      file,
+      line: current.lineNumber,
+      rule: "no-commented-out-code",
+      severity: "error",
+      message: "Commented-out code blocks are not allowed.",
+    });
+    index += 1;
+  }
+
+  return findings;
+}
+
+function collectImmediateCommentBlock(startLine: number, lineInfo: LineInfo[]): Array<{ lineNumber: number; text: string }> {
+  const block: Array<{ lineNumber: number; text: string }> = [];
+  let lineNumber = startLine - 1;
+
+  while (lineNumber >= 1) {
+    const line = lineInfo[lineNumber - 1];
+    if (line.isBlank) break;
+    if (!line.isCommentOnly) return [];
+    block.unshift({ lineNumber: line.lineNumber, text: line.commentText });
+    lineNumber -= 1;
+  }
+
+  return block;
+}
+
+function validateFunctionHeaderBlock(
+  file: string,
+  callableLine: number,
+  signatureText: string,
+  nonCommentLoc: number,
+  lineInfo: LineInfo[],
+): RuleFinding[] {
+  if (nonCommentLoc <= 5) return [];
+  const block = collectImmediateCommentBlock(callableLine, lineInfo);
+  if (block.length < 3) {
+    return [{
+      file,
+      line: callableLine,
+      rule: "function-header-3-lines",
+      severity: "warning",
+      message: `${signatureText} must have a 3-line structured function header directly above it.`,
+    }];
+  }
+
+  const normalized = block.map((line) => line.text.toLowerCase());
+  const missingField = REQUIRED_FUNCTION_HEADER_FIELDS.find((field) =>
+    !normalized.some((line) => line.startsWith(`${field}:`)),
+  );
+  if (!missingField) return [];
+
+  return [{
+    file,
+    line: callableLine,
+    rule: "function-header-3-lines",
+    severity: "warning",
+    message: `${signatureText} is missing the "${missingField}:" line in its structured function header.`,
+  }];
+}
+
+function validateBareExcepts(file: string, lineInfo: LineInfo[]): RuleFinding[] {
+  if (extname(file) !== ".py") return [];
+  return lineInfo.flatMap((line) => {
+    if (!/^\s*except\s*:\s*$/.test(line.text)) return [];
+    return [{
+      file,
+      line: line.lineNumber,
+      rule: "no-generic-catch",
+      severity: "error" as const,
+      message: "Bare except blocks hide failures; catch a specific exception and rethrow or escalate.",
+    }];
+  });
+}
+
+async function validateFunctionMetrics(file: string, fullPath: string, lineInfo: LineInfo[]): Promise<RuleFinding[]> {
+  if (!isSupportedFile(fullPath)) return [];
+
+  let analysis;
+  try {
+    analysis = await analyzeFile(fullPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [{
+      file,
+      line: 1,
+      rule: "ast-analysis",
+      severity: "error",
+      message: `AST-backed lint rules could not analyze this file: ${message}`,
+    }];
+  }
+
+  const findings: RuleFinding[] = [];
+  const callables = flattenSymbols(analysis.symbols).filter((symbol) => CALLABLE_KINDS.has(symbol.kind));
+
+  if (callables.length > MAX_FUNCTIONS_PER_FILE) {
+    findings.push({
+      file,
+      line: callables[MAX_FUNCTIONS_PER_FILE]?.line ?? 1,
+      rule: "max-functions-per-file",
+      severity: "warning",
+      message: `File declares ${callables.length} callable bodies. Recommended maximum is ${MAX_FUNCTIONS_PER_FILE}.`,
+    });
+  }
+
+  for (const callable of callables) {
+    const signatureText = buildCallableSignatureText(
+      callable.line,
+      callable.endLine,
+      lineInfo,
+      callable.signature,
+    );
+    const nonCommentLoc = countNonCommentLines(lineInfo, callable.line, callable.endLine);
+    if (nonCommentLoc > MAX_FUNCTION_LOC) {
+      findings.push({
+        file,
+        line: callable.line,
+        rule: "max-function-loc",
+        severity: "error",
+        message: `${signatureText} exceeds ${MAX_FUNCTION_LOC} non-comment LOC (${nonCommentLoc}).`,
+      });
+    }
+
+    const parameterCount = countParameters(signatureText);
+    if (parameterCount > MAX_PARAMETER_COUNT) {
+      findings.push({
+        file,
+        line: callable.line,
+        rule: "max-parameter-count",
+        severity: "error",
+        message: `${signatureText} declares ${parameterCount} parameters. Maximum allowed is ${MAX_PARAMETER_COUNT}.`,
+      });
+    }
+
+    findings.push(
+      ...validateFunctionHeaderBlock(file, callable.line, signatureText, nonCommentLoc, lineInfo),
+    );
+  }
+
+  return findings;
 }
 
 async function collectRuleFindings(rootDir: string, targetFiles: string[]): Promise<RuleFinding[]> {
@@ -213,8 +630,16 @@ async function collectRuleFindings(rootDir: string, targetFiles: string[]): Prom
     const content = await readFile(file, "utf-8");
     const lines = content.split("\n");
     const relativePath = relative(rootDir, file).replace(/\\/g, "/");
+    const lineInfo = buildLineInfo(relativePath, lines);
     findings.push(...validateHeader(relativePath, lines));
-    findings.push(...validateFileLength(relativePath, lines));
+    findings.push(...validateFileLength(relativePath, lineInfo));
+    findings.push(...validateLineLength(relativePath, lineInfo));
+    findings.push(...validateTrackedTodos(relativePath, lineInfo));
+    findings.push(...validateWildcardImports(relativePath, lineInfo));
+    findings.push(...validateSingleStatementLines(relativePath, lineInfo));
+    findings.push(...validateCommentedOutCode(relativePath, lineInfo));
+    findings.push(...validateBareExcepts(relativePath, lineInfo));
+    findings.push(...await validateFunctionMetrics(relativePath, file, lineInfo));
   }
   return findings;
 }

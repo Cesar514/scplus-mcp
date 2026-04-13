@@ -3,3 +3,14 @@
 // Example: [x] 2026-04-05T20:39:27Z Verify the completed-task log is sorted newest-first using 24-hour HH:MM:SS UTC timestamps. \
 
 [x] 2026-04-05T21:39:27Z Reformat the old todo list from `TODO.bak` into the current numbered `TODO.md` format and keep the imported items as the active backlog. \
+[x] 2026-04-13T11:31:45Z Review `Lints_wip.md` and map the feasible rules onto the current `src/tools/static-analysis.ts` design. \
+[x] 2026-04-13T11:31:45Z Implement additional strict lint rules in `src/tools/static-analysis.ts` without breaking the existing lint report surface. \
+[x] 2026-04-13T11:31:45Z Add automated coverage for the new rule findings in `test/main/static-analysis.test.mjs`. \
+[x] 2026-04-13T11:31:45Z Build the project and run the targeted static-analysis tests to verify the requested lint behavior. \
+[x] 2026-04-13T11:40:38Z Implement `max_file_loc` as true non-comment LOC counting in `src/tools/static-analysis.ts`. \
+[x] 2026-04-13T11:40:38Z Implement `function_header_3_lines` for parser-supported callables across the supported source languages. \
+[x] 2026-04-13T11:40:38Z Expand static-analysis tests to prove the new rules fire across TypeScript, Python, Go, Java, Rust, and C++. \
+[x] 2026-04-13T11:40:38Z Rebuild and rerun targeted static-analysis tests after the smarter lint changes. \
+[x] 2026-04-13T11:41:57Z Increase the static-analysis maximum line length from 100 to 150 characters. \
+[x] 2026-04-13T11:41:57Z Update the static-analysis tests so line-length coverage matches the new 150-character threshold. \
+[x] 2026-04-13T11:41:57Z Rebuild and rerun the targeted static-analysis test suite to verify the new threshold. \
