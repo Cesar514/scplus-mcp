@@ -1,3 +1,5 @@
+// Main test coverage for semantic identifier indexing
+// FEATURE: Semantic identifiers tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";

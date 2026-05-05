@@ -1,3 +1,5 @@
+// Demo coverage for the blast-radius tool against a temporary fixture
+// FEATURE: Blast radius demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

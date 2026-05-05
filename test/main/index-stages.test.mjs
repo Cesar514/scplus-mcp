@@ -1,3 +1,5 @@
+// Main test coverage for index stage orchestration
+// FEATURE: Index stages tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";

@@ -1,11 +1,16 @@
-// Embedding tracker controller tests cover lazy startup and shutdown modes
-// FEATURE: Verifies watcher creation only occurs when explicitly needed
+// Embedding tracker controller tests cover backend-batch refresh and native watcher removal.
+// FEATURE: Verifies embedding tracking no longer starts recursive filesystem watches.
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createEmbeddingTrackerController,
   parseEmbeddingTrackerMode,
+  refreshEmbeddingsForChangedPaths,
+  startEmbeddingTracker,
 } from "../../build/core/embedding-tracker.js";
 
 describe("embedding-tracker controller", () => {
@@ -19,12 +24,23 @@ describe("embedding-tracker controller", () => {
     assert.equal(mod.startEmbeddingTracker.length, 1);
   });
 
-  it("parses tracker modes with lazy as the safe default", () => {
-    assert.equal(parseEmbeddingTrackerMode(undefined), "lazy");
+  it("parses tracker modes with off as the no-native-watch default", () => {
+    assert.equal(parseEmbeddingTrackerMode(undefined), "off");
     assert.equal(parseEmbeddingTrackerMode("true"), "lazy");
     assert.equal(parseEmbeddingTrackerMode("lazy"), "lazy");
     assert.equal(parseEmbeddingTrackerMode("eager"), "eager");
     assert.equal(parseEmbeddingTrackerMode("off"), "off");
+  });
+
+  it("rejects native tracker startup and keeps built output free of fs.watch", async () => {
+    assert.throws(
+      () => startEmbeddingTracker({ rootDir: "." }),
+      /Native embedding tracker startup is disabled/,
+    );
+    const source = await readFile(join(process.cwd(), "build", "core", "embedding-tracker.js"), "utf8");
+    assert.doesNotMatch(source, /watch\(/);
+    assert.doesNotMatch(source, /import \{ watch/);
+    assert.doesNotMatch(source, /fsnotify/);
   });
 
   it("defers tracker startup in lazy mode", () => {
@@ -79,5 +95,22 @@ describe("embedding-tracker controller", () => {
     disabled.ensureStarted();
     assert.equal(disabledStarts, 0);
     assert.equal(disabled.isRunning(), false);
+  });
+
+  it("refreshes backend batches as a no-op when changed files no longer exist", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "scplus-embedding-batch-"));
+    try {
+      const result = await refreshEmbeddingsForChangedPaths({
+        rootDir,
+        relativePaths: ["missing.ts", "node_modules/ignored.ts"],
+      });
+      assert.deepEqual(result, {
+        fileEmbeddings: 0,
+        identifierEmbeddings: 0,
+        refreshedPaths: [],
+      });
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
   });
 });

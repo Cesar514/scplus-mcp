@@ -51,6 +51,7 @@ export type IndexArtifactKey =
   | "hub-suggestion-index"
   | "query-explanation-index"
   | "full-index-manifest"
+  | "scanner-state"
   | "restore-points"
   | `embedding-cache:${string}`;
 

@@ -1,3 +1,5 @@
+// Main test coverage for context-tree artifact generation
+// FEATURE: Context tree tests
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { getContextTree } from "../../build/tools/context-tree.js";

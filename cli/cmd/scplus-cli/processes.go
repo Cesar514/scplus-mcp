@@ -65,14 +65,13 @@ func toolRoot() (string, error) {
 // Inputs: One process field plus the repo root path.
 // Returns/Effects: Returns true when the field matches a known runtime command shape.
 func matchesScplusProcessField(field string, repoRoot string) bool {
-	base := filepath.Base(field)
-	if field == "bridge-serve" || base == "bridge-serve" {
+	if field == "bridge-serve" {
 		return true
 	}
-	if field == "scplus-cli" || base == "scplus-cli" {
+	if field == "scplus-cli" {
 		return true
 	}
-	if field == "scplus-mcp" || base == "scplus-mcp" {
+	if field == "scplus-mcp" {
 		return true
 	}
 	if repoRoot == "" {

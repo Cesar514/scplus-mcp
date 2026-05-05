@@ -1,3 +1,5 @@
+// Main test coverage for write freshness tracking and invalidation
+// FEATURE: Write freshness tests
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";

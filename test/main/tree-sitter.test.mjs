@@ -1,3 +1,5 @@
+// Main test coverage for tree-sitter parsing helpers
+// FEATURE: Tree sitter tests
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";

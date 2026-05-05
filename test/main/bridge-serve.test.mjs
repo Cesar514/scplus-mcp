@@ -80,7 +80,7 @@ async function closeBridgeSession(session) {
 // Purpose: Initialize a BridgeSession instance around one persistent bridge-serve subprocess.
 // Inputs: The BridgeSession instance to populate plus the repository working directory for the subprocess.
 // Returns/Effects: Spawns the subprocess, wires stdout and stderr listeners, and seeds session state.
-function initializeBridgeSession(session, cwd) {
+function initializeBridgeSession(session, cwd, env = {}) {
   session.cwd = cwd;
   session.nextId = 0;
   session.pending = new Map();
@@ -96,6 +96,7 @@ function initializeBridgeSession(session, cwd) {
       ...process.env,
       SCPLUS_EMBED_PROVIDER: "mock",
       NODE_NO_WARNINGS: "1",
+      ...env,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -139,9 +140,9 @@ function initializeBridgeSession(session, cwd) {
 // Purpose: Create and initialize a persistent bridge-serve test session for one fixture repository.
 // Inputs: The repository working directory that the bridge-serve subprocess should run against.
 // Returns/Effects: Returns an initialized BridgeSession instance with a live bridge subprocess.
-function createBridgeSession(cwd) {
+function createBridgeSession(cwd, env) {
   const session = new BridgeSession();
-  initializeBridgeSession(session, cwd);
+  initializeBridgeSession(session, cwd, env);
   return session;
 }
 
@@ -534,6 +535,67 @@ describe("bridge-serve", () => {
           event.source === "manual",
         );
         assert.equal(manualCompleted.root, cwd);
+      } finally {
+        await session.close();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("escalates watch batches to full rebuild when pending path cap overflows", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "scplus-bridge-overflow-"));
+    try {
+      await mkdir(join(cwd, "src"), { recursive: true });
+      await writeFile(join(cwd, "src", "one.ts"), "export const one = 1;\n");
+      await writeFile(join(cwd, "src", "two.ts"), "export const two = 2;\n");
+      await git(cwd, "init");
+      await git(cwd, "config", "user.email", "scplus@example.com");
+      await git(cwd, "config", "user.name", "Context Plus");
+      await git(cwd, "add", ".");
+      await git(cwd, "commit", "-m", "init");
+
+      await execFileAsync(
+        process.execPath,
+        [join(process.cwd(), "build", "index.js"), "index"],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            SCPLUS_EMBED_PROVIDER: "mock",
+            NODE_NO_WARNINGS: "1",
+          },
+        },
+      );
+
+      const session = createBridgeSession(cwd, {
+        SCPLUS_WATCH_MAX_PENDING_PATHS: "1",
+        SCPLUS_SCAN_MAX_DIRS_PER_TICK: "20",
+        SCPLUS_SCAN_MAX_FILES_PER_TICK: "20",
+      });
+      try {
+        await session.request("watch-set", { root: cwd, enabled: true, debounceMs: 100 });
+        await session.waitForEvent((event) => event.kind === "watch-state" && event.enabled === true);
+
+        await writeFile(join(cwd, "src", "one.ts"), "export const one = 10;\n");
+        await writeFile(join(cwd, "src", "two.ts"), "export const two = 20;\n");
+
+        const overflowBatch = await session.waitForEvent((event) =>
+          event.kind === "watch-batch" &&
+          typeof event.rebuildReason === "string" &&
+          event.rebuildReason.includes("watch pending path overflow"),
+        );
+        assert.equal(overflowBatch.nativeWatchCount, 0);
+        assert.equal(overflowBatch.rebuildReason.includes("cap=1"), true);
+
+        const overflowIndex = await session.waitForEvent((event) =>
+          event.kind === "job" &&
+          event.job === "index" &&
+          event.source === "watch" &&
+          typeof event.rebuildReason === "string" &&
+          event.rebuildReason.includes("watch pending path overflow"),
+        );
+        assert.equal(overflowIndex.root, cwd);
       } finally {
         await session.close();
       }

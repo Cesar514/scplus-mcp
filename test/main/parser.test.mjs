@@ -1,3 +1,5 @@
+// Main test coverage for parser extraction behavior
+// FEATURE: Parser tests
 import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {

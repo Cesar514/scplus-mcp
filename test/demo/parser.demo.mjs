@@ -1,3 +1,5 @@
+// Demo coverage for parser behavior across sample source files
+// FEATURE: Parser demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

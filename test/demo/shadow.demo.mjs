@@ -1,3 +1,5 @@
+// Demo coverage for shadow restore-point behavior against fixtures
+// FEATURE: Shadow demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

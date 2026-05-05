@@ -139,6 +139,10 @@ export function formatSchedulerObservabilitySummary(report: BridgeDoctorReport):
   return [
     "observability scheduler:",
     `watch=${scheduler.watchEnabled ? "enabled" : "disabled"}`,
+    `scanner=${scheduler.scannerStatus}`,
+    `nativeWatchCount=${scheduler.nativeWatchCount}`,
+    `scannerQueue=${scheduler.scannerDirectoryQueueSize}/${scheduler.scannerFileQueueSize}`,
+    `coverageAt=${scheduler.scannerLastFullCoverageAt ?? "none"}`,
     `queueDepth=${scheduler.queueDepth}`,
     `pendingChanges=${scheduler.pendingChangeCount}`,
     `pendingJob=${scheduler.pendingJobKind ?? "none"}`,
@@ -147,5 +151,6 @@ export function formatSchedulerObservabilitySummary(report: BridgeDoctorReport):
     `deduped=${scheduler.dedupedPathEvents}`,
     `canceled=${scheduler.canceledJobs}`,
     `superseded=${scheduler.supersededJobs}`,
+    `overflow=${scheduler.scannerLastOverflowReason ?? "none"}`,
   ].join(" | ");
 }

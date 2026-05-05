@@ -1,5 +1,4 @@
-// summary: Static-analysis test shell.
-// FEATURE: Small lint-clean companion module.
+// summary: Provides a minimal static-analysis test shell companion module.
+// purpose: Keep a lint-clean sidecar file available for static-analysis test coverage.
 // inputs: Node test runner module loading.
-// outputs: This file intentionally carries no direct tests.
-
+// returns/effects: This file intentionally carries no direct tests.

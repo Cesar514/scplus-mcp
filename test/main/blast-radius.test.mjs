@@ -1,3 +1,5 @@
+// Main test coverage for blast-radius symbol tracing
+// FEATURE: Blast radius tests
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { getBlastRadius } from "../../build/tools/blast-radius.js";

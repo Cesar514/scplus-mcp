@@ -1,3 +1,5 @@
+// Main test coverage for suggested hub generation
+// FEATURE: Hub suggestions tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";

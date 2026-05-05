@@ -38,6 +38,8 @@ export interface BackendEvent {
   pending?: boolean;
   enabled?: boolean;
   changedPaths?: string[];
+  changedPathsTruncated?: boolean;
+  totalChangedPathCount?: number;
   queueDepth?: number;
   rebuildReason?: string;
   processedItems?: number;
@@ -47,6 +49,16 @@ export interface BackendEvent {
   pendingChangeCount?: number;
   pendingPaths?: string[];
   pendingJobKind?: BackendJobName;
+  scannerStatus?: "bootstrapping" | "enabled" | "blocked" | "disabled";
+  nativeWatchCount?: number;
+  scannerDirectoryQueueSize?: number;
+  scannerFileQueueSize?: number;
+  scannerKnownDirectoryCount?: number;
+  scannerKnownFileCount?: number;
+  scannerGeneration?: number;
+  scannerLastFullCoverageAt?: string;
+  scannerLastFailure?: string;
+  scannerLastOverflowReason?: string;
 }
 
 export interface TextPayload {

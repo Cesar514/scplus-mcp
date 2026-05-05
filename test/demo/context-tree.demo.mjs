@@ -1,3 +1,5 @@
+// Demo coverage for context-tree output against temporary fixtures
+// FEATURE: Context tree demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

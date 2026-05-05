@@ -1,3 +1,5 @@
+// Main test coverage for shadow restore-point workflows
+// FEATURE: Shadow tests
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";

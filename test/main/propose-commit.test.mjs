@@ -1,3 +1,7 @@
+// summary: Covers propose-commit validation and restore-point reporting behavior.
+// purpose: Verify write-time validation enforces the repository header contract before saving.
+// inputs: Temporary fixture files plus propose-commit entry points.
+// returns/effects: Assertion coverage for validation warnings, writes, and restore points.
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { proposeCommit } from "../../build/tools/propose-commit.js";
@@ -17,7 +21,7 @@ describe("propose-commit", async () => {
   describe("proposeCommit", () => {
     it("saves a valid file with proper header", async () => {
       const content =
-        "// summary: Valid checkpoint fixture module\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: main() return value\n\nfunction main() {\n  return 1;\n}\n";
+        "// summary: Valid checkpoint fixture module\n// purpose: Verify a valid checkpoint write passes validation.\n// inputs: none\n// returns/effects: main() return value.\n\nfunction main() {\n  return 1;\n}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "valid.ts",
@@ -44,7 +48,7 @@ describe("propose-commit", async () => {
 
     it("allows comments after the required header", async () => {
       const content =
-        "// summary: Comment-friendly checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: x() side effect free\n\n// This is an inline comment\nfunction x() {}\n";
+        "// summary: Comment-friendly checkpoint fixture\n// purpose: Verify comments after the required header remain allowed.\n// inputs: none\n// returns/effects: x() remains side effect free.\n\n// This is an inline comment\nfunction x() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "comments.ts",
@@ -53,11 +57,11 @@ describe("propose-commit", async () => {
       assert.ok(result.includes("saved") || result.includes("✅"));
     });
 
-    it("warns when the second header line is missing a feature tag", async () => {
+    it("warns when required header fields are missing", async () => {
       const lines = [
         "// summary: Header without feature tag",
         "// inputs: none",
-        "// outputs: x() result",
+        "// returns/effects: x() result",
         "",
       ];
       lines.push("// allowed comment");
@@ -68,11 +72,11 @@ describe("propose-commit", async () => {
         filePath: "feature.ts",
         newContent: content,
       });
-      assert.ok(result.includes("feature") || result.includes("⚠"));
+      assert.ok(result.includes("purpose-header") || result.includes("⚠"));
     });
 
     it("warns about high nesting depth", async () => {
-      let content = "// summary: Nested checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: nesting warning\n\n";
+      let content = "// summary: Nested checkpoint fixture\n// purpose: Trigger the nesting warning during checkpoint validation.\n// inputs: none\n// returns/effects: nesting warning.\n\n";
       for (let i = 0; i < 8; i++) content += "  ".repeat(i) + "if (true) {\n";
       content += "  ".repeat(8) + "doStuff();\n";
       for (let i = 7; i >= 0; i--) content += "  ".repeat(i) + "}\n";
@@ -89,7 +93,7 @@ describe("propose-commit", async () => {
     });
 
     it("warns about excessively long files", async () => {
-      const lines = ["// summary: Long checkpoint fixture", "// FEATURE: Checkpoint Tests", "// inputs: none", "// outputs: file length warning", ""];
+      const lines = ["// summary: Long checkpoint fixture", "// purpose: Trigger the file-length warning during checkpoint validation.", "// inputs: none", "// returns/effects: file length warning.", ""];
       for (let i = 0; i < 1100; i++) lines.push(`const x${i} = ${i};`);
       const content = lines.join("\n");
       const result = await proposeCommit({
@@ -106,7 +110,7 @@ describe("propose-commit", async () => {
 
     it("creates a restore point before saving", async () => {
       const content =
-        "// summary: Restore checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: r() placeholder\n\nfunction r() {}\n";
+        "// summary: Restore checkpoint fixture\n// purpose: Verify a restore point is created before saving.\n// inputs: none\n// returns/effects: r() placeholder.\n\nfunction r() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "restore.ts",
@@ -130,7 +134,7 @@ describe("propose-commit", async () => {
     });
 
     it("creates nested directories when needed", async () => {
-      const content = "// summary: Deep checkpoint fixture\n// FEATURE: Checkpoint Tests\n// inputs: none\n// outputs: deep() placeholder\n\nfunction deep() {}\n";
+      const content = "// summary: Deep checkpoint fixture\n// purpose: Verify nested directories are created before saving.\n// inputs: none\n// returns/effects: deep() placeholder.\n\nfunction deep() {}\n";
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "sub/dir/deep.ts",
@@ -149,12 +153,12 @@ describe("propose-commit", async () => {
         proposeCommit({
           rootDir: FIXTURE_DIR,
           filePath: "parallel/left.ts",
-          newContent: "// summary: Left parallel checkpoint fixture\n// FEATURE: Left\n// inputs: none\n// outputs: left constant\n\nexport const left = 1;\n",
+          newContent: "// summary: Left parallel checkpoint fixture\n// purpose: Verify concurrent writes serialize before refresh.\n// inputs: none\n// returns/effects: left constant.\n\nexport const left = 1;\n",
         }),
         proposeCommit({
           rootDir: FIXTURE_DIR,
           filePath: "parallel/right.ts",
-          newContent: "// summary: Right parallel checkpoint fixture\n// FEATURE: Right\n// inputs: none\n// outputs: right constant\n\nexport const right = 2;\n",
+          newContent: "// summary: Right parallel checkpoint fixture\n// purpose: Verify concurrent writes serialize before refresh.\n// inputs: none\n// returns/effects: right constant.\n\nexport const right = 2;\n",
         }),
       ]);
       assert.ok(left.includes("saved") || left.includes("✅"));
@@ -171,11 +175,11 @@ describe("propose-commit", async () => {
       const result = await proposeCommit({
         rootDir: FIXTURE_DIR,
         filePath: "missing-fields.ts",
-        newContent: "// FEATURE: Checkpoint Tests\n// plain header line\n\nexport const value = 1;\n",
+        newContent: "// summary: Checkpoint missing header fields fixture\n// plain header line\n// another plain header line\n// final plain header line\n\nexport const value = 1;\n",
       });
-      assert.ok(result.includes("summary-header"));
+      assert.ok(result.includes("purpose-header"));
       assert.ok(result.includes("inputs-header"));
-      assert.ok(result.includes("outputs-header"));
+      assert.ok(result.includes("returns/effects-header"));
     });
   });
 

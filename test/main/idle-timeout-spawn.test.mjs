@@ -1,3 +1,5 @@
+// Main test coverage for idle-timeout spawn handling
+// FEATURE: Idle timeout spawn tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";

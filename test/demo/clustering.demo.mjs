@@ -1,3 +1,5 @@
+// Demo coverage for semantic clustering against temporary fixtures
+// FEATURE: Clustering demo
 import { describe, it } from "node:test";
 
 const { spectralCluster, findPathPattern } =

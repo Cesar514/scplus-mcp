@@ -7,6 +7,16 @@ import { resolve } from "path";
 
 export interface BackendSchedulerObservability {
   watchEnabled: boolean;
+  scannerStatus: "bootstrapping" | "enabled" | "blocked" | "disabled";
+  nativeWatchCount: number;
+  scannerDirectoryQueueSize: number;
+  scannerFileQueueSize: number;
+  scannerKnownDirectoryCount: number;
+  scannerKnownFileCount: number;
+  scannerGeneration: number;
+  scannerLastFullCoverageAt?: string;
+  scannerLastFailure?: string;
+  scannerLastOverflowReason?: string;
   queueDepth: number;
   maxQueueDepth: number;
   batchCount: number;
@@ -28,6 +38,16 @@ const schedulerSnapshots = new Map<string, BackendSchedulerObservability>();
 function buildDefaultSchedulerObservability(): BackendSchedulerObservability {
   return {
     watchEnabled: false,
+    scannerStatus: "disabled",
+    nativeWatchCount: 0,
+    scannerDirectoryQueueSize: 0,
+    scannerFileQueueSize: 0,
+    scannerKnownDirectoryCount: 0,
+    scannerKnownFileCount: 0,
+    scannerGeneration: 0,
+    scannerLastFullCoverageAt: undefined,
+    scannerLastFailure: undefined,
+    scannerLastOverflowReason: undefined,
     queueDepth: 0,
     maxQueueDepth: 0,
     batchCount: 0,
@@ -66,6 +86,12 @@ export function updateBackendSchedulerObservability(
   const normalized: BackendSchedulerObservability = {
     ...next,
     queueDepth: Math.max(0, next.queueDepth),
+    nativeWatchCount: Math.max(0, next.nativeWatchCount),
+    scannerDirectoryQueueSize: Math.max(0, next.scannerDirectoryQueueSize),
+    scannerFileQueueSize: Math.max(0, next.scannerFileQueueSize),
+    scannerKnownDirectoryCount: Math.max(0, next.scannerKnownDirectoryCount),
+    scannerKnownFileCount: Math.max(0, next.scannerKnownFileCount),
+    scannerGeneration: Math.max(0, next.scannerGeneration),
     maxQueueDepth: Math.max(next.maxQueueDepth, next.queueDepth),
     pendingChangeCount: Math.max(0, next.pendingChangeCount),
     pendingPaths: [...next.pendingPaths],

@@ -1,3 +1,5 @@
+// Main test coverage for OpenCode initialization helpers
+// FEATURE: Init OpenCode tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";

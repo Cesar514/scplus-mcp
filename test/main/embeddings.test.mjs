@@ -1,3 +1,5 @@
+// Main test coverage for embedding cache and search behavior
+// FEATURE: Embeddings tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";

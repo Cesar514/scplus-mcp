@@ -1,3 +1,5 @@
+// Demo coverage proving embedding-backed search behavior on fixtures
+// FEATURE: Embeddings proof demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

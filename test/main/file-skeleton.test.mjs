@@ -1,3 +1,5 @@
+// Main test coverage for file skeleton extraction
+// FEATURE: File skeleton tests
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { getFileSkeleton } from "../../build/tools/file-skeleton.js";

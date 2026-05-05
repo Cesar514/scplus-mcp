@@ -1,3 +1,5 @@
+// Main test coverage for feature hub discovery and rendering
+// FEATURE: Feature hub tests
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, rm } from "fs/promises";

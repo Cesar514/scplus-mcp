@@ -1,9 +1,9 @@
-// summary: Tracks source-file changes and schedules incremental embedding refresh work.
-// FEATURE: Incremental embedding updates for changed files and identifiers.
-// inputs: File watcher events, tracker configuration, and embedding refresh callbacks.
-// outputs: Debounced changed-file batches and controlled embedding refresh execution.
+// summary: Refreshes embeddings from backend-owned change batches without native filesystem watches.
+// purpose: Keep semantic caches current while avoiding recursive `fs.watch` and inotify pressure.
+// inputs: Backend watch batches, tracker compatibility configuration, and embedding refresh callbacks.
+// returns/effects: Refreshes changed-file embeddings or loudly rejects obsolete native tracker startup.
 
-import { watch, type FSWatcher } from "fs";
+import { stat } from "node:fs/promises";
 import { refreshFileSearchEmbeddings } from "../tools/semantic-search.js";
 import { refreshIdentifierEmbeddings } from "../tools/semantic-identifiers.js";
 
@@ -24,20 +24,19 @@ export interface EmbeddingTrackerControllerOptions extends EmbeddingTrackerOptio
   starter?: (options: EmbeddingTrackerOptions) => () => void;
 }
 
-const MIN_FILES_PER_TICK = 5;
-const MAX_FILES_PER_TICK = 10;
-const DEFAULT_FILES_PER_TICK = 8;
-const DEFAULT_DEBOUNCE_MS = 1500;
-const MAX_PENDING_FILES = 50;
-
-const IGNORE_PREFIXES = [
-  ".scplus/",
-  ".git/",
-  "node_modules/",
-  "build/",
-  "dist/",
-  "landing/.next/",
-];
+// Purpose: Return path prefixes excluded from backend-batch embedding refresh.
+// Inputs: No direct inputs beyond the repository ignore policy encoded here.
+// Returns/Effects: Returns a fresh immutable prefix list for path filtering.
+function getIgnorePrefixes(): readonly string[] {
+  return [
+    ".scplus/",
+    ".git/",
+    "node_modules/",
+    "build/",
+    "dist/",
+    "landing/.next/",
+  ] as const;
+}
 
 // Purpose: Normalize watcher-relative paths into stable forward-slash repository paths.
 // Inputs: A watcher-reported path that may contain platform-specific separators or leading slashes.
@@ -51,107 +50,59 @@ function normalizeRelativePath(path: string): string {
 // Returns/Effects: Returns true when the path is non-empty and not inside ignored prefixes.
 function shouldTrack(path: string): boolean {
   if (!path) return false;
-  return !IGNORE_PREFIXES.some((prefix) => path.startsWith(prefix));
-}
-
-// Purpose: Clamp the per-tick embedding refresh batch size into the supported range.
-// Inputs: The optional configured maximum files per tick.
-// Returns/Effects: Returns a bounded integer batch size for embedding refresh work.
-function clampFilesPerTick(value: number | undefined): number {
-  if (!Number.isFinite(value)) return DEFAULT_FILES_PER_TICK;
-  return Math.max(MIN_FILES_PER_TICK, Math.min(MAX_FILES_PER_TICK, Math.floor(value ?? DEFAULT_FILES_PER_TICK)));
-}
-
-// Purpose: Clamp the embedding tracker debounce interval into the supported range.
-// Inputs: The optional configured debounce duration in milliseconds.
-// Returns/Effects: Returns a bounded integer debounce duration.
-function clampDebounceMs(value: number | undefined): number {
-  if (!Number.isFinite(value)) return DEFAULT_DEBOUNCE_MS;
-  return Math.max(500, Math.floor(value ?? DEFAULT_DEBOUNCE_MS));
+  return !getIgnorePrefixes().some((prefix) => path.startsWith(prefix));
 }
 
 // Purpose: Normalize the embedding tracker mode string into the supported runtime modes.
 // Inputs: The optional embedding tracker mode string from configuration or environment.
 // Returns/Effects: Returns the normalized tracker mode literal.
 export function parseEmbeddingTrackerMode(value: string | undefined): "off" | "lazy" | "eager" {
-  if (!value) return "lazy";
+  if (!value) return "off";
   const normalized = value.trim().toLowerCase();
   if (["false", "0", "no", "off", "disabled", "none"].includes(normalized)) return "off";
   if (["eager", "startup", "boot"].includes(normalized)) return "eager";
   return "lazy";
 }
 
-// Purpose: Start the filesystem-backed embedding tracker for changed source files.
-// Inputs: Embedding tracker options including root directory, debounce interval, and batch size.
-// Returns/Effects: Starts file watching and returns a stop function for the tracker.
+// Purpose: Reject obsolete native embedding tracker startup paths.
+// Inputs: Embedding tracker options retained for API compatibility during migration.
+// Returns/Effects: Throws because recursive native watching is no longer allowed.
 export function startEmbeddingTracker(options: EmbeddingTrackerOptions): () => void {
-  const pendingFiles = new Set<string>();
-  const debounceMs = clampDebounceMs(options.debounceMs);
-  const maxFilesPerTick = clampFilesPerTick(options.maxFilesPerTick);
+  throw new Error(
+    `Native embedding tracker startup is disabled for ${options.rootDir}; use backend watch batches via refreshEmbeddingsForChangedPaths.`,
+  );
+}
 
-  let watcher: FSWatcher | null = null;
-  let timer: NodeJS.Timeout | null = null;
-  let isProcessing = false;
-  let closed = false;
-
-  const schedule = (delay: number = debounceMs): void => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      void flushPending();
-    }, delay);
-    timer.unref();
-  };
-
-  const flushPending = async (): Promise<void> => {
-    if (closed || isProcessing) return;
-    if (pendingFiles.size === 0) return;
-
-    isProcessing = true;
-    const batch = Array.from(pendingFiles).slice(0, maxFilesPerTick);
-    for (const file of batch) pendingFiles.delete(file);
-
-    try {
-      const [fileEmbeds, identifierEmbeds] = await Promise.all([
-        refreshFileSearchEmbeddings({ rootDir: options.rootDir, relativePaths: batch }),
-        refreshIdentifierEmbeddings({ rootDir: options.rootDir, relativePaths: batch }),
-      ]);
-      if (fileEmbeds > 0 || identifierEmbeds > 0) {
-        console.error(
-          `Embedding tracker refreshed ${batch.length} file(s) | file-vectors=${fileEmbeds}, identifier-vectors=${identifierEmbeds}`,
-        );
-      }
-    } catch (error) {
-      console.error("Embedding tracker refresh failed:", error);
-    } finally {
-      isProcessing = false;
-      if (pendingFiles.size > 0) schedule(100);
-    }
-  };
-
-  try {
-    watcher = watch(options.rootDir, { recursive: true }, (_eventType, fileName) => {
-      if (closed || !fileName) return;
-      const relativePath = normalizeRelativePath(String(fileName));
-      if (!shouldTrack(relativePath)) return;
-      if (pendingFiles.size >= MAX_PENDING_FILES) return;
-      pendingFiles.add(relativePath);
-      schedule();
+// Purpose: Filter changed paths down to currently readable tracked files.
+// Inputs: Repository root and the changed paths emitted by the backend scanner.
+// Returns/Effects: Returns existing file paths that should refresh embedding caches.
+async function filterExistingTrackedFiles(rootDir: string, relativePaths: string[]): Promise<string[]> {
+  const uniquePaths = Array.from(new Set(relativePaths.map(normalizeRelativePath).filter(shouldTrack)));
+  const results = await Promise.all(uniquePaths.map(async (relativePath) => {
+    const info = await stat(`${rootDir}/${relativePath}`).catch((error) => {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return null;
+      throw error;
     });
-  } catch (error) {
-    console.error("Embedding tracker disabled: file watching is unavailable.", error);
-    return () => { };
-  }
+    return info?.isFile() ? relativePath : undefined;
+  }));
+  return results.filter((path): path is string => Boolean(path));
+}
 
-  watcher.on("error", (error) => {
-    console.error("Embedding tracker watcher error:", error);
-  });
-
-  return () => {
-    closed = true;
-    if (timer) clearTimeout(timer);
-    watcher?.close();
-    watcher = null;
-  };
+// Purpose: Refresh semantic embedding caches for a backend-owned watch batch.
+// Inputs: Repository root and changed relative paths from the bounded backend scanner.
+// Returns/Effects: Refreshes file and identifier embeddings for existing changed files.
+export async function refreshEmbeddingsForChangedPaths(options: EmbeddingTrackerOptions & { relativePaths: string[] }): Promise<{
+  fileEmbeddings: number;
+  identifierEmbeddings: number;
+  refreshedPaths: string[];
+}> {
+  const refreshedPaths = await filterExistingTrackedFiles(options.rootDir, options.relativePaths);
+  if (refreshedPaths.length === 0) return { fileEmbeddings: 0, identifierEmbeddings: 0, refreshedPaths };
+  const [fileEmbeddings, identifierEmbeddings] = await Promise.all([
+    refreshFileSearchEmbeddings({ rootDir: options.rootDir, relativePaths: refreshedPaths }),
+    refreshIdentifierEmbeddings({ rootDir: options.rootDir, relativePaths: refreshedPaths }),
+  ]);
+  return { fileEmbeddings, identifierEmbeddings, refreshedPaths };
 }
 
 // Purpose: Build a mode-aware embedding tracker controller with explicit start and stop operations.

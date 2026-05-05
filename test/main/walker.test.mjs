@@ -1,3 +1,5 @@
+// Main test coverage for filesystem walker behavior
+// FEATURE: Walker tests
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { walkDirectory, groupByDirectory } from "../../build/core/walker.js";

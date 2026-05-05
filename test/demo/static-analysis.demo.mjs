@@ -1,3 +1,5 @@
+// Demo coverage for static analysis reporting against temporary fixtures
+// FEATURE: Static analysis demo
 import { describe, it, before, after } from "node:test";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join, resolve } from "path";

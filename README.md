@@ -267,7 +267,6 @@ OLLAMA_EMBED_MODEL = "qwen3-embedding:0.6b-32k"
 OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"
 OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"
 SCPLUS_EMBED_BATCH_SIZE = "8"
-SCPLUS_EMBED_TRACKER = "lazy"
 ```
 
 If you prefer running through `npx` or `bunx` instead of the locally linked command, the generated Codex config follows the same structure but sets:
@@ -289,8 +288,7 @@ For clients that use JSON config files, the generated config follows this genera
         "OLLAMA_EMBED_MODEL": "qwen3-embedding:0.6b-32k",
         "OLLAMA_CHAT_MODEL": "nemotron-3-nano:4b-128k",
         "OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY",
-        "SCPLUS_EMBED_BATCH_SIZE": "8",
-        "SCPLUS_EMBED_TRACKER": "lazy"
+        "SCPLUS_EMBED_BATCH_SIZE": "8"
       }
     }
   }
@@ -510,11 +508,14 @@ The committed plain snapshot is in [cli-snapshot.txt](/home/cesar514/Documents/a
 
 The backend, not the Go frontend, owns watcher behavior:
 
+- native recursive filesystem watchers are not used by default
+- a bounded backend scanner covers repositories in budgeted directory and file ticks
 - bursty path changes are deduped
 - the scheduler can queue or supersede stale pending work
 - ordinary edits can become refresh jobs
 - dependency/config changes can escalate to full index jobs
 - job, watch, and log events are streamed over `bridge-serve`
+- diagnostics report scanner status, native watch count, scanner queue sizes, and last full coverage time
 
 ## Environment Variables
 
@@ -543,9 +544,13 @@ The repository does not have a checked-in `.env.example`, so the source is the a
 | `SCPLUS_EMBED_BATCH_SIZE` | No | Embedding batch size, clamped in code | `8` |
 | `SCPLUS_EMBED_CHUNK_CHARS` | No | Chunk chars before vector merge, clamped in code | `2000` |
 | `SCPLUS_MAX_EMBED_FILE_SIZE` | No | Max file size for embed-aware search paths | tool fallback in `semantic-search.ts` |
-| `SCPLUS_EMBED_TRACKER` | No | Enable/shape tracker behavior | read directly from env |
-| `SCPLUS_EMBED_TRACKER_MAX_FILES` | No | Max files processed per tracker tick | `8` |
-| `SCPLUS_EMBED_TRACKER_DEBOUNCE_MS` | No | Debounce window for tracker work | `700` |
+| `SCPLUS_SCAN_MAX_DIRS_PER_TICK` | No | Max directories scanned per bounded watcher tick | `32` |
+| `SCPLUS_SCAN_MAX_FILES_PER_TICK` | No | Max files fingerprinted per bounded watcher tick | `256` |
+| `SCPLUS_SCAN_MAX_MS_PER_TICK` | No | Max scanner milliseconds per tick | `100` |
+| `SCPLUS_SCAN_STAT_CONCURRENCY` | No | Max concurrent file stat calls per scanner tick | `16` |
+| `SCPLUS_SCAN_RESCAN_INTERVAL_MS` | No | Scanner tick interval cap used while watching | `1000` |
+| `SCPLUS_WATCH_MAX_PENDING_PATHS` | No | Max detailed pending paths before escalating to full rebuild | `5000` |
+| `SCPLUS_WATCH_EVENT_PATH_SAMPLE` | No | Max changed paths included in one streamed event payload | `100` |
 | `SCPLUS_IDLE_TIMEOUT_MS` | No | Idle shutdown timeout for MCP process | unset |
 | `SCPLUS_PARENT_POLL_MS` | No | Parent-process polling interval | unset |
 

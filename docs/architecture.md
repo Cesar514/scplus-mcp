@@ -34,6 +34,7 @@ scplus uses a two-lane query model.
 The MCP server and the human CLI share one backend core.
 
 - The TypeScript backend core owns watcher state, scheduler state, generation-aware reads, and backend event streaming.
+- Repository watching uses a backend-owned bounded scanner with zero default native recursive watches.
 - MCP calls use that core directly for server-side operations.
 - The human CLI talks to the same core over the persistent local `bridge-serve` JSON-line protocol.
 - `bridge` commands expose the same high-value engine surfaces for local automation without requiring the full MCP transport.

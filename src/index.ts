@@ -11,7 +11,6 @@ import { resolve } from "path";
 import { z } from "zod";
 import { createBackendCore } from "./cli/backend-core.js";
 import { CLI_SUBCOMMANDS, handleCliCommand } from "./cli/commands.js";
-import { createEmbeddingTrackerController } from "./core/embedding-tracker.js";
 import { createIdleMonitor, getIdleShutdownMs, getParentPollMs, isBrokenPipeError, runCleanup, startParentMonitor } from "./core/process-lifecycle.js";
 import { getContextTree } from "./tools/context-tree.js";
 import { getFileSkeleton } from "./tools/file-skeleton.js";
@@ -52,7 +51,6 @@ const INSTRUCTIONS_SOURCE_URL = "https://raw.githubusercontent.com/Cesar514/scpl
 const INSTRUCTIONS_RESOURCE_URI = "scplus-mcp://instructions";
 
 let noteServerActivity = () => { };
-let ensureTrackerRunning = () => { };
 const backendCore = createBackendCore();
 
 // Purpose: Prefix prepared-query text responses with the current prepared-index freshness banner.
@@ -62,16 +60,14 @@ async function formatPreparedQueryResponse(text: string): Promise<string> {
   return `${await formatPreparedIndexFreshnessHeader(ROOT_DIR)}\n\n${text}`;
 }
 
-// Purpose: Wrap MCP handlers so each request records activity and optionally starts the embedding tracker.
+// Purpose: Wrap MCP handlers so each request records activity for lifecycle management.
 // Inputs: An async handler plus optional wrapper behavior flags.
 // Returns/Effects: Returns a wrapped handler that updates server activity before delegating to the original handler.
 function withRequestActivity<TArgs, TResult>(
   handler: (args: TArgs) => Promise<TResult>,
-  options?: { useEmbeddingTracker?: boolean },
 ): (args: TArgs) => Promise<TResult> {
   return async (args: TArgs): Promise<TResult> => {
     noteServerActivity();
-    if (options?.useEmbeddingTracker) ensureTrackerRunning();
     return handler(args);
   };
 }
@@ -144,7 +140,7 @@ server.tool(
       type: "text" as const,
       text: await repairPreparedIndex(ROOT_DIR, target),
     }],
-  }), { useEmbeddingTracker: true }),
+  })),
 );
 
 server.tool(
@@ -283,7 +279,7 @@ server.tool(
         }),
       ),
     }],
-  }), { useEmbeddingTracker: true }),
+  })),
 );
 
 server.tool(
@@ -295,7 +291,7 @@ server.tool(
       type: "text" as const,
       text: await runEvaluation(),
     }],
-  }), { useEmbeddingTracker: true }),
+  })),
 );
 
 server.tool(
@@ -332,7 +328,7 @@ server.tool(
         }),
       ),
     }],
-  }), { useEmbeddingTracker: true }),
+  })),
 );
 
 server.tool(
@@ -488,12 +484,6 @@ async function main() {
   if (await handleCliCommand(args)) {
     return;
   }
-  const trackerController = createEmbeddingTrackerController({
-    rootDir: ROOT_DIR,
-    mode: process.env.SCPLUS_EMBED_TRACKER,
-    debounceMs: Number.parseInt(process.env.SCPLUS_EMBED_TRACKER_DEBOUNCE_MS ?? "700", 10),
-    maxFilesPerTick: Number.parseInt(process.env.SCPLUS_EMBED_TRACKER_MAX_FILES ?? "8", 10),
-  });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
@@ -506,7 +496,6 @@ async function main() {
   });
 
   noteServerActivity = idleMonitor.touch;
-  ensureTrackerRunning = trackerController.ensureStarted;
 
   const closeServer = async () => {
     const closable = server as unknown as { close?: () => Promise<void> | void };
@@ -527,7 +516,7 @@ async function main() {
     await backendCore.close();
     await runCleanup({
       cancelEmbeddings: cancelAllEmbeddings,
-      stopTracker: trackerController.stop,
+      stopTracker: () => { },
       closeServer,
       closeTransport,
       stopMonitors: () => {
@@ -554,7 +543,6 @@ async function main() {
   process.once("exit", () => {
     idleMonitor.stop();
     stopParentMonitor();
-    trackerController.stop();
   });
   process.stdin.once("end", () => requestShutdown("stdin-end", 0));
   process.stdin.once("close", () => requestShutdown("stdin-close", 0));

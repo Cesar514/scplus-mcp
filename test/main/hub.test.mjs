@@ -1,3 +1,5 @@
+// Main test coverage for manual hub parsing and rendering
+// FEATURE: Hub tests
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, rm } from "fs/promises";

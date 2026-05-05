@@ -3,9 +3,9 @@
 // inputs: Repository roots, backend event sink functions, watch changes, and index job requests.
 // outputs: Per-root backend events, queue state updates, and manual or watch-triggered job execution.
 
-import { readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
 import { acquireRepoRuntimeLock, type RepoRuntimeLockHandle } from "../core/runtime-locks.js";
+import { updateIndexServingFreshness } from "../core/index-database.js";
+import { refreshEmbeddingsForChangedPaths } from "../core/embedding-tracker.js";
 import { resetBackendSchedulerObservability, updateBackendSchedulerObservability } from "../core/runtime-observability.js";
 import { semanticNavigate } from "../tools/semantic-navigate.js";
 import { DEFAULT_INDEX_MODE, type IndexMode } from "../tools/index-contract.js";
@@ -20,10 +20,14 @@ import {
   formatIntegrityObservabilitySummary,
   formatSchedulerObservabilitySummary,
   formatStageObservabilitySummary,
-  normalizeRelativePath,
   summarizeChangedPaths,
   type WatchExecutionPlan,
 } from "./backend-core-helpers.js";
+import {
+  createBackendBoundedScanner,
+  type BackendBoundedScannerController,
+  type BackendScannerSnapshot,
+} from "./backend-scan-state.js";
 import { buildDoctorReport } from "./reports.js";
 import {
   calculatePercentComplete,
@@ -31,24 +35,38 @@ import {
   type BackendJobControlAction,
   type EventSink,
   firstNonEmptyLine,
-  formatFileFingerprint,
   formatFileProgress,
   formatFullProgress,
   formatIdentifierProgress,
   type JobControlPayload,
   type ManualIndexMode,
   scaleRefreshPercent,
-  shouldWatchPath,
   type TextPayload,
   toErrorMessage,
   type WatchStatePayload,
 } from "./backend-core-shared.js";
 
+const DEFAULT_WATCH_MAX_PENDING_PATHS = 5000;
+const DEFAULT_WATCH_EVENT_PATH_SAMPLE = 100;
+
+// Purpose: Parse a positive integer environment budget for watch queue behavior.
+// Inputs: Environment variable name plus the default used when it is absent.
+// Returns/Effects: Returns a positive integer or throws for invalid configured values.
+function parseWatchBudget(name: string, defaultValue: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return defaultValue;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || String(parsed) !== raw.trim() || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer when set; received ${JSON.stringify(raw)}.`);
+  }
+  return parsed;
+}
+
 export class BackendRootSession {
   private debounceTimer: NodeJS.Timeout | null = null;
   private scanTimer: NodeJS.Timeout | null = null;
   private readonly pendingPaths = new Set<string>();
-  private previousSnapshot = new Map<string, string>();
+  private scanner: BackendBoundedScannerController | null = null;
   private watchEnabled = false;
   private watchDebounceMs = 1200;
   private activeJob: "cluster" | "index" | "refresh" | null = null;
@@ -62,6 +80,7 @@ export class BackendRootSession {
   private lastWatchBatch: string[] = [];
   private lastIndexMode: ManualIndexMode = "auto";
   private watchLock: RepoRuntimeLockHandle | null = null;
+  private pendingOverflowReason: string | null = null;
 
   constructor(
     private readonly rootDir: string,
@@ -83,6 +102,7 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: this.queuedWatchPlan?.job,
+        ...this.buildScannerEventFields(),
         message: "watcher enabled",
       });
       return { root: this.rootDir, enabled: true };
@@ -98,6 +118,7 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: this.queuedWatchPlan?.job,
+        ...this.buildScannerEventFields(),
         message: "watcher disabled",
       });
     }
@@ -273,12 +294,13 @@ export class BackendRootSession {
     this.assertOpen();
     const pendingPaths = this.getLatestPendingPaths();
     const hadQueuedIndex = this.queuedWatchPlan !== null;
-    const hadPendingPaths = this.pendingPaths.size > 0;
+    const hadPendingPaths = this.pendingPaths.size > 0 || this.pendingOverflowReason !== null;
     if (!hadQueuedIndex && !hadPendingPaths) {
       throw new Error(`No pending watch job exists for ${this.rootDir}.`);
     }
     this.clearDebounceTimer();
     this.pendingPaths.clear();
+    this.pendingOverflowReason = null;
     const canceledPlan = this.queuedWatchPlan;
     this.queuedWatchPlan = null;
     this.lastWatchBatch = pendingPaths;
@@ -315,17 +337,21 @@ export class BackendRootSession {
   async supersedePendingJob(): Promise<JobControlPayload> {
     this.assertOpen();
     const pendingPaths = this.getLatestPendingPaths();
-    if (pendingPaths.length === 0) {
+    const overflowReason = this.pendingOverflowReason;
+    if (pendingPaths.length === 0 && !overflowReason) {
       throw new Error(`No pending watch work exists for ${this.rootDir}.`);
     }
     this.clearDebounceTimer();
     this.pendingPaths.clear();
+    this.pendingOverflowReason = null;
     this.lastWatchBatch = pendingPaths;
     this.supersededJobs++;
     this.canceledJobs++;
     if (this.activeJob) {
       const priorPlan = this.queuedWatchPlan;
-      const nextPlan = buildWatchExecutionPlan(priorPlan ? dedupePaths([...priorPlan.changedPaths, ...pendingPaths]) : pendingPaths);
+      const nextPlan = overflowReason
+        ? this.buildWatchPlan([], overflowReason)
+        : buildWatchExecutionPlan(priorPlan ? dedupePaths([...priorPlan.changedPaths, ...pendingPaths]) : pendingPaths);
       this.queuedWatchPlan = nextPlan;
       this.syncSchedulerObservability();
       if (priorPlan) {
@@ -343,6 +369,7 @@ export class BackendRootSession {
           pendingPaths: this.getCurrentPendingPaths(),
           pendingChangeCount: this.getCurrentPendingPaths().length,
           pendingJobKind: nextPlan.job,
+          ...this.buildScannerEventFields(),
           message: `canceled stale queued watch ${priorPlan.job}`,
         });
       }
@@ -362,13 +389,14 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: nextPlan.job,
+        ...this.buildScannerEventFields(),
         message,
       });
       return this.buildJobControlPayload("supersede-pending", message);
     }
 
     this.syncSchedulerObservability();
-    const nextPlan = buildWatchExecutionPlan(pendingPaths);
+    const nextPlan = this.buildWatchPlan(pendingPaths, overflowReason);
     const message = `superseded pending watch batch and started a fresh ${nextPlan.job}: ${summarizeChangedPaths(nextPlan.changedPaths)}`;
     this.emitLog(message);
     void this.runWatchPlan(nextPlan);
@@ -495,6 +523,7 @@ export class BackendRootSession {
   private buildJobControlPayload(action: BackendJobControlAction, message: string): JobControlPayload {
     const pendingPaths = this.getLatestPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
+      ?? (this.pendingOverflowReason ? "index" : undefined)
       ?? (this.pendingPaths.size > 0 ? buildWatchExecutionPlan(Array.from(this.pendingPaths)).job : undefined);
     return {
       root: this.rootDir,
@@ -511,7 +540,75 @@ export class BackendRootSession {
   }
 
   private getQueueDepth(): number {
-    return this.pendingPaths.size > 0 || this.queuedWatchPlan ? 1 : 0;
+    return this.pendingPaths.size > 0 || this.pendingOverflowReason || this.queuedWatchPlan ? 1 : 0;
+  }
+
+  // Purpose: Return the latest scanner snapshot or a disabled placeholder for event payloads.
+  // Inputs: No direct inputs beyond the optional active scanner instance.
+  // Returns/Effects: Returns scanner diagnostics without mutating scanner state.
+  private getScannerSnapshot(): BackendScannerSnapshot {
+    return this.scanner?.snapshot() ?? {
+      status: "disabled",
+      nativeWatchCount: 0,
+      directoryQueueSize: 0,
+      fileQueueSize: 0,
+      knownDirectoryCount: 0,
+      knownFileCount: 0,
+      scanGeneration: 0,
+      budgets: {
+        maxDirsPerTick: 0,
+        maxFilesPerTick: 0,
+        maxMsPerTick: 0,
+        statConcurrency: 0,
+        rescanIntervalMs: 0,
+      },
+    };
+  }
+
+  // Purpose: Build scanner diagnostics shared by watch-state, watch-batch, and job events.
+  // Inputs: No direct inputs beyond the active scanner snapshot.
+  // Returns/Effects: Returns flattened optional event fields for backend consumers.
+  private buildScannerEventFields(): Partial<BackendEvent> {
+    const scanner = this.getScannerSnapshot();
+    return {
+      scannerStatus: scanner.status,
+      nativeWatchCount: scanner.nativeWatchCount,
+      scannerDirectoryQueueSize: scanner.directoryQueueSize,
+      scannerFileQueueSize: scanner.fileQueueSize,
+      scannerKnownDirectoryCount: scanner.knownDirectoryCount,
+      scannerKnownFileCount: scanner.knownFileCount,
+      scannerGeneration: scanner.scanGeneration,
+      scannerLastFullCoverageAt: scanner.lastFullCoverageAt,
+      scannerLastFailure: scanner.lastScanFailure,
+      scannerLastOverflowReason: scanner.lastOverflowReason,
+    };
+  }
+
+  // Purpose: Build bounded changed-path fields for events that may represent huge file batches.
+  // Inputs: The complete changed-path list for the batch.
+  // Returns/Effects: Returns a sample plus total count and truncation metadata.
+  private buildChangedPathEventFields(
+    changedPaths: string[],
+  ): Pick<BackendEvent, "changedPaths" | "changedPathsTruncated" | "totalChangedPathCount"> {
+    const sampleSize = parseWatchBudget("SCPLUS_WATCH_EVENT_PATH_SAMPLE", DEFAULT_WATCH_EVENT_PATH_SAMPLE);
+    return {
+      changedPaths: changedPaths.slice(0, sampleSize),
+      changedPathsTruncated: changedPaths.length > sampleSize,
+      totalChangedPathCount: changedPaths.length,
+    };
+  }
+
+  // Purpose: Build a watch plan for normal or overflowed pending changes.
+  // Inputs: The changed paths collected for the batch and any pending overflow reason.
+  // Returns/Effects: Returns a refresh or full-index plan with explicit overflow escalation.
+  private buildWatchPlan(changedPaths: string[], overflowReason: string | null): WatchExecutionPlan {
+    if (!overflowReason) return buildWatchExecutionPlan(changedPaths);
+    return {
+      job: "index",
+      mode: DEFAULT_INDEX_MODE,
+      changedPaths: [],
+      reason: overflowReason,
+    };
   }
 
   // Purpose: Push the latest watcher and queue counters into backend scheduler observability state.
@@ -520,10 +617,22 @@ export class BackendRootSession {
   private syncSchedulerObservability(): void {
     const pendingPaths = this.getCurrentPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
+      ?? (this.pendingOverflowReason ? "index" : undefined)
       ?? (pendingPaths.length > 0 ? buildWatchExecutionPlan(pendingPaths).job : undefined);
+    const scanner = this.getScannerSnapshot();
     updateBackendSchedulerObservability(this.rootDir, (current) => ({
       ...current,
       watchEnabled: this.watchEnabled,
+      scannerStatus: scanner.status,
+      nativeWatchCount: scanner.nativeWatchCount,
+      scannerDirectoryQueueSize: scanner.directoryQueueSize,
+      scannerFileQueueSize: scanner.fileQueueSize,
+      scannerKnownDirectoryCount: scanner.knownDirectoryCount,
+      scannerKnownFileCount: scanner.knownFileCount,
+      scannerGeneration: scanner.scanGeneration,
+      scannerLastFullCoverageAt: scanner.lastFullCoverageAt,
+      scannerLastFailure: scanner.lastScanFailure,
+      scannerLastOverflowReason: scanner.lastOverflowReason,
       queueDepth: this.getQueueDepth(),
       maxQueueDepth: Math.max(current.maxQueueDepth, this.getQueueDepth()),
       batchCount: this.batchCount,
@@ -542,10 +651,22 @@ export class BackendRootSession {
   private recordFullRebuildReason(reason: string): void {
     const pendingPaths = this.getCurrentPendingPaths();
     const pendingJobKind = this.queuedWatchPlan?.job
+      ?? (this.pendingOverflowReason ? "index" : undefined)
       ?? (pendingPaths.length > 0 ? buildWatchExecutionPlan(pendingPaths).job : undefined);
+    const scanner = this.getScannerSnapshot();
     updateBackendSchedulerObservability(this.rootDir, (current) => ({
       ...current,
       watchEnabled: this.watchEnabled,
+      scannerStatus: scanner.status,
+      nativeWatchCount: scanner.nativeWatchCount,
+      scannerDirectoryQueueSize: scanner.directoryQueueSize,
+      scannerFileQueueSize: scanner.fileQueueSize,
+      scannerKnownDirectoryCount: scanner.knownDirectoryCount,
+      scannerKnownFileCount: scanner.knownFileCount,
+      scannerGeneration: scanner.scanGeneration,
+      scannerLastFullCoverageAt: scanner.lastFullCoverageAt,
+      scannerLastFailure: scanner.lastScanFailure,
+      scannerLastOverflowReason: scanner.lastOverflowReason,
       queueDepth: this.getQueueDepth(),
       maxQueueDepth: Math.max(current.maxQueueDepth, this.getQueueDepth()),
       batchCount: this.batchCount,
@@ -559,20 +680,35 @@ export class BackendRootSession {
     }));
   }
 
-  // Purpose: Add a changed path to the pending watch buffer while tracking deduplication metrics.
-  // Inputs: A normalized repository-relative path detected as changed by the watcher scan.
-  // Returns/Effects: Updates pending path state, dedupe counters, and scheduler observability.
-  private trackPendingPath(path: string): void {
+  // Purpose: Add a changed path to the pending watch buffer while tracking caps and deduplication.
+  // Inputs: A normalized repository-relative path detected as changed by the bounded scanner.
+  // Returns/Effects: Updates pending state or records an overflow that forces a full rebuild.
+  private async trackPendingPath(path: string): Promise<void> {
+    if (this.pendingOverflowReason) {
+      this.dedupedPathEvents++;
+      return;
+    }
     if (this.pendingPaths.has(path)) {
       this.dedupedPathEvents++;
+    }
+    const maxPendingPaths = parseWatchBudget("SCPLUS_WATCH_MAX_PENDING_PATHS", DEFAULT_WATCH_MAX_PENDING_PATHS);
+    if (!this.pendingPaths.has(path) && this.pendingPaths.size + 1 > maxPendingPaths) {
+      const reason = `watch pending path overflow: cap=${maxPendingPaths}, observedAtLeast=${this.pendingPaths.size + 1}; full rebuild required`;
+      this.pendingPaths.clear();
+      this.pendingOverflowReason = reason;
+      this.emitLog(reason, "error");
+      await this.scanner?.recordOverflow(reason);
+      await updateIndexServingFreshness(this.rootDir, "dirty", reason);
+      this.syncSchedulerObservability();
+      return;
     }
     this.pendingPaths.add(path);
     this.syncSchedulerObservability();
   }
 
-  // Purpose: Start polling-based watch scanning for the repository and seed the initial file snapshot.
-  // Inputs: An optional debounce override used to tune watcher polling and batch timing.
-  // Returns/Effects: Acquires the watcher lock, captures the initial snapshot, and schedules polling timers.
+  // Purpose: Start bounded backend-owned scanning for the repository and persist its initial cursor.
+  // Inputs: An optional debounce override used to tune watch batch timing.
+  // Returns/Effects: Acquires the watcher lock, initializes scanner state, and schedules bounded scan ticks.
   private async startWatcher(debounceMs?: number): Promise<void> {
     if (this.watchEnabled) return;
     this.watchDebounceMs = debounceMs ?? this.watchDebounceMs;
@@ -585,7 +721,7 @@ export class BackendRootSession {
       },
     });
     try {
-      this.previousSnapshot = await this.scanSnapshot();
+      this.scanner = await createBackendBoundedScanner(this.rootDir);
     } catch (error) {
       this.emitLog(`watcher failed: ${toErrorMessage(error)}`, "error");
       await this.stopWatcher();
@@ -597,13 +733,15 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: this.queuedWatchPlan?.job,
+        ...this.buildScannerEventFields(),
         message: `watcher failed: ${toErrorMessage(error)}`,
       });
       throw error;
     }
     this.watchEnabled = true;
     this.syncSchedulerObservability();
-    const pollMs = Math.max(250, Math.min(this.watchDebounceMs, 1000));
+    await this.scanForChanges();
+    const pollMs = Math.max(250, Math.min(this.watchDebounceMs, this.getScannerSnapshot().budgets.rescanIntervalMs));
     this.scanTimer = setInterval(() => {
       void this.scanForChanges();
     }, pollMs);
@@ -623,8 +761,9 @@ export class BackendRootSession {
       this.scanTimer = null;
     }
     this.pendingPaths.clear();
+    this.pendingOverflowReason = null;
     this.queuedWatchPlan = null;
-    this.previousSnapshot.clear();
+    this.scanner = null;
     this.scanRunning = false;
     this.watchEnabled = false;
     this.syncSchedulerObservability();
@@ -651,26 +790,32 @@ export class BackendRootSession {
   // Inputs: No direct inputs beyond the buffered pending paths and any currently active backend job.
   // Returns/Effects: Emits a watch-batch event, updates queue state, and starts or queues the next watch plan.
   private async flushWatchBatch(): Promise<void> {
-    if (this.pendingPaths.size === 0) return;
+    if (this.pendingPaths.size === 0 && !this.pendingOverflowReason) return;
     const changedPaths = Array.from(this.pendingPaths).sort();
+    const overflowReason = this.pendingOverflowReason;
     this.pendingPaths.clear();
+    this.pendingOverflowReason = null;
     this.lastWatchBatch = changedPaths;
     this.batchCount++;
-    const plan = buildWatchExecutionPlan(changedPaths);
+    const plan = this.buildWatchPlan(changedPaths, overflowReason);
     this.syncSchedulerObservability();
     await this.emit({
       kind: "watch-batch",
       root: this.rootDir,
-      changedPaths,
+      ...this.buildChangedPathEventFields(changedPaths),
       queueDepth: this.getQueueDepth(),
       pendingPaths: this.getCurrentPendingPaths(),
       pendingChangeCount: this.getCurrentPendingPaths().length,
       pendingJobKind: this.queuedWatchPlan?.job ?? (this.activeJob ? plan.job : undefined),
-      message: `detected changes: ${summarizeChangedPaths(changedPaths)}`,
+      rebuildReason: overflowReason ?? undefined,
+      ...this.buildScannerEventFields(),
+      message: overflowReason ?? `detected changes: ${summarizeChangedPaths(changedPaths)}`,
     });
     if (this.activeJob) {
       const priorPlan = this.queuedWatchPlan;
-      const nextPlan = buildWatchExecutionPlan(priorPlan ? dedupePaths([...priorPlan.changedPaths, ...changedPaths]) : changedPaths);
+      const nextPlan = overflowReason
+        ? this.buildWatchPlan([], overflowReason)
+        : buildWatchExecutionPlan(priorPlan ? dedupePaths([...priorPlan.changedPaths, ...changedPaths]) : changedPaths);
       if (priorPlan) {
         this.supersededJobs++;
         this.canceledJobs++;
@@ -688,6 +833,7 @@ export class BackendRootSession {
           pendingPaths: this.getCurrentPendingPaths(),
           pendingChangeCount: this.getCurrentPendingPaths().length,
           pendingJobKind: nextPlan.job,
+          ...this.buildScannerEventFields(),
           message: `canceled stale queued watch ${priorPlan.job}`,
         });
       }
@@ -710,6 +856,7 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: nextPlan.job,
+        ...this.buildScannerEventFields(),
         message: queuedMessage,
       });
       this.emitLog(`${queuedMessage}: ${summarizeChangedPaths(nextPlan.changedPaths)}`);
@@ -733,57 +880,27 @@ export class BackendRootSession {
     }
   }
 
-  // Purpose: Build a recursive file fingerprint snapshot for the repository paths that the watcher tracks.
-  // Inputs: An optional directory to scan plus the snapshot map being populated during recursion.
-  // Returns/Effects: Traverses tracked files, records fingerprints, and returns the completed snapshot map.
-  private async scanSnapshot(directoryPath: string = this.rootDir, snapshot: Map<string, string> = new Map()): Promise<Map<string, string>> {
-    const entries = await readdir(directoryPath, { withFileTypes: true }).catch((error) => {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return [];
-      throw error;
-    });
-    for (const entry of entries) {
-      const absolutePath = join(directoryPath, entry.name);
-      const relativePath = normalizeRelativePath(relative(this.rootDir, absolutePath));
-      if (!shouldWatchPath(relativePath)) continue;
-      if (entry.isDirectory()) {
-        await this.scanSnapshot(absolutePath, snapshot);
-        continue;
-      }
-      const info = await stat(absolutePath).catch((error) => {
-        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return null;
-        throw error;
-      });
-      if (!info) continue;
-      if (!info.isFile()) continue;
-      snapshot.set(relativePath, formatFileFingerprint(info.size, info.mtimeMs));
-    }
-    return snapshot;
-  }
-
-  // Purpose: Poll the repository for tracked file changes and queue them for batched watch processing.
-  // Inputs: No direct inputs beyond watcher state, the previous snapshot, and current queue buffers.
-  // Returns/Effects: Updates snapshots, tracks changed paths, resets debounce, and disables the watcher on fatal scan errors.
+  // Purpose: Run one bounded scanner tick and queue any changed paths for batched processing.
+  // Inputs: No direct inputs beyond watcher state and the active bounded scanner.
+  // Returns/Effects: Updates persisted scanner state, queues changes, and blocks freshness on fatal scan errors.
   private async scanForChanges(): Promise<void> {
-    if (!this.watchEnabled || this.closed || this.scanRunning) return;
+    if (!this.watchEnabled || this.closed || this.scanRunning || !this.scanner) return;
     this.scanRunning = true;
     try {
-      const nextSnapshot = await this.scanSnapshot();
-      for (const [path, fingerprint] of nextSnapshot.entries()) {
-        if (this.previousSnapshot.get(path) !== fingerprint) {
-          this.trackPendingPath(path);
-        }
+      const result = await this.scanner.scanTick();
+      for (const path of result.changedPaths) await this.trackPendingPath(path);
+      this.syncSchedulerObservability();
+      if (result.completedCoverage) {
+        this.emitLog(`bounded scanner coverage completed: dirs=${result.knownDirectoryCount}, files=${result.knownFileCount}`);
       }
-      for (const path of this.previousSnapshot.keys()) {
-        if (!nextSnapshot.has(path)) {
-          this.trackPendingPath(path);
-        }
-      }
-      this.previousSnapshot = nextSnapshot;
       if (this.pendingPaths.size > 0) {
         this.resetWatchDebounce();
       }
+      if (this.pendingOverflowReason) this.resetWatchDebounce();
     } catch (error) {
-      this.emitLog(`watcher failed: ${toErrorMessage(error)}`, "error");
+      const message = `watcher failed: ${toErrorMessage(error)}`;
+      this.emitLog(message, "error");
+      await updateIndexServingFreshness(this.rootDir, "blocked", message);
       await this.stopWatcher();
       await this.emit({
         kind: "watch-state",
@@ -793,7 +910,8 @@ export class BackendRootSession {
         pendingPaths: this.getCurrentPendingPaths(),
         pendingChangeCount: this.getCurrentPendingPaths().length,
         pendingJobKind: this.queuedWatchPlan?.job,
-        message: `watcher failed: ${toErrorMessage(error)}`,
+        ...this.buildScannerEventFields(),
+        message,
       });
     } finally {
       this.scanRunning = false;
@@ -858,16 +976,49 @@ export class BackendRootSession {
           ? "running manual incremental refresh"
           : `running background incremental refresh for ${summarizeChangedPaths(plan.changedPaths)}`,
       });
+      if (source === "watch" && plan.changedPaths.length > 0) {
+        const refreshed = await refreshEmbeddingsForChangedPaths({
+          rootDir: this.rootDir,
+          relativePaths: plan.changedPaths,
+        });
+        const embeddingMessage = [
+          `watch embedding refresh: paths=${refreshed.refreshedPaths.length}`,
+          `file-vectors=${refreshed.fileEmbeddings}`,
+          `identifier-vectors=${refreshed.identifierEmbeddings}`,
+        ].join(", ");
+        this.emitLog(embeddingMessage);
+      }
       await ensureFileSearchIndex(this.rootDir, async (progress) => {
-        await emitRefreshProgress(0, progress.phase, formatFileProgress(progress), progress.processedFiles, progress.totalFiles, progress.currentFile);
+        await emitRefreshProgress(
+          0,
+          progress.phase,
+          formatFileProgress(progress),
+          progress.processedFiles,
+          progress.totalFiles,
+          progress.currentFile,
+        );
       });
 
       await ensureIdentifierSearchIndex(this.rootDir, async (progress) => {
-        await emitRefreshProgress(1, progress.phase, formatIdentifierProgress(progress), progress.processedFiles, progress.totalFiles, progress.currentFile);
+        await emitRefreshProgress(
+          1,
+          progress.phase,
+          formatIdentifierProgress(progress),
+          progress.processedFiles,
+          progress.totalFiles,
+          progress.currentFile,
+        );
       });
 
       await ensureFullIndexArtifacts({ rootDir: this.rootDir }, async (progress) => {
-        await emitRefreshProgress(2, progress.phase, formatFullProgress(progress), progress.processedFiles, progress.totalFiles, progress.currentFile);
+        await emitRefreshProgress(
+          2,
+          progress.phase,
+          formatFullProgress(progress),
+          progress.processedFiles,
+          progress.totalFiles,
+          progress.currentFile,
+        );
       });
 
       const summary = source == "manual"
@@ -903,6 +1054,9 @@ export class BackendRootSession {
     } catch (error) {
       const message = toErrorMessage(error);
       this.emitLog(message, "error");
+      if (source === "watch") {
+        await updateIndexServingFreshness(this.rootDir, "blocked", `watch refresh failed: ${message}`);
+      }
       await this.emit({
         kind: "job",
         root: this.rootDir,

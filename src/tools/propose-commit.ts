@@ -1,7 +1,7 @@
 // summary: Validates prospective file writes and creates restore points before committing edits.
-// FEATURE: Write-time validation and restore point creation for file edits.
+// purpose: Reject malformed source updates before they mutate the repository worktree.
 // inputs: Proposed file contents, repository paths, and write-time validation rules.
-// outputs: Accepted writes, restore points, and explicit validation failures.
+// returns/effects: Accepted writes, restore points, and explicit validation failures.
 
 import { writeFile, mkdir } from "fs/promises";
 import { resolve, dirname, extname } from "path";
@@ -29,7 +29,7 @@ export interface CheckpointReport {
   restorePointCreated: boolean;
 }
 
-const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
+const REQUIRED_HEADER_FIELDS = ["summary", "purpose", "inputs", "returns/effects"] as const;
 
 // Purpose: Validate that a proposed source file starts with the required structured header block.
 // Inputs: The proposed file content split into lines plus the target file extension.
@@ -54,19 +54,12 @@ function validateHeader(lines: string[], ext: string): ValidationError[] {
     index += 1;
   }
 
-  if (headerLines.length < 2) {
+  if (headerLines.length < REQUIRED_HEADER_FIELDS.length) {
     errors.push({
       rule: "header",
-      message: `Missing header block. Start the file with at least 2 ${prefix} comment lines.`,
+      message: `Missing header block. Start the file with at least ${REQUIRED_HEADER_FIELDS.length} ${prefix} comment lines for summary, purpose, inputs, and returns/effects.`,
     });
     return errors;
-  }
-
-  if (!headerLines.some((line) => line.toUpperCase().includes("FEATURE:"))) {
-    errors.push({
-      rule: "feature-tag",
-      message: `Header must include a FEATURE: line (e.g., "${prefix} FEATURE: Feature Name").`,
-    });
   }
 
   for (const field of REQUIRED_HEADER_FIELDS) {

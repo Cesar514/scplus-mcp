@@ -1,7 +1,7 @@
 // summary: Runs native diagnostics together with repository hygiene rules for lint reporting.
-// FEATURE: Native diagnostics plus repository hygiene rule enforcement surface.
+// purpose: Evaluate files against repository lint rules and collect scored findings.
 // inputs: Repository files, native lint or typecheck tools, and hygiene rule definitions.
-// outputs: Repo score summaries, diagnostics, and practical lint findings.
+// returns/effects: Repo score summaries, diagnostics, and practical lint findings.
 
 import { execFile } from "child_process";
 import { readFile, stat } from "fs/promises";
@@ -156,7 +156,7 @@ const FILE_LOC_LIMITS = new Map<string, number>([
   ["cli/internal/ui/model.go", 5000],
   ["src/tools/evaluation.ts", 1500],
 ]);
-const REQUIRED_HEADER_FIELDS = ["summary", "inputs", "outputs"] as const;
+const REQUIRED_HEADER_FIELDS = ["summary", "purpose", "inputs", "returns/effects"] as const;
 const REQUIRED_FUNCTION_HEADER_FIELDS = ["purpose", "inputs", "returns/effects"] as const;
 const REQUIRED_PUBLIC_API_DOC_FIELDS = ["purpose", "inputs"] as const;
 const CALLABLE_KINDS = new Set([SymbolKind.Function, SymbolKind.Method]);
@@ -747,26 +747,16 @@ function validateHeader(file: string, lines: string[]): RuleFinding[] {
     headerLines.push({ lineNumber: index + 1, text: lines[index].slice(prefix.length).trim() });
     index += 1;
   }
-  if (headerLines.length < 2) {
+  if (headerLines.length < REQUIRED_HEADER_FIELDS.length) {
     return [{
       file,
       line: headerStart + 1,
       rule: "header",
       severity: "error",
-      message: `The header must begin with at least 2 ${prefix} comment lines.`,
+      message: `The header must begin with at least ${REQUIRED_HEADER_FIELDS.length} ${prefix} comment lines for summary, purpose, inputs, and returns/effects.`,
     }];
   }
   const findings: RuleFinding[] = [];
-  const featureLine = headerLines.find((line) => line.text.toUpperCase().includes("FEATURE:"));
-  if (!featureLine) {
-    findings.push({
-      file,
-      line: headerLines[1]?.lineNumber ?? (headerStart + 2),
-      rule: "feature-tag",
-      severity: "warning",
-      message: "Header must include a FEATURE: line.",
-    });
-  }
   for (const field of REQUIRED_HEADER_FIELDS) {
     const expectedPrefix = `${field}:`;
     const line = headerLines.find((entry) => entry.text.toLowerCase().startsWith(expectedPrefix));

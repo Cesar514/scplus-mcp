@@ -1,3 +1,7 @@
+// summary: Covers static-analysis rule reporting and repository hygiene edge cases.
+// purpose: Verify the lint engine enforces the repository header and structural rules.
+// inputs: Temporary fixture files plus static-analysis entry points.
+// returns/effects: Assertion coverage for static-analysis findings and score output.
 import { describe, it, after, before } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -40,7 +44,7 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "clean.ts"),
-        "// summary: Clean static analysis fixture module\n// FEATURE: Static Analysis Tests\n// inputs: none\n// outputs: exported numeric constant\n\nexport const x: number = 1;\n",
+        "// summary: Clean static analysis fixture module\n// purpose: Exercise a lint-clean TypeScript fixture.\n// inputs: none\n// returns/effects: Exported numeric constant.\n\nexport const x: number = 1;\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -68,7 +72,7 @@ describe("static-analysis", async () => {
     it("handles Python files with py_compile", async () => {
       await writeFile(
         join(FIXTURE_DIR, "good.py"),
-        "# summary: Clean static analysis python fixture\n# FEATURE: Static Analysis Tests\n# inputs: none\n# outputs: hello() greeting string\n\ndef hello():\n    return 'hi'\n",
+        "# summary: Clean static analysis python fixture\n# purpose: Exercise a lint-clean Python fixture.\n# inputs: none\n# returns/effects: hello() greeting string.\n\ndef hello():\n    return 'hi'\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -85,7 +89,7 @@ describe("static-analysis", async () => {
       );
       await writeFile(
         join(FIXTURE_DIR, "err.ts"),
-        "// summary: Broken static analysis fixture module\n// FEATURE: Static Analysis Tests\n// inputs: none\n// outputs: type error for lint coverage\n\nconst a: number = 'wrong';\n",
+        "// summary: Broken static analysis fixture module\n// purpose: Trigger native TypeScript diagnostics for lint coverage.\n// inputs: none\n// returns/effects: Type error for lint coverage.\n\nconst a: number = 'wrong';\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
@@ -121,15 +125,15 @@ describe("static-analysis", async () => {
     it("reports missing structured header fields as rule findings", async () => {
       await writeFile(
         join(FIXTURE_DIR, "missing-fields.ts"),
-        "// FEATURE: Static Analysis Tests\n// plain header line\n\nexport const missingFields = 1;\n",
+        "// summary: Static analysis missing header fields fixture\n// plain header line\n// another plain header line\n// final plain header line\n\nexport const missingFields = 1;\n",
       );
       const result = await runStaticAnalysis({
         rootDir: FIXTURE_DIR,
         targetPath: "missing-fields.ts",
       });
-      assert.ok(result.includes("[summary-header]"));
+      assert.ok(result.includes("[purpose-header]"));
       assert.ok(result.includes("[inputs-header]"));
-      assert.ok(result.includes("[outputs-header]"));
+      assert.ok(result.includes("[returns/effects-header]"));
     });
 
     it("reports function size and parameter count rule findings", async () => {
@@ -141,9 +145,9 @@ describe("static-analysis", async () => {
         join(FIXTURE_DIR, "complex.ts"),
         [
           "// summary: Complex static analysis fixture module",
-          "// FEATURE: Static Analysis Tests",
+          "// purpose: Exercise function size and parameter-count lint findings.",
           "// inputs: six numeric parameters",
-          "// outputs: numeric total after too many local steps",
+          "// returns/effects: Numeric total after too many local steps.",
           "",
           "export function complex(",
           "  alpha: number,",
@@ -181,9 +185,9 @@ describe("static-analysis", async () => {
         join(FIXTURE_DIR, "many-functions.ts"),
         [
           "// summary: Many functions static analysis fixture module",
-          "// FEATURE: Static Analysis Tests",
+          "// purpose: Trigger the max-functions-per-file rule with many callables.",
           "// inputs: none",
-          "// outputs: too many callable declarations",
+          "// returns/effects: Too many callable declarations.",
           "",
           callables,
         ].join("\n"),
@@ -206,9 +210,9 @@ describe("static-analysis", async () => {
         join(FIXTURE_DIR, "oversized.ts"),
         [
           "// summary: Oversized static analysis fixture module",
-          "// FEATURE: Static Analysis Tests",
+          "// purpose: Trigger the max-file-loc rule using non-comment lines.",
           "// inputs: many executable lines and many comments",
-          "// outputs: max file loc finding",
+          "// returns/effects: Max-file-loc finding.",
           "",
           ...Array.from({ length: 40 }, (_, index) => `// comment ${index}`),
           "",

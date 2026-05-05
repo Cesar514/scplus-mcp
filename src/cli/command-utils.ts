@@ -82,7 +82,6 @@ function buildMcpConfig(runner: "npx" | "bunx"): string {
             OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
             OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             SCPLUS_EMBED_BATCH_SIZE: "8",
-            SCPLUS_EMBED_TRACKER: "lazy",
           },
         },
       },
@@ -110,7 +109,6 @@ function buildOpenCodeConfig(runner: "npx" | "bunx"): string {
             OLLAMA_CHAT_MODEL: "nemotron-3-nano:4b-128k",
             OLLAMA_API_KEY: "YOUR_OLLAMA_API_KEY",
             SCPLUS_EMBED_BATCH_SIZE: "8",
-            SCPLUS_EMBED_TRACKER: "lazy",
           },
         },
       },
@@ -135,7 +133,6 @@ function buildCodexConfig(runner: "npx" | "bunx"): string {
     'OLLAMA_CHAT_MODEL = "nemotron-3-nano:4b-128k"',
     'OLLAMA_API_KEY = "YOUR_OLLAMA_API_KEY"',
     'SCPLUS_EMBED_BATCH_SIZE = "8"',
-    'SCPLUS_EMBED_TRACKER = "lazy"',
     "",
   ].join("\n");
 }
@@ -287,6 +284,55 @@ export function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctor
       ].filter(Boolean);
       return `- ${stage}: ${metrics.durationMs}ms${throughputParts.length > 0 ? ` | ${throughputParts.join(" | ")}` : ""}`;
     });
+  const scheduler = report.observability.scheduler;
+  const schedulerLine = [
+    `Scheduler: watch=${scheduler.watchEnabled}`,
+    `scanner=${scheduler.scannerStatus}`,
+    `nativeWatchCount=${scheduler.nativeWatchCount}`,
+    `scannerQueue=${scheduler.scannerDirectoryQueueSize}/${scheduler.scannerFileQueueSize}`,
+    `fullCoverageAt=${scheduler.scannerLastFullCoverageAt ?? "none"}`,
+    `queueDepth=${scheduler.queueDepth}`,
+    `pendingChanges=${scheduler.pendingChangeCount}`,
+    `pendingJob=${scheduler.pendingJobKind ?? "none"}`,
+    `maxQueueDepth=${scheduler.maxQueueDepth}`,
+    `batches=${scheduler.batchCount}`,
+    `dedupedPathEvents=${scheduler.dedupedPathEvents}`,
+    `canceledJobs=${scheduler.canceledJobs}`,
+    `supersededJobs=${scheduler.supersededJobs}`,
+    `overflow=${scheduler.scannerLastOverflowReason ?? "none"}`,
+  ].join(" | ");
+  const hybridVectorLine = [
+    `Hybrid vectors: chunk ${chunkCoverage.loadedVectorCount}/${chunkCoverage.requestedVectorCount} ${chunkCoverage.state}`,
+    `identifier ${identifierCoverage.loadedVectorCount}/${identifierCoverage.requestedVectorCount} ${identifierCoverage.state}`,
+  ].join(" | ");
+  const treeSitterLine = [
+    `Tree-sitter: parses=${report.treeSitter.totalParseCalls}`,
+    `parse failures=${report.treeSitter.totalParseFailures}`,
+    `grammar load failures=${report.treeSitter.totalGrammarLoadFailures}`,
+    `parser reuses=${report.treeSitter.totalParserReuses}`,
+  ].join(" | ");
+  const observabilityLine = [
+    `Observability: staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"}`,
+    `fallback markers=${report.observability.integrity.fallbackMarkerCount}`,
+    `parse failures by language=${parseFailuresByLanguage || "none"}`,
+  ].join(" | ");
+  const refreshFailureLine = [
+    `Refresh failures: file-search=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures}`,
+    `failed-files=${report.observability.integrity.refreshFailures.fileSearch.refreshFailedFiles}`,
+    `write-refresh=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
+  ].join(" | ");
+  const embeddingCacheLine = [
+    `Embedding cache: namespace hits=${report.observability.caches.embeddings.processNamespaceHits}`,
+    `namespace misses=${report.observability.caches.embeddings.processNamespaceMisses}`,
+    `vector hits=${report.observability.caches.embeddings.processVectorHits}`,
+    `vector misses=${report.observability.caches.embeddings.processVectorMisses}`,
+  ].join(" | ");
+  const hybridRuntimeLine = [
+    `Hybrid search runtime: chunk lexical=${report.observability.caches.hybridSearch.chunk.lexicalCandidateCount}`,
+    `chunk last=${report.observability.caches.hybridSearch.chunk.lastLexicalCandidateCount}`,
+    `identifier lexical=${report.observability.caches.hybridSearch.identifier.lexicalCandidateCount}`,
+    `identifier last=${report.observability.caches.hybridSearch.identifier.lastLexicalCandidateCount}`,
+  ].join(" | ");
   const lines = [
     `Doctor: ${report.root}`,
     "",
@@ -301,17 +347,17 @@ export function formatDoctorReport(report: Awaited<ReturnType<typeof buildDoctor
     `Hub suggestions: ${report.hubSummary.suggestionCount}`,
     `Feature groups: ${report.hubSummary.featureGroupCount}`,
     `Restore points: ${report.restorePointCount}`,
-    `Hybrid vectors: chunk ${chunkCoverage.loadedVectorCount}/${chunkCoverage.requestedVectorCount} ${chunkCoverage.state} | identifier ${identifierCoverage.loadedVectorCount}/${identifierCoverage.requestedVectorCount} ${identifierCoverage.state}`,
-    `Tree-sitter: parses=${report.treeSitter.totalParseCalls} | parse failures=${report.treeSitter.totalParseFailures} | grammar load failures=${report.treeSitter.totalGrammarLoadFailures} | parser reuses=${report.treeSitter.totalParserReuses}`,
+    hybridVectorLine,
+    treeSitterLine,
     report.ollama.ok
       ? `Ollama: ok | running models ${report.ollama.models.length}`
       : `Ollama: error | ${report.ollama.error}`,
     "",
-    `Observability: staleAgeMs=${report.observability.integrity.staleGenerationAgeMs ?? "none"} | fallback markers=${report.observability.integrity.fallbackMarkerCount} | parse failures by language=${parseFailuresByLanguage || "none"}`,
-    `Refresh failures: file-search=${report.observability.integrity.refreshFailures.fileSearch.refreshFailures} | failed-files=${report.observability.integrity.refreshFailures.fileSearch.refreshFailedFiles} | write-refresh=${report.observability.integrity.refreshFailures.writeFreshness.refreshFailures}`,
-    `Embedding cache: namespace hits=${report.observability.caches.embeddings.processNamespaceHits} | namespace misses=${report.observability.caches.embeddings.processNamespaceMisses} | vector hits=${report.observability.caches.embeddings.processVectorHits} | vector misses=${report.observability.caches.embeddings.processVectorMisses}`,
-    `Hybrid search runtime: chunk lexical=${report.observability.caches.hybridSearch.chunk.lexicalCandidateCount} | chunk last=${report.observability.caches.hybridSearch.chunk.lastLexicalCandidateCount} | identifier lexical=${report.observability.caches.hybridSearch.identifier.lexicalCandidateCount} | identifier last=${report.observability.caches.hybridSearch.identifier.lastLexicalCandidateCount}`,
-    `Scheduler: watch=${report.observability.scheduler.watchEnabled} | queueDepth=${report.observability.scheduler.queueDepth} | pendingChanges=${report.observability.scheduler.pendingChangeCount} | pendingJob=${report.observability.scheduler.pendingJobKind ?? "none"} | maxQueueDepth=${report.observability.scheduler.maxQueueDepth} | batches=${report.observability.scheduler.batchCount} | dedupedPathEvents=${report.observability.scheduler.dedupedPathEvents} | canceledJobs=${report.observability.scheduler.canceledJobs} | supersededJobs=${report.observability.scheduler.supersededJobs}`,
+    observabilityLine,
+    refreshFailureLine,
+    embeddingCacheLine,
+    hybridRuntimeLine,
+    schedulerLine,
     `Pending paths: ${report.observability.scheduler.pendingPaths.length > 0 ? report.observability.scheduler.pendingPaths.join(", ") : "none"}`,
   ];
   if (indexingStages.length > 0) {
